@@ -1,0 +1,62 @@
+# Render Blueprint: crea la oficina con disco persistente y HTTPS.
+# En Render: New → Blueprint → elige este repositorio. Las variables con
+# "sync: false" te las pide al crear el servicio (déjalas vacías si no usas esa función).
+services:
+  - type: web
+    name: nuvora
+    runtime: docker
+    plan: starter            # el gratis se apaga solo y no permite disco
+    region: virginia         # la más cercana a México
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass   # publica solo cuando las pruebas de GitHub pasan
+    numInstances: 1          # SQLite: una sola instancia
+    disk:
+      name: nuvora-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: OFFICE_NAME
+        value: GTAHUB
+      - key: OFFICE_THEME
+        value: gtahub
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        generateValue: true  # contraseña aleatoria; la ves en Environment
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: PUBLIC_URL
+        sync: false          # p. ej. https://oficina.gtahub.gg
+      - key: VAPID_SUBJECT
+        sync: false          # mailto:tu-correo
+      # Voz y pantallas (LiveKit Cloud)
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # Respaldos fuera del servidor (Cloudflare R2)
+      - key: BACKUP_S3_ENDPOINT
+        sync: false
+      - key: BACKUP_S3_BUCKET
+        value: nuvora-respaldos
+      - key: BACKUP_S3_ACCESS_KEY
+        sync: false
+      - key: BACKUP_S3_SECRET_KEY
+        sync: false
+      # Avisos (webhook de Discord)
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      # Entrar con Discord
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
