@@ -1039,6 +1039,15 @@ api.patch('/floors/:id', requireAdmin, wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// Renovar el mapa del piso con la plantilla más nueva (conserva escritorios reclamados)
+api.post('/floors/:id/reset-layout', requireAdmin, wrap((req, res) => {
+  const id = Number(req.params.id);
+  const r = world.resetFloorLayout(id);
+  for (const [uid, p] of presence) if (p.floorId === id) relocate(uid, id, p.x, p.y);
+  broadcastFloor(id);
+  res.json({ ok: true, kept: r.kept, moved: r.moved });
+}));
+
 api.delete('/floors/:id', requireAdmin, wrap((req, res) => {
   const id = Number(req.params.id);
   world.deleteFloor(id);

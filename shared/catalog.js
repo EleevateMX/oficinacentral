@@ -80,10 +80,19 @@ export const CATALOG = {
   armchair: f('Sillón', 'muebles', 1, 1, { solid: false, colorable: true, color: '#FFCC00', rotatable: true }),
   bigScreen: f('Pantalla gigante', 'salas', 5, 1, { colorable: true, color: '#101010', interactive: 'screen' }),
   flagPole: f('Asta con bandera', 'gtahub', 1, 1, { colorable: true, brand: true }),
+  confChair: f('Silla de juntas', 'salas', 1, 1, { solid: false, colorable: true, color: '#e07a3a', rotatable: true }),
+  lSofa: f('Sofá en L', 'muebles', 3, 2, { solid: false, colorable: true, color: '#e8a27c' }),
+  gong: f('Gong', 'deco', 2, 2),
+  aquarium: f('Acuario', 'deco', 2, 1),
+  fern: f('Helecho', 'plantas', 1, 1, { solid: false }),
+  bamboo: f('Bambú', 'plantas', 1, 1),
+  plantShelf: f('Repisa de plantas', 'plantas', 2, 1),
+  willowTree: f('Sauce llorón', 'exterior', 3, 3),
 
   // Decoraciones de escritorio (no bloquean, posición libre)
   monitor: d('Monitor', 'tech', 0.75, 0.75, { colorable: true, color: '#2b2f3a' }),
   dualMonitor: d('Doble monitor', 'tech', 1.5, 0.75, { colorable: true, color: '#2b2f3a' }),
+  curvedMonitor: d('Monitor curvo', 'tech', 1.5, 0.75, { colorable: true, color: '#2b2f3a' }),
   imac: d('Computadora', 'tech', 1, 1, { colorable: true, color: '#e8e8ee' }),
   laptop: d('Laptop', 'tech', 0.75, 0.5, { colorable: true, color: '#9aa3ad' }),
   keyboard: d('Teclado', 'tech', 0.75, 0.25, { colorable: true, color: '#3a3f4b' }),
@@ -158,6 +167,7 @@ export const CATALOG = {
   // Piso (alrededor de tu lugar)
   floorPlant: d('Planta grande', 'piso', 1, 1),
   floorLamp: d('Lámpara de pie', 'piso', 0.5, 1, { colorable: true, color: '#f4a261' }),
+  arcLamp: d('Lámpara de arco', 'piso', 1, 1.5, { colorable: true, color: '#f4a261' }),
   miniFridge: d('Minirefri', 'piso', 0.75, 1, { colorable: true, color: '#e8e8ee' }),
   guitar: d('Guitarra', 'piso', 0.5, 1, { colorable: true, color: '#b5651d' }),
   roundRug: d('Tapete redondo', 'piso', 1, 1, { colorable: true, color: '#8ecae6', under: true }),
@@ -169,7 +179,7 @@ export const CATALOG = {
 // Modelos de escritorio y de silla que cada quien puede elegir para su lugar
 export const DESK_TYPES = ['desk', 'standingDesk', 'gamingDesk', 'woodDesk', 'glassDesk'];
 // Muebles donde el personaje se sienta. dir: hacia dónde mira ('rot' = según la rotación).
-export const SEAT_TYPES = { chair: 'rot', gamingChair: 'rot', officeChair: 'rot', armchair: 'rot', sofa: 'sofa', sofaSmall: 'sofa', bench: 'down', stool: null, beanBag: null };
+export const SEAT_TYPES = { chair: 'rot', gamingChair: 'rot', officeChair: 'rot', confChair: 'rot', armchair: 'rot', sofa: 'sofa', sofaSmall: 'sofa', bench: 'down', stool: null, beanBag: null };
 const ROT_FACE = ['up', 'right', 'down', 'left'];
 const seatCache = new WeakMap();
 // Asiento en la casilla (x, y): { dir } o null
@@ -183,7 +193,7 @@ export function seatAt(f, x, y) {
       if (kind === undefined) continue;
       const dir = kind === 'rot' ? ROT_FACE[(o.rot || 0) % 4] : kind === 'sofa' ? ((o.rot || 0) === 2 ? 'up' : 'down') : kind;
       const { w, h } = objSize(o);
-      for (let j = o.y; j < o.y + h; j++) for (let i = o.x; i < o.x + w; i++) m.set(`${i},${j}`, { dir });
+      for (let j = o.y; j < o.y + h; j++) for (let i = o.x; i < o.x + w; i++) m.set(`${i},${j}`, { dir, obj: o });
     }
     seatCache.set(f.objects, m);
   }

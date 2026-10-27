@@ -346,6 +346,15 @@ function FloorsTab({ floor }) {
               <input className="inline-input" defaultValue={f.name} onBlur={(e) => e.target.value.trim() && e.target.value !== f.name && api.patch(`/floors/${f.id}`, { name: e.target.value }).catch((err) => office.toast({ title: err.message, kind: 'error' }))} />
               <div className="row gap4">
                 {f.id !== floor.id && <button className="btn tiny" onClick={() => office.changeFloor(f.id)}>Ir</button>}
+                {f.template === 'hq' && (
+                  <button className="btn tiny" title="Pone la distribución más nueva del mapa. Los escritorios reclamados se conservan con su decoración." onClick={async () => {
+                    if (!confirm(`¿Renovar el mapa de "${f.name}"?\n\nSe pone la distribución más nueva. Cada persona conserva su escritorio (en su mismo departamento si existe) con su decoración. Los muebles que se hayan movido o agregado a mano vuelven a como vienen en el mapa.`)) return;
+                    try {
+                      const r = await api.post(`/floors/${f.id}/reset-layout`);
+                      office.toast({ title: `Mapa renovado. Se conservaron ${r.kept} escritorios reclamados${r.moved ? ` (${r.moved} cambiaron de departamento)` : ''}.` });
+                    } catch (err) { office.toast({ title: err.message, kind: 'error' }); }
+                  }}>Renovar mapa</button>
+                )}
                 {floors.length > 1 && (
                   <button className="icon-btn danger" title="Borrar piso" onClick={() => confirm(`¿Borrar "${f.name}" con todo su contenido?`) && api.del(`/floors/${f.id}`).catch((err) => office.toast({ title: err.message, kind: 'error' }))}>
                     <Trash2 size={14} />

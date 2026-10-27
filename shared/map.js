@@ -30,6 +30,8 @@ export const AREA_COLORS = [
   { id: 'slate', name: 'Pizarra' },
   { id: 'concrete', name: 'Cemento pulido' },
   { id: 'hex', name: 'Hexágonos (GTAHUB)' },
+  { id: 'redRug', name: 'Roja ornamental' },
+  { id: 'diamond', name: 'Rombos gris azulado' },
 ];
 
 // Forma de la alfombra de un área (para que el mapa no se vea tan cuadrado)
@@ -338,17 +340,20 @@ function templateHQ() {
   b.deskRow([23, 26, 29, 35, 38, 41], 29, { type: 'glassDesk', chairColor: ['#FE3377', '#8B7BFF'] });
   b.o('tallPlant', 33, 25); b.o('easel', 33, 28); b.o('tallPlant', 33, 30);
 
-  b.area('engineering', 'Engineering', 6, 34, 18, 9, { color: 'mint' });
-  b.deskRow([7, 10, 13, 16, 19], 36, { type: 'gamingDesk', chairType: 'gamingChair', chairColor: ['#157A6E', '#d9454f'] });
-  b.deskRow([7, 10, 13, 16, 19], 40, { type: 'gamingDesk', chairType: 'gamingChair', chairColor: ['#d9454f', '#157A6E'] });
-  b.o('serverRack', 22, 34); b.o('robotArm', 22, 38);
+  b.area('engineering', 'Engineering', 6, 33, 18, 6, { color: 'mint' });
+  b.deskRow([7, 10, 13, 16, 19], 34, { type: 'gamingDesk', chairType: 'gamingChair', chairColor: ['#157A6E', '#d9454f'] });
+  b.o('serverRack', 22, 33); b.o('robotArm', 22, 36);
 
-  b.area('marketing', 'Marketing', 27, 34, 19, 9, { color: 'rose' });
-  b.deskRow([28, 31, 34, 37, 40], 36, { type: 'standingDesk', chairColor: '#FE3377' });
-  b.deskRow([28, 31, 34, 37, 40], 40, { type: 'standingDesk', chairColor: '#FFCC00' });
-  b.o('tallPlant', 44, 36); b.o('whiteboard', 43, 34 + 0);
+  b.area('marketing', 'Marketing', 27, 33, 19, 6, { color: 'rose' });
+  b.deskRow([28, 31, 34, 37, 40], 34, { type: 'standingDesk', chairColor: ['#FE3377', '#FFCC00'] });
+  b.o('tallPlant', 44, 36); b.o('whiteboard', 43, 33);
 
-  for (const y of [34, 37, 40]) b.o('tallPlant', 25, y);
+  for (const y of [33, 36]) b.o('tallPlant', 25, y);
+
+  // Gameplay / LiveOps / Testing: una fila larga de puestos gamer
+  b.area('gameplay', 'Gameplay / LiveOps / Testing', 6, 40, 40, 5, { color: 'blue' });
+  b.deskRow([7, 10, 13, 16, 19, 22, 28, 31, 34, 37, 40, 43], 41, { type: 'gamingDesk', chairType: 'gamingChair', chairColor: ['#3a86ff', '#FE3377', '#06a77d'] });
+  b.o('tallPlant', 25, 41);
 
   // ===== Columna central: salas chicas de cristal =====
   b.glass(48, 23, 1, 20); b.glass(57, 23, 1, 20);
@@ -374,21 +379,20 @@ function templateHQ() {
     b.area(key, name, 49, y0, 8, h, { private: true });
   }
 
-  // ===== Centro derecho: Staff / Orgs y lounge =====
-  b.area('staff', 'Staff / Orgs', 59, 24, 36, 13, { color: 'lilac' });
+  // ===== Centro derecho: Staff / Orgs (40 lugares) y lounge =====
+  b.area('staff', 'Staff / Orgs', 59, 24, 36, 17, { color: 'lilac' });
   const left = [60, 63, 66, 69, 72], right = [78, 81, 84, 87, 90];
-  for (const y of [26, 30, 34]) {
+  for (const y of [26, 30, 34, 38]) {
     b.deskRow(left, y, { type: 'desk', color: '#e8e8ee', chairColor: ['#101010', '#FE3377'] });
     b.deskRow(right, y, { type: 'desk', color: '#e8e8ee', chairColor: ['#FE3377', '#101010'] });
     b.o('planter', 75, y, { color: '#101010' });
   }
-  b.area('lounge', 'Lounge', 60, 38, 34, 6, { color: 'rug', shape: 'round' });
-  for (const lx of [64, 82]) {
-    b.o('sofa', lx, 38, { color: '#101010' });
-    b.o('roundTable', lx + 1, 40, { w: 3 });
-    b.o('sofa', lx, 42, { rot: 2, color: '#FE3377' });
+  b.area('lounge', 'Lounge', 60, 41, 34, 4, { color: 'rug', shape: 'round' });
+  for (const lx of [63, 85]) {
+    b.o('sofa', lx, 41, { color: '#101010' });
+    b.o('sofa', lx, 43, { rot: 2, color: '#FE3377' });
   }
-  b.o('coffee', 74, 38); b.o('tallPlant', 77, 38); b.o('tallPlant', 72, 42); b.o('tallPlant', 92, 42);
+  b.o('tallPlant', 61, 42); b.o('tallPlant', 72, 42); b.o('tallPlant', 92, 42); b.o('coffee', 80, 41);
 
   // ===== Fila inferior (y 47..57), frente de cristal en y 46 =====
   b.glass(X0, 46, X1 - X0 + 1, 1);
@@ -459,12 +463,12 @@ function templateHQ() {
   b.o('floorLogo', 41, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
   for (const [type, x, y, extra] of RECEPTION_EXTRAS) b.o(type, x, y, extra);
   b.o('flagPole', 39, 59); b.o('flagPole', 46, 59);
-  b.o('floorLogo', 73, 39);
+  b.o('floorLogo', 74, 41.5, { h: 2.5 });
   for (const x0 of [5, 52]) b.o('poster', x0 + 8.6, 47);
   b.o('poster', 19.5, 47); b.o('poster', 31.5, 47);
   b.o('fairyLights', 68.5, 46.2); b.o('balloons', 76, 49);
   b.o('neonLogo', 83.5, 47.1); b.o('wallBanner', 87.2, 47.1);
-  for (const [x, y] of [[6, 24], [22, 24], [6, 34], [27, 34], [59, 24]]) b.o('deskFlag', x + 0.2, y + 0.1);
+  for (const [x, y] of [[6, 24], [22, 24], [6, 33], [27, 33], [6, 40], [59, 24]]) b.o('deskFlag', x + 0.2, y + 0.1);
 
   // ===== Exterior =====
   // Camino de entrada hasta una plaza redonda con fuente
