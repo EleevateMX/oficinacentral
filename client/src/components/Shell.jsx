@@ -17,6 +17,7 @@ import EditProfile from './EditProfile.jsx';
 import Preferences from './settings/Preferences.jsx';
 import Toasts from './Toasts.jsx';
 import SearchPalette from './SearchPalette.jsx';
+import { handleLaunchUrl, syncPush } from '../lib/push.js';
 
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
@@ -30,6 +31,8 @@ export default function Shell({ session, onLogout }) {
 
   useEffect(() => {
     office.start(session.user, session.prefs).then(() => {
+      handleLaunchUrl();
+      syncPush();
       if (['linked', 'welcome'].includes(returnInfo.discord)) office.toast({ title: discordMessage });
     }).catch((e) => console.error(e));
     const out = () => onLogout();

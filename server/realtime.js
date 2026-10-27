@@ -120,6 +120,9 @@ export function initRealtime(httpServer) {
       io.emit('player', { id: userId, ...publicPresence(userId) });
     });
 
+    // Pestaña oculta o visible: si todas están ocultas, los avisos llegan por push (server/push.js)
+    socket.on('visibility', (v) => { socket.data.hidden = !!v?.hidden; });
+
     socket.on('react', (r) => {
       const emoji = typeof r?.emoji === 'string' ? r.emoji.slice(0, 8) : null;
       if (emoji) io.emit('react', { id: userId, emoji });

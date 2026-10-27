@@ -109,6 +109,7 @@ class Office {
 
   handleVisibility() {
     const hidden = document.visibilityState === 'hidden';
+    this.socket?.emit('visibility', { hidden });
     clearTimeout(this.awayTimer);
     if (hidden) {
       const inRoom = this.state.space && this.state.space.startsWith('area:');
@@ -144,7 +145,10 @@ class Office {
   connect() {
     const s = io({ withCredentials: true });
     this.socket = s;
-    s.on('connect', () => this.set({ connected: true }));
+    s.on('connect', () => {
+      this.set({ connected: true });
+      s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push
+    });
     s.on('disconnect', () => this.set({ connected: false }));
     s.on('connect_error', (e) => {
       if (e.message === 'unauthorized') window.location.reload();
@@ -562,6 +566,7 @@ class Office {
 
   desktopNotify(body) {
     if (!this.state.prefs.notifications.desktop || document.visibilityState === 'visible') return;
+    if (this.pushOn) return; // este dispositivo ya recibe el aviso por push
     if ('Notification' in window && Notification.permission === 'granted') new Notification(this.state.config.officeName, { body, icon: '/logo.svg' });
   }
 

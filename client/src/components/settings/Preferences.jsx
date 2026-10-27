@@ -12,6 +12,7 @@ import { Toggle, Select, Row, Radio, Avatar, Empty, AvatarCanvas } from '../ui.j
 import { fmtDate } from '../../lib/time.js';
 import { THEMES } from '../../lib/themes.js';
 import { OfficeMark, ByNuvora } from '../brand.jsx';
+import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -116,6 +117,7 @@ function General() {
           <Select value={mode} onChange={(v) => office.updatePrefs({ colorMode: v })} options={[{ value: 'light', label: 'Claro' }, { value: 'dark', label: 'Oscuro' }, { value: 'system', label: 'Sistema' }]} />
         </Row>
       </Section>
+      <InstallAppSection />
       <Section title="Atajos de teclado">
         <div className="shortcuts">
           <div><kbd>W A S D</kbd> / <kbd>flechas</kbd> Caminar</div>
@@ -283,6 +285,9 @@ function Notifications() {
   };
   return (
     <>
+      <Section title="Este dispositivo">
+        <PushDeviceRow />
+      </Section>
       <Section title="Eventos del calendario">
         <Row title="Recordatorio 5 minutos antes"><Toggle checked={n.remind5} onChange={(v) => set('remind5', v)} /></Row>
         <Row title="Recordatorio al empezar"><Toggle checked={n.remindStart} onChange={(v) => set('remindStart', v)} /></Row>
