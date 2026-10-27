@@ -141,6 +141,14 @@ CREATE TABLE IF NOT EXISTS desk_claims (
   claimed_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS characters (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  png BLOB NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL
+);
+
 INSERT OR IGNORE INTO channels (name) VALUES ('general'), ('social');
 `);
 

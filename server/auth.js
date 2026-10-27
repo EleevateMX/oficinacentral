@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { db, now } from './db.js';
+import { PRESETS } from '../shared/sprite.js';
 
 const SESSION_DAYS = 30;
 export const SESSION_COOKIE = 'oc_sid';
@@ -82,18 +83,10 @@ export function validateNewAccount({ username, password, displayName }) {
   return null;
 }
 
-const PALETTE = ['#e63946', '#f4a261', '#2a9d8f', '#3a86ff', '#8338ec', '#ff006e', '#06d6a0', '#118ab2', '#ef476f', '#ffd166'];
+// Personaje inicial: uno de los prediseñados, elegido según el nombre de usuario
 export function defaultAvatar(seed = '') {
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const skins = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
-  const hairs = ['#2c1b10', '#5a3825', '#a0522d', '#e6c07b', '#111111', '#7b3fbf'];
-  return {
-    skin: skins[h % skins.length],
-    hair: hairs[(h >> 3) % hairs.length],
-    hairStyle: ['short', 'long', 'spiky', 'bun', 'bald'][(h >> 5) % 4],
-    shirt: PALETTE[(h >> 7) % PALETTE.length],
-    pants: ['#2b2d42', '#3d405b', '#1d3557', '#6b705c'][(h >> 9) % 4],
-    accessory: 'none',
-  };
+  const { id, name, ...spec } = PRESETS[h % PRESETS.length];
+  return { preset: id, ...spec };
 }

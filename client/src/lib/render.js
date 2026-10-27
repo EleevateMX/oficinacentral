@@ -1,6 +1,7 @@
 // Dibujo del mapa en canvas, estilo pixel-art, sin imágenes externas.
 import { TILE } from '@shared/map.js';
 import { CATALOG, objSize } from '@shared/catalog.js';
+import { getSheet, drawSprite, FRAME_W, FRAME_H } from './sprites.js';
 
 const T = TILE;
 
@@ -536,7 +537,7 @@ export function drawObjectPreview(canvas, type, color) {
   ctx.save();
   ctx.translate(width / 2 - (c.w * T * scale) / 2, height / 2 - (c.h * T * scale) / 2 + 6 * scale);
   ctx.scale(scale, scale);
-  (D[type] || fallback)(ctx, 0, 0, c.w * T, c.h * T, { type, color: color || null, rot: type.includes('hair') ? 2 : 0 }, c);
+  (D[type] || fallback)(ctx, 0, 0, c.w * T, c.h * T, { type, color: color || null, rot: 0 }, c);
   ctx.restore();
 }
 
@@ -554,114 +555,29 @@ export function sortObjects(objects) {
 }
 
 // ---------------- Avatares ----------------
-export const AVATAR_OPTIONS = {
-  skin: ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#5c3a21'],
-  hair: ['#111111', '#2c1b10', '#5a3825', '#a0522d', '#e6c07b', '#d9d9d9', '#e63946', '#7b3fbf', '#3a86ff', '#2bb673'],
-  hairStyle: ['short', 'long', 'spiky', 'bun', 'curly', 'bald'],
-  shirt: ['#e63946', '#f4a261', '#ffd23f', '#2a9d8f', '#2bb673', '#3a86ff', '#1d3557', '#8338ec', '#ff006e', '#ffffff', '#2b2d42', '#6b705c'],
-  pants: ['#2b2d42', '#3d405b', '#1d3557', '#6b705c', '#7a4a2b', '#111111', '#a3b1c6'],
-  shoes: ['#222222', '#ffffff', '#e63946', '#7a4a2b'],
-  accessory: ['none', 'glasses', 'headphones', 'cap', 'beanie', 'sunglasses'],
-};
-
-export const HAIR_STYLE_NAMES = { short: 'Corto', long: 'Largo', spiky: 'Picudo', bun: 'Chongo', curly: 'Rizado', bald: 'Rapado' };
-export const ACCESSORY_NAMES = { none: 'Nada', glasses: 'Lentes', headphones: 'Audífonos', cap: 'Gorra', beanie: 'Gorro', sunglasses: 'Lentes de sol' };
-
-// cx = centro, by = base (pies). Tamaño ~ 22x30 px.
-export function drawAvatar(ctx, cx, by, av = {}, dir = 'down', step = 0) {
-  const skin = av.skin || '#f1c27d';
-  const hair = av.hair || '#2c1b10';
-  const shirt = av.shirt || '#3a86ff';
-  const pants = av.pants || '#2b2d42';
-  const shoes = av.shoes || '#222222';
-  const style = av.hairStyle || 'short';
-  const acc = av.accessory || 'none';
-  const x = Math.round(cx - 11);
-  const y = Math.round(by - 31);
-  const bob = step ? 1 : 0;
-
-  ctx.fillStyle = 'rgba(0,0,0,.18)';
-  ctx.beginPath(); ctx.ellipse(cx, by - 1, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
-
-  // Piernas
-  const l = step === 1 ? -2 : step === 2 ? 2 : 0;
-  R(ctx, pants, x + 6, y + 23, 4, 6 + Math.max(0, l));
-  R(ctx, pants, x + 12, y + 23, 4, 6 + Math.max(0, -l));
-  R(ctx, shoes, x + 5, y + 28 + Math.max(0, l), 5, 2);
-  R(ctx, shoes, x + 12, y + 28 + Math.max(0, -l), 5, 2);
-
-  // Torso y brazos
-  const ty = y + 14 - bob;
-  R(ctx, shirt, x + 4, ty, 14, 10);
-  R(ctx, shade(shirt, -0.15), x + 4, ty + 8, 14, 2);
-  if (dir === 'left' || dir === 'right') {
-    R(ctx, shade(shirt, -0.1), x + 9, ty + 1, 4, 7);
-    R(ctx, skin, x + 9, ty + 8, 4, 2);
-  } else {
-    R(ctx, shirt, x + 1, ty + 1, 3, 7); R(ctx, shirt, x + 18, ty + 1, 3, 7);
-    R(ctx, skin, x + 1, ty + 8, 3, 2); R(ctx, skin, x + 18, ty + 8, 3, 2);
-  }
-
-  // Cabeza
-  const hy = y + 1 - bob;
-  RR(ctx, skin, x + 3, hy + 1, 16, 13, 4);
-
-  // Cabello (detrás)
-  if (style === 'long') R(ctx, hair, x + 2, hy + 4, 18, dir === 'up' ? 14 : 12);
-  if (style === 'bun') circle(ctx, hair, x + 11, hy - 1, 4);
-
-  // Cara
-  if (dir !== 'up') {
-    const eo = dir === 'left' ? -3 : dir === 'right' ? 3 : 0;
-    if (dir === 'down') { R(ctx, '#222', x + 7 + eo, hy + 7, 2, 3); R(ctx, '#222', x + 13 + eo, hy + 7, 2, 3); }
-    else R(ctx, '#222', x + 10 + eo + (dir === 'right' ? 2 : 0), hy + 7, 2, 3);
-    if (dir === 'down') R(ctx, shade(skin, -0.15), x + 10, hy + 11, 2, 1);
-  }
-
-  // Cabello (encima)
-  if (style !== 'bald') {
-    if (dir === 'up') RR(ctx, hair, x + 3, hy, 16, 12, 4);
-    else {
-      RR(ctx, hair, x + 2, hy, 18, 6, 4);
-      if (style === 'spiky') for (let k = 0; k < 4; k++) R(ctx, hair, x + 3 + k * 4, hy - 3 + (k % 2), 3, 4);
-      if (style === 'curly') for (let k = 0; k < 5; k++) circle(ctx, hair, x + 4 + k * 3.5, hy + 1, 3);
-      if (dir !== 'right') R(ctx, hair, x + 2, hy + 3, 3, style === 'long' ? 12 : 5);
-      if (dir !== 'left') R(ctx, hair, x + 17, hy + 3, 3, style === 'long' ? 12 : 5);
-    }
-  }
-
-  // Accesorios
-  if (dir !== 'up' && (acc === 'glasses' || acc === 'sunglasses')) {
-    const eo = dir === 'left' ? -3 : dir === 'right' ? 3 : 0;
-    const col = acc === 'sunglasses' ? '#111' : 'rgba(255,255,255,.35)';
-    if (dir === 'down') {
-      R(ctx, col, x + 6 + eo, hy + 6, 4, 4); R(ctx, col, x + 12 + eo, hy + 6, 4, 4);
-      ctx.strokeStyle = '#111'; ctx.lineWidth = 1;
-      ctx.strokeRect(x + 6.5 + eo, hy + 6.5, 3, 3); ctx.strokeRect(x + 12.5 + eo, hy + 6.5, 3, 3);
-      R(ctx, '#111', x + 9 + eo, hy + 7, 3, 1);
-    } else R(ctx, col === '#111' ? '#111' : '#333', x + 9 + eo + (dir === 'right' ? 1 : 0), hy + 6, 5, 4);
-  }
-  if (acc === 'headphones') {
-    ctx.strokeStyle = '#1f9d55'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x + 11, hy + 6, 9, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
-    R(ctx, '#2bb673', x + 0, hy + 5, 4, 7); R(ctx, '#2bb673', x + 18, hy + 5, 4, 7);
-  }
-  if (acc === 'cap') {
-    RR(ctx, '#e63946', x + 2, hy - 2, 18, 6, 3);
-    if (dir === 'down') R(ctx, '#c1121f', x + 4, hy + 3, 14, 2);
-    if (dir === 'left') R(ctx, '#c1121f', x - 2, hy + 2, 8, 2);
-    if (dir === 'right') R(ctx, '#c1121f', x + 16, hy + 2, 8, 2);
-  }
-  if (acc === 'beanie') { RR(ctx, '#3a86ff', x + 2, hy - 3, 18, 8, 4); R(ctx, '#1d4ed8', x + 2, hy + 3, 18, 2); circle(ctx, '#fff', x + 11, hy - 3, 2); }
+// cx = centro horizontal, by = base (pies). El sprite mide 32×48.
+export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0) {
+  ctx.fillStyle = 'rgba(0,0,0,.2)';
+  ctx.beginPath();
+  ctx.ellipse(cx, by - 1, 10, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), Math.round(by - FRAME_H + 1), dir, step);
 }
 
-export function drawAvatarPreview(canvas, avatar, dir = 'down') {
+// Vista previa: el cuadro quieto en la dirección pedida, escalado a número entero.
+export function drawAvatarPreview(canvas, avatar, dir = 'down', step = 0) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
-  const s = Math.floor(Math.min(canvas.width / 26, canvas.height / 36));
-  ctx.save();
-  ctx.scale(s, s);
-  drawAvatar(ctx, canvas.width / s / 2, canvas.height / s / 2 + 16, avatar, dir, 0);
-  ctx.restore();
+  const k = Math.max(1, Math.floor(Math.min(canvas.width / FRAME_W, canvas.height / FRAME_H)));
+  drawSprite(ctx, getSheet(avatar), Math.round((canvas.width - FRAME_W * k) / 2), Math.round((canvas.height - FRAME_H * k) / 2), dir, step, k);
+}
+
+// Solo la cara (para usar como foto de perfil cuando no hay foto)
+export function drawAvatarFace(canvas, avatar) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  const sheet = getSheet(avatar);
+  if (sheet) ctx.drawImage(sheet, 4, 8, 24, 24, 0, 0, canvas.width, canvas.height);
 }

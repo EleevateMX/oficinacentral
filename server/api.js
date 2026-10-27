@@ -188,7 +188,7 @@ api.get('/users/:id/photo', (req, res) => {
   res.send(Buffer.from(m[3], 'base64'));
 });
 
-const AVATAR_KEYS = ['skin', 'hair', 'hairStyle', 'shirt', 'pants', 'accessory', 'shoes'];
+const AVATAR_KEYS = ['skin', 'hair', 'hairStyle', 'shirt', 'pants', 'accessory', 'shoes', 'top', 'accent', 'preset', 'sprite'];
 
 api.patch('/me', wrap((req, res) => {
   const b = req.body || {};
@@ -202,7 +202,10 @@ api.patch('/me', wrap((req, res) => {
   const statusText = b.statusText !== undefined ? String(b.statusText).slice(0, 80) : u.status_text;
   let avatar = parseJSON(u.avatar, {});
   if (b.avatar && typeof b.avatar === 'object') {
-    for (const k of AVATAR_KEYS) if (typeof b.avatar[k] === 'string') avatar[k] = b.avatar[k].slice(0, 20);
+    // El avatar se reemplaza completo: ficha generada o personaje subido (sprite)
+    avatar = {};
+    for (const k of AVATAR_KEYS) if (typeof b.avatar[k] === 'string') avatar[k] = b.avatar[k].slice(0, 40);
+    if (avatar.sprite && !db.prepare('SELECT 1 FROM characters WHERE id = ?').get(avatar.sprite)) return fail(res, 400, 'Ese personaje ya no existe');
   }
   const email = b.email !== undefined ? String(b.email).trim().toLowerCase().slice(0, 120) : u.email;
   db.prepare('UPDATE users SET display_name = ?, timezone = ?, status_text = ?, avatar = ?, email = ? WHERE id = ?')
@@ -240,6 +243,65 @@ api.post('/me/password', wrap((req, res) => {
   if (!password || String(password).length < 8) return fail(res, 400, 'La nueva contraseña debe tener al menos 8 caracteres');
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), req.user.id);
   db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, req.token);
+  res.json({ ok: true });
+}));
+
+// ---------- Personajes subidos (hojas de sprites PNG 96×192) ----------
+const SHEET_W = 96;
+const SHEET_H = 192;
+
+function pngSize(buf) {
+  const sig = '89504e470d0a1a0a';
+  if (buf.length < 24 || buf.subarray(0, 8).toString('hex') !== sig || buf.subarray(12, 16).toString('ascii') !== 'IHDR') return null;
+  return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+}
+
+api.get('/characters', (req, res) => {
+  const rows = db.prepare('SELECT id, name, created_at FROM characters ORDER BY created_at').all();
+  res.json({ characters: rows.map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at })) });
+});
+
+api.get('/characters/:id.png', (req, res) => {
+  const r = db.prepare('SELECT png FROM characters WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).end();
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.send(Buffer.from(r.png));
+});
+
+api.post('/characters', requireAdmin, wrap((req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 40);
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.dataUrl || ''));
+  if (!name) return fail(res, 400, 'Ponle un nombre al personaje');
+  if (!m) return fail(res, 400, 'Sube un archivo PNG');
+  const buf = Buffer.from(m[1], 'base64');
+  if (buf.length > 300_000) return fail(res, 413, 'El PNG es demasiado grande');
+  const size = pngSize(buf);
+  if (!size) return fail(res, 400, 'El archivo no es un PNG válido');
+  if (size.w !== SHEET_W || size.h !== SHEET_H) {
+    return fail(res, 400, `La hoja debe medir ${SHEET_W}×${SHEET_H} px (3 cuadros × 4 direcciones de 32×48). La tuya mide ${size.w}×${size.h}.`);
+  }
+  const base = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'personaje';
+  let id = base;
+  for (let n = 2; db.prepare('SELECT 1 FROM characters WHERE id = ?').get(id); n++) id = `${base}-${n}`;
+  db.prepare('INSERT INTO characters (id, name, png, created_by, created_at) VALUES (?, ?, ?, ?, ?)').run(id, name, buf, req.user.id, now());
+  emitAll('characters', {});
+  res.json({ character: { id, name } });
+}));
+
+api.delete('/characters/:id', requireAdmin, wrap((req, res) => {
+  const id = String(req.params.id);
+  // Quien lo usaba vuelve a su ficha generada
+  for (const u of db.prepare("SELECT id, avatar FROM users WHERE avatar LIKE ?").all(`%"sprite":"${id}"%`)) {
+    const av = parseJSON(u.avatar, {});
+    if (av.sprite === id) {
+      delete av.sprite;
+      db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(JSON.stringify(av), u.id);
+      broadcastUser(u.id);
+    }
+  }
+  db.prepare('DELETE FROM characters WHERE id = ?').run(id);
+  emitAll('characters', {});
   res.json({ ok: true });
 }));
 

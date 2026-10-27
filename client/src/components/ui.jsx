@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { X, ChevronDown } from 'lucide-react';
-import { drawAvatarPreview } from '../lib/render.js';
+import { drawAvatarPreview, drawAvatarFace } from '../lib/render.js';
+import { onSpritesLoaded } from '../lib/sprites.js';
 
 export const STATUS = {
   active: { label: 'Activo', color: 'var(--green)' },
@@ -33,27 +34,21 @@ export function Avatar({ user, size = 32, showStatus = true, ring = false }) {
 }
 
 function SpriteFace({ avatar, size, fallback }) {
-  if (!avatar || !avatar.skin) return <span>{fallback}</span>;
+  if (!avatar) return <span>{fallback}</span>;
   return <AvatarCanvas avatar={avatar} width={size} height={size} zoomFace />;
 }
 
-export function AvatarCanvas({ avatar, width = 96, height = 120, dir = 'down', zoomFace = false }) {
+export function AvatarCanvas({ avatar, width = 96, height = 120, dir = 'down', step = 0, zoomFace = false }) {
   const ref = useRef(null);
+  const [, bump] = React.useState(0);
+  useEffect(() => onSpritesLoaded(() => bump((x) => x + 1)), []);
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
-    if (zoomFace) {
-      // Zoom a la cabeza para usarlo como foto de perfil
-      const tmp = document.createElement('canvas');
-      tmp.width = 26 * 4; tmp.height = 36 * 4;
-      drawAvatarPreview(tmp, avatar, dir);
-      const ctx = c.getContext('2d');
-      ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, c.width, c.height);
-      ctx.drawImage(tmp, 8, 10, 88, 88, 0, 0, c.width, c.height);
-    } else drawAvatarPreview(c, avatar, dir);
-  }, [avatar, dir, zoomFace, width, height]);
-  return <canvas ref={ref} width={width * 2} height={height * 2} style={{ width, height, imageRendering: 'pixelated' }} />;
+    if (zoomFace) drawAvatarFace(c, avatar);
+    else drawAvatarPreview(c, avatar, dir, step);
+  });
+  return <canvas ref={ref} width={zoomFace ? 48 : width * 2} height={zoomFace ? 48 : height * 2} style={{ width, height, imageRendering: 'pixelated' }} />;
 }
 
 export function StatusDot({ status, online = true }) {

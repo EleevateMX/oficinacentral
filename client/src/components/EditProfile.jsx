@@ -1,9 +1,9 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Pencil, Trash2, ArrowLeft, RotateCw } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Pencil, Trash2, ArrowLeft } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Modal, AvatarCanvas, initials, Select } from './ui.jsx';
-import { AVATAR_OPTIONS, HAIR_STYLE_NAMES, ACCESSORY_NAMES } from '../lib/render.js';
+import { SPRITE_OPTIONS, STYLE_NAMES, PRESETS, normalizeSpec } from '@shared/sprite.js';
 import { timezones, tzOffsetLabel } from '../lib/time.js';
 
 // Reduce la imagen a 256×256 (recorte cuadrado centrado)
@@ -133,38 +133,82 @@ function Chips({ options, names, value, onChange }) {
   );
 }
 
-export function AvatarEditor({ avatar, onChange }) {
-  const [dir, setDir] = useState('down');
-  const set = (k) => (v) => onChange({ ...avatar, [k]: v });
+// Vista previa caminando en las 4 direcciones
+function WalkingPreview({ avatar }) {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setT((x) => x + 1), 180);
+    return () => clearInterval(id);
+  }, []);
   const dirs = ['down', 'left', 'up', 'right'];
+  const dir = dirs[Math.floor(t / 12) % 4];
+  const step = [1, 0, 2, 0][t % 4];
+  return <AvatarCanvas avatar={avatar} width={128} height={192} dir={dir} step={step} />;
+}
+
+export function AvatarEditor({ avatar, onChange }) {
+  const characters = useOffice((s) => s.characters);
+  const [tab, setTab] = useState(avatar.sprite ? 'chars' : avatar.preset ? 'chars' : 'custom');
+  const spec = normalizeSpec(avatar.sprite ? {} : avatar);
+  const set = (k) => (v) => onChange({ ...spec, preset: undefined, sprite: undefined, [k]: v });
+  const pickPreset = (p) => {
+    const { id, name, ...rest } = p;
+    onChange({ ...rest, preset: id });
+  };
   const random = () => {
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
-    onChange(Object.fromEntries(Object.entries(AVATAR_OPTIONS).map(([k, v]) => [k, pick(v)])));
+    onChange(Object.fromEntries(Object.entries(SPRITE_OPTIONS).map(([k, v]) => [k, pick(v)])));
   };
+
   return (
     <div className="avatar-editor">
       <div className="ae-preview">
-        <AvatarCanvas avatar={avatar} width={150} height={190} dir={dir} />
-        <div className="row gap8">
-          <button type="button" className="btn tiny" onClick={() => setDir(dirs[(dirs.indexOf(dir) + 1) % 4])}><RotateCw size={12} /> Girar</button>
-          <button type="button" className="btn tiny" onClick={random}>🎲 Aleatorio</button>
-        </div>
+        <WalkingPreview avatar={avatar} />
+        {!avatar.sprite && <button type="button" className="btn tiny" onClick={random}>Aleatorio</button>}
       </div>
       <div className="ae-options">
-        <div className="ae-label">Piel</div>
-        <Swatches options={AVATAR_OPTIONS.skin} value={avatar.skin} onChange={set('skin')} />
-        <div className="ae-label">Peinado</div>
-        <Chips options={AVATAR_OPTIONS.hairStyle} names={HAIR_STYLE_NAMES} value={avatar.hairStyle} onChange={set('hairStyle')} />
-        <div className="ae-label">Color de cabello</div>
-        <Swatches options={AVATAR_OPTIONS.hair} value={avatar.hair} onChange={set('hair')} />
-        <div className="ae-label">Camisa</div>
-        <Swatches options={AVATAR_OPTIONS.shirt} value={avatar.shirt} onChange={set('shirt')} />
-        <div className="ae-label">Pantalón</div>
-        <Swatches options={AVATAR_OPTIONS.pants} value={avatar.pants} onChange={set('pants')} />
-        <div className="ae-label">Zapatos</div>
-        <Swatches options={AVATAR_OPTIONS.shoes} value={avatar.shoes} onChange={set('shoes')} />
-        <div className="ae-label">Accesorio</div>
-        <Chips options={AVATAR_OPTIONS.accessory} names={ACCESSORY_NAMES} value={avatar.accessory || 'none'} onChange={set('accessory')} />
+        <div className="seg">
+          <button type="button" className={tab === 'chars' ? 'on' : ''} onClick={() => setTab('chars')}>Personajes</button>
+          <button type="button" className={tab === 'custom' ? 'on' : ''} onClick={() => setTab('custom')}>Personalizar</button>
+        </div>
+        {tab === 'chars' ? (
+          <div className="char-grid">
+            {PRESETS.map((p) => (
+              <button type="button" key={p.id} className={`char-card ${!avatar.sprite && avatar.preset === p.id ? 'on' : ''}`} onClick={() => pickPreset(p)}>
+                <AvatarCanvas avatar={p} width={48} height={72} />
+                <span>{p.name}</span>
+              </button>
+            ))}
+            {characters.map((c) => (
+              <button type="button" key={c.id} className={`char-card ${avatar.sprite === c.id ? 'on' : ''}`} onClick={() => onChange({ sprite: c.id })}>
+                <AvatarCanvas avatar={{ sprite: c.id }} width={48} height={72} />
+                <span>{c.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <>
+            {avatar.sprite && <p className="muted small">Estás usando un personaje dibujado a mano. Al cambiar algo aquí pasas a un personaje personalizado.</p>}
+            <div className="ae-label">Piel</div>
+            <Swatches options={SPRITE_OPTIONS.skin} value={spec.skin} onChange={set('skin')} />
+            <div className="ae-label">Peinado</div>
+            <Chips options={SPRITE_OPTIONS.hairStyle} names={STYLE_NAMES.hairStyle} value={spec.hairStyle} onChange={set('hairStyle')} />
+            <div className="ae-label">Color de cabello</div>
+            <Swatches options={SPRITE_OPTIONS.hair} value={spec.hair} onChange={set('hair')} />
+            <div className="ae-label">Ropa</div>
+            <Chips options={SPRITE_OPTIONS.top} names={STYLE_NAMES.top} value={spec.top} onChange={set('top')} />
+            <div className="ae-label">Color de la ropa</div>
+            <Swatches options={SPRITE_OPTIONS.shirt} value={spec.shirt} onChange={set('shirt')} />
+            <div className="ae-label">Color de detalle (estampado, corbata, gorra…)</div>
+            <Swatches options={SPRITE_OPTIONS.accent} value={spec.accent} onChange={set('accent')} />
+            <div className="ae-label">Pantalón</div>
+            <Swatches options={SPRITE_OPTIONS.pants} value={spec.pants} onChange={set('pants')} />
+            <div className="ae-label">Zapatos</div>
+            <Swatches options={SPRITE_OPTIONS.shoes} value={spec.shoes} onChange={set('shoes')} />
+            <div className="ae-label">Accesorio</div>
+            <Chips options={SPRITE_OPTIONS.accessory} names={STYLE_NAMES.accessory} value={spec.accessory} onChange={set('accessory')} />
+          </>
+        )}
       </div>
     </div>
   );

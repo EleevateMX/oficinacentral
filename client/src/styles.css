@@ -546,3 +546,13 @@ pre code { background: none; padding: 0; }
   .tr > :nth-child(3), .tr > :nth-child(4) { display: none; }
   .control-bar { bottom: 10px; }
 }
+
+/* Selector de personajes */
+.char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-top: 10px; max-height: 360px; overflow-y: auto; }
+.char-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; border: 2px solid transparent; background: var(--panel-2); }
+.char-card:hover { background: var(--hover); }
+.char-card.on { border-color: var(--accent); background: var(--accent-soft); }
+.char-card span { font-size: 11.5px; color: var(--text-2); text-align: center; line-height: 1.2; }
+.char-admin { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.char-admin .char-card { position: relative; }
+.char-admin .char-card .icon-btn { position: absolute; top: 4px; right: 4px; }

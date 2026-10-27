@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2,
+  X, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
 import { listDevices } from '../../lib/media.js';
 import { playSound } from '../../lib/sounds.js';
-import { Toggle, Select, Row, Radio, Avatar, Empty } from '../ui.jsx';
+import { Toggle, Select, Row, Radio, Avatar, Empty, AvatarCanvas } from '../ui.jsx';
 import { fmtDate } from '../../lib/time.js';
 
 const SECTIONS = [
@@ -23,6 +23,7 @@ const SECTIONS = [
   { group: 'Oficina' },
   { id: 'members', label: 'Miembros', icon: UserCog },
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
+  { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -66,6 +67,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'account' && <Account />}
             {cur === 'members' && <Members initialTab={modal?.tab} />}
             {cur === 'office' && <OfficeAdmin />}
+            {cur === 'characters' && <CharactersAdmin />}
           </div>
         </section>
       </div>
@@ -514,5 +516,79 @@ function OfficeAdmin() {
       <p className="muted">Pisos actuales: {floors.map((f) => f.name).join(', ')}</p>
       <button className="btn primary" onClick={() => office.set({ modal: null, view: 'map', editMode: 'build' })}>Abrir editor de oficina</button>
     </Section>
+  );
+}
+
+// ---------- Personajes (hojas de sprites) ----------
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function CharactersAdmin() {
+  const characters = useOffice((s) => s.characters);
+  const [name, setName] = useState('');
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+
+  const upload = async (e) => {
+    e.preventDefault();
+    if (!file) return;
+    setBusy(true);
+    try {
+      await api.post('/characters', { name, dataUrl: await readAsDataUrl(file) });
+      setName('');
+      setFile(null);
+      fileRef.current.value = '';
+      office.toast({ title: 'Personaje agregado. Ya aparece en el editor de avatar.' });
+    } catch (err) {
+      office.toast({ title: err.message, kind: 'error' });
+    }
+    setBusy(false);
+  };
+
+  const remove = async (c) => {
+    if (!confirm(`¿Borrar "${c.name}"? Quien lo use volverá a su avatar personalizado.`)) return;
+    await api.del(`/characters/${c.id}`).catch((err) => office.toast({ title: err.message, kind: 'error' }));
+  };
+
+  return (
+    <>
+      <Section title="Formato">
+        <p className="muted">
+          Cada personaje es una imagen PNG de <b>96×192 px</b> con fondo transparente: <b>3 columnas</b> (quieto, paso A, paso B)
+          × <b>4 filas</b> (abajo, izquierda, derecha, arriba). Cada cuadro mide 32×48 px y los pies van en la fila 46.
+          Puedes dibujarlos en Aseprite, Piskel o LibreSprite usando la plantilla.
+        </p>
+        <div className="row gap8 wrap">
+          <a className="btn" href="/characters/plantilla.png" download><Download size={15} /> Plantilla (96×192)</a>
+          <a className="btn" href="/characters/plantilla-4x.png" download><Download size={15} /> Plantilla ampliada (4×)</a>
+        </div>
+      </Section>
+      <Section title="Subir personaje">
+        <form className="form narrow" onSubmit={upload}>
+          <input placeholder="Nombre (ej. Mascota GTAHUB)" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} required />
+          <input ref={fileRef} type="file" accept="image/png" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
+          <button className="btn primary" disabled={busy || !file}><Upload size={15} /> {busy ? 'Subiendo…' : 'Subir'}</button>
+        </form>
+      </Section>
+      <Section title={`Personajes subidos (${characters.length})`}>
+        {!characters.length && <Empty title="Aún no hay personajes subidos">Los 10 personajes prediseñados siempre están disponibles.</Empty>}
+        <div className="char-admin">
+          {characters.map((c) => (
+            <div key={c.id} className="char-card">
+              <AvatarCanvas avatar={{ sprite: c.id }} width={48} height={72} />
+              <span>{c.name}</span>
+              <button className="icon-btn danger" title="Borrar" onClick={() => remove(c)}><Ban size={14} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+    </>
   );
 }

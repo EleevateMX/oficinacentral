@@ -42,6 +42,7 @@ class Office {
       config: { officeName: 'GTAHUB', iceServers: [] },
       users: {},
       floors: [],
+      characters: [],
       floor: null, // piso que estoy viendo (compuesto)
       presenceVersion: 0,
       view: 'map',
@@ -83,6 +84,7 @@ class Office {
     ]);
     const byId = Object.fromEntries(users.users.map((u) => [u.id, u]));
     this.set({ config: { ...config, iceServers: ice.iceServers }, users: byId, floors: floors.floors, chat, notifications: notifications.notifications });
+    this.loadCharacters();
     this.connect();
     this.timers = [
       setInterval(() => this.updateProximity(), 400),
@@ -198,6 +200,7 @@ class Office {
     });
     s.on('message', (m) => this.onMessage(m));
     s.on('channels', () => this.refreshChat());
+    s.on('characters', () => this.loadCharacters());
     s.on('events', () => this.loadEvents());
     s.on('notification', (n) => {
       this.set((st) => ({ notifications: [n, ...st.notifications] }));
@@ -394,6 +397,11 @@ class Office {
   async wave(userId) {
     await api.post(`/wave/${userId}`);
     playSound('wave', this.state.prefs.audio.notifVolume);
+  }
+
+  async loadCharacters() {
+    const { characters } = await api.get('/characters').catch(() => ({ characters: [] }));
+    this.set({ characters });
   }
 
   // ---------- Calendario ----------
