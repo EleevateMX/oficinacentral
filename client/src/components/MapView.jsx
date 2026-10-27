@@ -13,6 +13,7 @@ import ControlBar from './ControlBar.jsx';
 import VideoStrip from './VideoStrip.jsx';
 import { ScreenStage } from './Streams.jsx';
 import RoomChat from './RoomChat.jsx';
+import Minimap from './Minimap.jsx';
 import Decorator from './Decorator.jsx';
 import { drawPet } from '../lib/pets.js';
 import { pose, drawFxUnder, drawFxOver } from '../lib/fx.js';
@@ -1065,6 +1066,7 @@ export default function MapView({ active }) {
         <button className="icon-btn" title="Ver todo el mapa" onClick={fitMap}><MapIcon size={18} /></button>
       </div>
 
+      {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>
   );
