@@ -714,6 +714,5 @@ export function create(canvas, ctx) {
       canvas.style.touchAction = prevTouch;
     },
   };
-  Object.defineProperty(api, '_st', { get: () => st, enumerable: false });
   return api;
 }

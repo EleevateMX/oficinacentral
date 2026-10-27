@@ -164,6 +164,14 @@ export const CATALOG = {
   fairyLights: d('Luces colgantes', 'gtahub', 4, 0.5, { colorable: true, brand: true }),
   balloons: d('Globos', 'gtahub', 1, 1.5, { colorable: true, brand: true }),
   deskFlag: d('Banderita de escritorio', 'gtahub', 0.5, 0.75, { colorable: true, brand: true }),
+  // GTAHUB premium (animated: se dibujan en cada cuadro, son pocos y baratos)
+  wavingFlag: f('Bandera que ondea', 'gtahub', 1, 1, { colorable: true, brand: true, animated: true }),
+  rollupBanner: f('Roll-up GTAHUB', 'gtahub', 1, 1, { colorable: true, brand: true }),
+  brandWall: d('Muro de logo iluminado', 'gtahub', 4, 1, { colorable: true, brand: true }),
+  logoTotem: f('Tótem con logo', 'gtahub', 1, 1, { colorable: true, brand: true, animated: true }),
+  photocall: f('Photocall', 'gtahub', 4, 1, { colorable: true, brand: true }),
+  brandRug: d('Tapete con logo', 'gtahub', 3, 3, { colorable: true, brand: true, under: true }),
+  trophyCase: f('Vitrina de trofeos', 'gtahub', 2, 1, { colorable: true, brand: true }),
   // Piso (alrededor de tu lugar)
   floorPlant: d('Planta grande', 'piso', 1, 1),
   floorLamp: d('Lámpara de pie', 'piso', 0.5, 1, { colorable: true, color: '#f4a261' }),

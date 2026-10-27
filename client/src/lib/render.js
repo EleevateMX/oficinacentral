@@ -813,6 +813,189 @@ D.flagPole = (ctx, x, y, w, h, o) => {
   ctx.fillStyle = s; hexPath(ctx, x + w / 2 + 14, y - 36.5, 2); ctx.fill();
 };
 
+// ----- GTAHUB premium -----
+// Tiempo de animación (lo pone el mapa en cada cuadro; en vistas previas queda quieto)
+let ANIM_T = 0;
+export function setAnimTime(t) { ANIM_T = t; }
+
+// Logo recortado a un ancho (para pintarlo por tiras en la bandera)
+function logoImage() { return brandLogo(); }
+
+// Bandera que ondea: tela por tiras verticales con una onda que viaja; el logo va pintado en la tela
+D.wavingFlag = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const px = x + w / 2;
+  const top = y - 70;
+  // base y asta
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(px + 3, y + h - 6, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+  RR(ctx, '#5b606b', px - 9, y + h - 12, 18, 7, 2);
+  RR(ctx, '#8a909c', px - 7, y + h - 14, 14, 4, 2);
+  const pole = ctx.createLinearGradient(px - 2, 0, px + 2, 0);
+  pole.addColorStop(0, '#e9edf2'); pole.addColorStop(1, '#8e96a3');
+  ctx.fillStyle = pole; ctx.fillRect(px - 1.5, top, 3, y + h - 12 - top);
+  circle(ctx, '#FFCC00', px, top - 1, 3);
+  circle(ctx, '#fff6c2', px - 1, top - 2, 1);
+  // tela
+  const FW = 46, FH = 30, N = 23, sw = FW / N;
+  const t = ANIM_T / 1000;
+  const im = logoImage();
+  const wave = (k) => Math.sin(k * 0.35 - t * 5) * (k / N) * 4;
+  for (let k = 0; k < N; k++) {
+    const dy = wave(k);
+    const shadeK = Math.cos(k * 0.35 - t * 5) * (k / N);
+    const fx = px + 1.5 + k * sw;
+    const fy = top + 2 + dy;
+    const g = ctx.createLinearGradient(0, fy, 0, fy + FH);
+    g.addColorStop(0, p); g.addColorStop(1, shade(p, -0.15));
+    ctx.fillStyle = g; ctx.fillRect(fx, fy, sw + 0.6, FH);
+    // franja inferior
+    ctx.fillStyle = s; ctx.fillRect(fx, fy + FH - 5, sw + 0.6, 3);
+    ctx.fillStyle = d; ctx.fillRect(fx, fy + FH - 2, sw + 0.6, 2);
+    if (im) {
+      const lw = FW - 12, lh = Math.min(FH - 10, lw * im.naturalHeight / im.naturalWidth);
+      const lx0 = 6, ly0 = (FH - 5 - lh) / 2;
+      const a = k * sw - lx0, b = a + sw;
+      if (b > 0 && a < lw) {
+        const sx0 = Math.max(0, a), sx1 = Math.min(lw, b);
+        const srcX = (sx0 / lw) * im.naturalWidth, srcW = ((sx1 - sx0) / lw) * im.naturalWidth;
+        ctx.drawImage(im, srcX, 0, srcW, im.naturalHeight, fx + (sx0 - a), fy + ly0, sx1 - sx0 + 0.4, lh);
+      }
+    }
+    // luz y sombra de los pliegues
+    ctx.fillStyle = shadeK > 0 ? `rgba(255,255,255,${shadeK * 0.22})` : `rgba(0,0,0,${-shadeK * 0.28})`;
+    ctx.fillRect(fx, fy, sw + 0.6, FH);
+  }
+  if (!im) { ctx.fillStyle = '#fff'; hexPath(ctx, px + 1.5 + FW / 2, top + 2 + FH / 2 - 2 + wave(N / 2), 6); ctx.fill(); }
+};
+
+// Roll-up de pie: lona con degradado, logo grande, líneas de texto y base de aluminio
+D.rollupBanner = (ctx, x, y, w, h, o) => {
+  const { p, s, d, l } = brandCols(o);
+  const bx = x + 3, bw = w - 6, top = y - 46, bot = y + h - 9;
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(x + w / 2 + 3, y + h - 4, bw / 2 + 2, 4, 0, 0, Math.PI * 2); ctx.fill();
+  R(ctx, '#7c8391', x + w / 2 - 1, top - 3, 2, 4);
+  const g = ctx.createLinearGradient(0, top, 0, bot);
+  g.addColorStop(0, d); g.addColorStop(0.55, shade(p, -0.25)); g.addColorStop(1, p);
+  RR(ctx, g, bx, top, bw, bot - top, 2);
+  // brillo diagonal
+  ctx.save(); ctx.beginPath(); ctx.rect(bx, top, bw, bot - top); ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.beginPath(); ctx.moveTo(bx, top + 10); ctx.lineTo(bx + bw, top); ctx.lineTo(bx + bw, top + 16); ctx.lineTo(bx, top + 30); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  R(ctx, s, bx, top, bw, 2);
+  if (!drawLogo(ctx, x + w / 2, top + 16, bw - 6)) { ctx.fillStyle = l; hexPath(ctx, x + w / 2, top + 16, 8); ctx.fill(); }
+  R(ctx, 'rgba(255,255,255,.85)', bx + 5, top + 32, bw - 10, 2);
+  R(ctx, 'rgba(255,255,255,.5)', bx + 7, top + 37, bw - 14, 1.5);
+  R(ctx, s, bx + 5, bot - 9, bw - 10, 4);
+  // base
+  RR(ctx, '#b9c0cb', x + 1, bot, w - 2, 5, 2);
+  R(ctx, '#8b929e', x + 1, bot + 4, w - 2, 2);
+  R(ctx, '#e6eaef', x + 3, bot + 1, w - 6, 1);
+};
+
+// Muro de logo retroiluminado (para recepción o detrás de un escenario)
+D.brandWall = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const top = y - 26;
+  R(ctx, 'rgba(0,0,0,.18)', x + 4, top + 6, w - 4, h + 22);
+  RR(ctx, '#17161d', x + 1, top, w - 2, h + 24, 4);
+  const g = ctx.createRadialGradient(x + w / 2, top + (h + 24) / 2, 4, x + w / 2, top + (h + 24) / 2, w / 1.6);
+  g.addColorStop(0, shade(p, -0.1)); g.addColorStop(1, d);
+  RR(ctx, g, x + 4, top + 3, w - 8, h + 18, 3);
+  // marco con luz
+  ctx.save(); ctx.shadowColor = p; ctx.shadowBlur = 10; ctx.strokeStyle = p; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(x + 5.5, top + 4.5, w - 11, h + 15, 3); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(255,255,255,.8)'; ctx.shadowBlur = 14;
+  if (!drawLogo(ctx, x + w / 2, top + (h + 24) / 2 - 2, Math.min(w - 26, h + 8))) { ctx.fillStyle = '#fff'; hexPath(ctx, x + w / 2, top + (h + 24) / 2, 10); ctx.fill(); }
+  ctx.restore();
+  R(ctx, s, x + w / 2 - 18, top + h + 14, 36, 2);
+  // focos arriba
+  for (const fx of [x + 10, x + w - 14]) { R(ctx, '#2c2b33', fx, top - 4, 4, 5); ctx.fillStyle = 'rgba(255,240,200,.18)'; ctx.beginPath(); ctx.moveTo(fx, top + 1); ctx.lineTo(fx + 4, top + 1); ctx.lineTo(fx + 18, top + 26); ctx.lineTo(fx - 14, top + 26); ctx.closePath(); ctx.fill(); }
+};
+
+// Tótem hexagonal con el logo encendido arriba
+D.logoTotem = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const cx = x + w / 2, base = y + h - 6, top = y - 30;
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(cx + 3, base + 2, 13, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  // columna
+  const g = ctx.createLinearGradient(cx - 10, 0, cx + 10, 0);
+  g.addColorStop(0, shade(d, 0.25)); g.addColorStop(0.5, d); g.addColorStop(1, shade(d, -0.3));
+  ctx.fillStyle = g; ctx.fillRect(cx - 10, top + 12, 20, base - top - 12);
+  R(ctx, p, cx - 10, top + 12, 20, 2);
+  R(ctx, s, cx - 10, base - 4, 20, 2);
+  R(ctx, 'rgba(255,255,255,.12)', cx - 8, top + 14, 2, base - top - 20);
+  // hexágono con brillo que respira (se ve aunque no se anime)
+  const pulse = 0.75 + Math.sin(ANIM_T / 600) * 0.25;
+  ctx.save(); ctx.shadowColor = p; ctx.shadowBlur = 14 * pulse;
+  ctx.fillStyle = '#121216'; hexPath(ctx, cx, top + 2, 14); ctx.fill();
+  ctx.strokeStyle = p; ctx.lineWidth = 2; hexPath(ctx, cx, top + 2, 13); ctx.stroke(); ctx.restore();
+  if (!drawLogo(ctx, cx, top + 2, 20)) { ctx.fillStyle = s; hexPath(ctx, cx, top + 2, 6); ctx.fill(); }
+};
+
+// Photocall: lona con el logo repetido, para fotos en eventos
+D.photocall = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const top = y - 40, bot = y + h - 6;
+  R(ctx, 'rgba(0,0,0,.15)', x + 5, top + 5, w - 6, bot - top);
+  for (const fx of [x + 2, x + w - 5]) { R(ctx, '#3a3d45', fx, top - 2, 3, bot - top + 4); R(ctx, '#23252b', fx - 3, bot + 1, 9, 3); }
+  R(ctx, '#f6f6f8', x + 5, top, w - 10, bot - top);
+  ctx.save(); ctx.beginPath(); ctx.rect(x + 5, top, w - 10, bot - top); ctx.clip();
+  let row = 0;
+  for (let yy = top + 7; yy < bot; yy += 14, row++) {
+    for (let xx = x + 5 + (row % 2 ? 0 : 16); xx < x + w; xx += 32) {
+      if (!drawLogo(ctx, xx + 8, yy, 20)) { ctx.fillStyle = (row + Math.round(xx)) % 2 ? p : d; hexPath(ctx, xx + 8, yy, 4); ctx.fill(); }
+    }
+  }
+  ctx.restore();
+  R(ctx, p, x + 5, top, w - 10, 3);
+  R(ctx, s, x + 5, bot - 3, w - 10, 3);
+};
+
+// Tapete redondo con el logo (debajo de todo)
+D.brandRug = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) / 2 - 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, r, r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = d; ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = p; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(cx, cy, r - 4, r * 0.92 - 4, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([3, 4]); ctx.strokeStyle = s; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, cy, r - 9, r * 0.92 - 9, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  if (!drawLogo(ctx, cx, cy, r * 1.25)) { ctx.fillStyle = p; hexPath(ctx, cx, cy, r * 0.35); ctx.fill(); }
+  ctx.restore();
+};
+
+// Vitrina de trofeos (sala de juegos)
+D.trophyCase = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const top = y - 30, bot = y + h - 4;
+  R(ctx, 'rgba(0,0,0,.18)', x + 4, top + 4, w - 4, bot - top);
+  RR(ctx, '#3b2a20', x + 1, top, w - 2, bot - top, 3);
+  R(ctx, '#2a1d16', x + 1, bot - 6, w - 2, 6);
+  const glass = ctx.createLinearGradient(x, top, x + w, bot);
+  glass.addColorStop(0, '#1d2b3a'); glass.addColorStop(1, '#0f1720');
+  ctx.fillStyle = glass; ctx.fillRect(x + 4, top + 3, w - 8, bot - top - 11);
+  const shelves = [top + 18, top + 34];
+  for (const sy of shelves) R(ctx, '#6b4b36', x + 4, sy, w - 8, 2);
+  // trofeos
+  const cup = (cx, by, c) => {
+    ctx.fillStyle = c;
+    ctx.beginPath(); ctx.moveTo(cx - 4, by - 11); ctx.lineTo(cx + 4, by - 11); ctx.quadraticCurveTo(cx + 4, by - 5, cx, by - 4); ctx.quadraticCurveTo(cx - 4, by - 5, cx - 4, by - 11); ctx.fill();
+    ctx.fillRect(cx - 1, by - 4, 2, 2); ctx.fillRect(cx - 3, by - 2, 6, 2);
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(cx - 2.5, by - 10, 1, 4);
+  };
+  const n = Math.max(2, Math.floor((w - 8) / 12));
+  for (let k = 0; k < n; k++) {
+    const cx = x + 4 + (w - 8) * (k + 0.5) / n;
+    cup(cx, shelves[0], k % 3 === 0 ? '#FFCC00' : k % 3 === 1 ? '#d9dde3' : '#d08a4a');
+    if (k % 2 === 0) cup(cx, shelves[1], '#FFCC00');
+    else { ctx.fillStyle = p; hexPath(ctx, cx, shelves[1] - 5, 4); ctx.fill(); }
+  }
+  if (!drawLogo(ctx, x + w / 2, bot - 3, 12)) R(ctx, s, x + w / 2 - 8, bot - 4, 16, 2);
+  // reflejo del vidrio
+  ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(x + 6, top + 3); ctx.lineTo(x + 14, top + 3); ctx.lineTo(x + 6, bot - 12); ctx.closePath(); ctx.fill();
+  R(ctx, d, x + 1, top, w - 2, 2);
+};
+
 D.carpetRunner = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color;
   R(ctx, shade(col, -0.25), x + 2, y, w - 4, h);

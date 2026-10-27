@@ -448,6 +448,7 @@ function templateHQ() {
   b.o('foosball', 81, 54);
   for (const [x, y, c] of [[87, 54, '#FE3377'], [89, 55, '#3a86ff'], [91, 54, '#FFCC00']]) b.o('beanBag', x, y, { color: c });
   b.o('drum', 93, 50);
+  b.o('trophyCase', 85, 56);
   b.area('juegos', 'Sala de juegos', 79, 47, 16, 11, { color: 'purple', shape: 'soft' });
 
   // Pasillos con plantas
@@ -463,7 +464,7 @@ function templateHQ() {
   b.o('fairyLights', 29.25, 10); b.o('fairyLights', 34.5, 10);
   b.o('floorLogo', 41.5, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
   for (const [type, x, y, extra] of RECEPTION_EXTRAS) b.o(type, x, y, extra);
-  b.o('flagPole', 39, 59); b.o('flagPole', 46, 59);
+  b.o('wavingFlag', 39, 59); b.o('wavingFlag', 46, 59);
   b.o('floorLogo', 74, 41.5, { h: 2.5 });
   for (const x0 of [5, 52]) b.o('poster', x0 + 8.6, 47);
   b.o('poster', 19.5, 47); b.o('poster', 31.5, 47);

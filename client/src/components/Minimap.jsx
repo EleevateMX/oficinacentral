@@ -45,7 +45,7 @@ export default function Minimap({ floor, staticRef, view }) {
       ctx.clearRect(0, 0, W, H);
       const { k, ox, oy } = fit();
       ctx.imageSmoothingEnabled = true;
-      if (staticRef.current) ctx.drawImage(staticRef.current, ox, oy, floor.W * TILE * k, floor.H * TILE * k);
+      if (staticRef.current) for (const l of [staticRef.current.base, staticRef.current.top]) ctx.drawImage(l, ox, oy, floor.W * TILE * k, floor.H * TILE * k);
       // Lo que se ve en pantalla
       const v = view.current;
       if (v?.w && v.zoom) {
