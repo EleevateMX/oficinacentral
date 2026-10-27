@@ -189,9 +189,21 @@ export const CATALOG = {
 
 // Modelos de escritorio y de silla que cada quien puede elegir para su lugar
 export const DESK_TYPES = ['desk', 'standingDesk', 'gamingDesk', 'woodDesk', 'glassDesk'];
-// Muebles donde el personaje se sienta. dir: hacia dónde mira ('rot' = según la rotación).
-export const SEAT_TYPES = { chair: 'rot', gamingChair: 'rot', officeChair: 'rot', confChair: 'rot', armchair: 'rot', sofa: 'sofa', sofaSmall: 'sofa', bench: 'down', stool: null, beanBag: null };
+// Muebles donde el personaje se sienta y hacia dónde mira:
+// 'rot' = sillas (rot 0 mira arriba, al escritorio); 'sofa' = sofás, sillones y bancas
+// (rot 0 mira abajo, con el respaldo atrás); 'free' = sin respaldo, conserva hacia dónde miraba.
+export const SEAT_TYPES = { chair: 'rot', gamingChair: 'rot', officeChair: 'rot', confChair: 'rot', armchair: 'sofa', sofa: 'sofa', sofaSmall: 'sofa', bench: 'sofa', stool: 'free', beanBag: 'down' };
 const ROT_FACE = ['up', 'right', 'down', 'left'];
+const SOFA_FACE = ['down', 'right', 'up', 'left'];
+// Hacia dónde mira quien se sienta en o (null = conserva su dirección)
+export function seatDir(o) {
+  const kind = SEAT_TYPES[o?.type];
+  const r = (((o?.rot || 0) % 4) + 4) % 4;
+  if (kind === 'rot') return ROT_FACE[r];
+  if (kind === 'sofa') return SOFA_FACE[r];
+  if (kind === 'free' || !kind) return null;
+  return kind;
+}
 const seatCache = new WeakMap();
 // Asiento en la casilla (x, y): { dir } o null
 export function seatAt(f, x, y) {
@@ -202,7 +214,7 @@ export function seatAt(f, x, y) {
     for (const o of f.objects) {
       const kind = SEAT_TYPES[o.type];
       if (kind === undefined) continue;
-      const dir = kind === 'rot' ? ROT_FACE[(o.rot || 0) % 4] : kind === 'sofa' ? ((o.rot || 0) === 2 ? 'up' : 'down') : kind;
+      const dir = seatDir(o);
       const { w, h } = objSize(o);
       for (let j = o.y; j < o.y + h; j++) for (let i = o.x; i < o.x + w; i++) m.set(`${i},${j}`, { dir, obj: o });
     }

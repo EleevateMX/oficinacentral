@@ -7,6 +7,7 @@ import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
+import { seatPose, STAND_EMOTES } from '../lib/seating.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
@@ -639,33 +640,24 @@ export default function MapView({ active }) {
         const blink = !p.moving && (t + Number(id) * 1337) % 4200 < 140;
         const re = office.reactions[id];
         const hopY = re && re.until - performance.now() > 3000 ? -Math.abs(Math.sin((re.until - performance.now()) / 60)) * 4 : 0;
-        // Sentado de lado: se recorre hacia el cojín (lejos del respaldo) y baja un poco
-        const side = seat?.obj && (seat.dir === 'left' || seat.dir === 'right');
-        const sitDX = side ? (seat.dir === 'right' ? 4 : -4) : 0;
-        const sitDY = 0;
         // Acción en curso (bailar, saludar, guiño…)
         let em = !p.moving && office.emotes[id];
         if (em && em.until < t) { delete office.emotes[id]; em = null; }
         const emOther = em && em.target != null ? office.players[em.target] : null;
         const emPose = em ? emotePose(em, t, p, emOther) : null;
+        // Sentado (bailar, saltar, girar o abrazar lo ponen de pie; las demás acciones se hacen sentado)
+        const sitting = seat && !(em && STAND_EMOTES.has(em.kind));
+        const sp = sitting ? seatPose(seat, Math.round(p.rx), Math.round(p.ry)) : null;
+        const sitDX = sp ? sp.dx : 0, sitDY = sp ? sp.dy : 0;
         const ax = (p.rx + 0.5) * T + sitDX + (emPose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (emPose?.dy || 0);
-        drawAvatar(ctx, ax, ay, u?.avatar, emPose?.dir || seat?.dir || p.dir, emPose?.step || step, !!seat, blink || !!emPose?.blink, emPose?.pose || null);
-        if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (seat ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
-        if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!seat);
-        // Sentado de lado: el brazo de enfrente del sillón (o la base de la silla) queda delante de las piernas
-        if (side) {
+        drawAvatar(ctx, ax, ay, u?.avatar, (sitting && seat.dir) || emPose?.dir || p.dir, emPose?.step || step, !!sitting, blink || !!emPose?.blink, emPose?.pose || null);
+        if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (sitting ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
+        if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!sitting);
+        // Lo que del asiento queda entre el personaje y la cámara (respaldo por detrás, brazo cercano…)
+        if (sp?.front) {
           ctx.save();
           ctx.beginPath();
-          ctx.rect(seat.obj.x * T - 4, (seat.obj.y + objSize(seat.obj).h) * T - 9, objSize(seat.obj).w * T + 8, 12);
-          ctx.clip();
-          drawObject(ctx, seat.obj);
-          ctx.restore();
-        }
-        // Sentado mirando hacia arriba: el respaldo de la silla tapa la parte de abajo (como en Gather)
-        if (seat?.obj && seat.dir === 'up' && CATALOG[seat.obj.type]?.rotatable) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(seat.obj.x * T - 4, (seat.obj.y + 0.62) * T, T + 8, T * 0.6);
+          ctx.rect(sp.front.x, sp.front.y, sp.front.w, sp.front.h);
           ctx.clip();
           drawObject(ctx, seat.obj);
           ctx.restore();

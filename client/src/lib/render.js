@@ -2,6 +2,7 @@
 import { TILE } from '@shared/map.js';
 import { CATALOG, objSize } from '@shared/catalog.js';
 import { getSheet, drawSprite, FRAME_W, FRAME_H } from './sprites.js';
+import { FULL_SHEET_W, SIT_POSE } from '@shared/sprite.js';
 
 const T = TILE;
 
@@ -1409,7 +1410,8 @@ function seatChair(ctx, x, y, rot, s) {
     obox(ctx, seat, cx - 10, y + 4, 20, 10, 2);
     R(ctx, shade(seat, 0.14), cx - 8, y + 5, 16, 1);
     if (s.arms !== false) { arm(cx - 14, y + 7, 4, 10); arm(cx + 10, y + 7, 4, 10); }
-    const bh = s.tall ? 24 : 16;
+    // respaldo visto por detrás: arranca a la altura de los hombros de quien se sienta
+    const bh = s.tall ? 18 : 16;
     chairBack(ctx, cx - 10, y + 26 - bh, 20, bh, s, 'rear');
   } else {
     // mira a la derecha: respaldo a la izquierda
@@ -2020,13 +2022,19 @@ export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit
   // Parpadeo: la misma ficha con los ojos cerrados (no aplica a personajes dibujados ni lentes de sol)
   if (blink && !avatar?.sprite && avatar?.eyewear !== 'sunglasses' && (dir === 'down' || dir === 'left' || dir === 'right')) avatar = { ...avatar, eyes: 'sleepy' };
   if (sit) {
-    // Sentado: más abajo y sin piernas (quedan detrás del asiento)
-    const top = Math.round(by - FRAME_H + 4);
+    const sheet = getSheet(avatar);
+    // Sentado: cuadro propio (regazo y rodillas al frente, de lado la pierna doblada)
+    if (!pose && sheet && sheet.width >= FULL_SHEET_W) {
+      drawSprite(ctx, sheet, Math.round(cx - FRAME_W / 2), Math.round(by - FRAME_H + 1), dir, 0, 1, SIT_POSE);
+      return;
+    }
+    // Hojas subidas (sin cuadro de sentado) o una postura: más abajo y sin piernas
+    const top = Math.round(by - FRAME_H + 5);
     ctx.save();
     ctx.beginPath();
     ctx.rect(cx - FRAME_W, top - 2, FRAME_W * 2, FRAME_H - 8);
     ctx.clip();
-    drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), top, dir, 0, 1, pose);
+    drawSprite(ctx, sheet, Math.round(cx - FRAME_W / 2), top, dir, 0, 1, pose);
     ctx.restore();
     return;
   }
