@@ -1,8 +1,9 @@
 import { SCREEN_PRESETS } from '../../lib/media.js';
 import { FeedbackAdmin } from '../Feedback.jsx';
+import StatsAdmin from './StatsAdmin.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart,
+  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart, BarChart3,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
@@ -16,6 +17,7 @@ import { fmtDate } from '../../lib/time.js';
 import { THEMES } from '../../lib/themes.js';
 import { OfficeMark, ByNuvora } from '../brand.jsx';
 import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
+import { AnniversarySettings } from '../SeasonExtras.jsx';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -36,6 +38,7 @@ const SECTIONS = [
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
   { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
   { id: 'feedback', label: 'Comentarios', icon: MessageSquareHeart, admin: true },
+  { id: 'stats', label: 'Estadísticas', icon: BarChart3, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -84,6 +87,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'brand' && <BrandAdmin />}
             {cur === 'security' && <SecurityAdmin />}
             {cur === 'feedback' && <FeedbackAdmin api={api} />}
+            {cur === 'stats' && <StatsAdmin />}
           </div>
         </section>
       </div>
@@ -1092,12 +1096,22 @@ function BrandAdmin() {
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
       <Section title="Decoración de temporada">
-        <Row title="Temporada" desc="Adornos, personajes y ambiente especiales en el mapa (calabazas, zombies, perritos, ofrenda…). En automático se pone sola en su fecha.">
+        <Row title="Temporada" desc="Adornos, personajes y ambiente especiales en el mapa (Halloween: calabazas, zombies y ofrenda; Navidad, del 1 de dic. al 6 de ene.: nieve, árbol y Amigo secreto; Aniversario: pastel, fuegos artificiales y foto grupal). En automático se pone sola en su fecha.">
           <select value={config.seasonSetting || 'auto'} onChange={(e) => save({ season: e.target.value })}>
             <option value="auto">Automática (según la fecha)</option>
             <option value="halloween">🎃 Halloween y Día de Muertos</option>
+            <option value="navidad">🎄 Navidad (con Amigo secreto)</option>
+            <option value="aniversario">🎂 Aniversario</option>
             <option value="none">Sin decoración</option>
           </select>
+        </Row>
+        <AnniversarySettings config={config} save={save} />
+      </Section>
+      <Section title="Resumen de reuniones con IA">
+        <Row title="Permitir “📝 Tomar notas” en las salas" desc={config.aiNotesReady
+          ? 'Dentro de una sala con 2 o más personas, cualquiera puede activarlo; todos ven el aviso y cualquiera lo apaga. Al terminar, el resumen con acuerdos y pendientes llega por mensaje directo a quienes participaron.'
+          : 'No disponible: falta configurar ANTHROPIC_API_KEY en el servidor (variables de entorno). Sin la llave el botón no aparece.'}>
+          <Toggle checked={config.aiNotes !== false && !!config.aiNotesReady} disabled={!config.aiNotesReady} onChange={(v) => save({ aiNotes: v })} />
         </Row>
       </Section>
       <ShiftsAdmin shifts={config.shifts || []} save={save} />

@@ -8,6 +8,7 @@
 // de datos al crear el piso; a partir de ahí todo se puede mover.
 
 import { CATALOG, objSize } from './catalog.js';
+import { stageLink } from './stage.js';
 
 export const TILE = 32;
 export const PROXIMITY_RADIUS = 3;
@@ -392,6 +393,8 @@ function templateHQ() {
     b.o('sofa', lx, 41, { color: '#101010' });
     b.o('sofa', lx, 43, { rot: 2, color: '#FE3377' });
   }
+  // Escenario para juntas de staff: lo oye toda el área Staff / Orgs
+  for (const [type, x, y, extra] of STAGE_EXTRAS) b.o(type, x, y, extra);
   b.o('tallPlant', 61, 42); b.o('tallPlant', 72, 42); b.o('tallPlant', 92, 42); b.o('coffee', 80, 41);
 
   // ===== Fila inferior (y 47..57), frente de cristal en y 46 =====
@@ -433,6 +436,7 @@ function templateHQ() {
   room(65, 47, 13, 11, 'wood2');
   for (let x = 68; x <= 74; x++) b.door(x, 46, 'wood2');
   b.o('tv', 69, 47); b.o('bookshelf', 74, 47); b.o('plant', 65, 47);
+  b.o('jukebox', 66, 47); // rocola: música compartida en la zona
   b.o('sofa', 67, 50, { color: '#3a86ff' });
   b.o('roundTable', 68, 52, { w: 3 });
   for (const [x, y, c] of [[66, 55, '#FE3377'], [68, 56, '#FFCC00'], [71, 55, '#9b5de5'], [74, 54, '#06d6a0']]) b.o('beanBag', x, y, { color: c });
@@ -565,6 +569,12 @@ export const RECEPTION_EXTRAS = [
   ['hexLamp', 46.15, 55.1, {}],
 ];
 
+// Escenario de Staff / Orgs (arriba del área, asomado al pasillo). También se agrega una vez
+// a las oficinas ya creadas si el lugar está libre (server/world.js).
+export const STAGE_EXTRAS = [
+  ['stage', 72, 22, {}],
+];
+
 // Donde va la decoración de un escritorio: encima del mueble y la fila de atrás (no donde va la silla)
 export function deskDecorZone(o) {
   const { w, h } = objSize(o);
@@ -634,6 +644,7 @@ export function closedRoomAt(f, from, to) {
 
 export function canTalk(f, a, b) {
   if (!a || !b || a.floorId !== b.floorId) return false;
+  if (stageLink(f, a, b)) return true; // ponente en el escenario ↔ su público
   const sa = talkSpace(f, a.x, a.y);
   const sb = talkSpace(f, b.x, b.y);
   if (sa || sb) return sa === sb;

@@ -2,6 +2,7 @@ import { useSyncExternalStore, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { api } from './api.js';
 import { MediaManager } from './media.js';
+import { initStageClient } from './stage.js';
 import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable, PROXIMITY_RADIUS } from '@shared/map.js';
 import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
@@ -9,6 +10,9 @@ import { FX, pickFx } from './fx.js';
 import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
 import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes.js';
 import { DANCES } from './emoteFx.js';
+import { bindNotes } from './notes.js';
+import { onAchievementNotification, forgetBadges } from './achievements.js';
+import { initPetSocket } from './petFx.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -159,11 +163,14 @@ class Office {
   connect() {
     const s = io({ withCredentials: true });
     this.socket = s;
+    initStageClient(this, s); // escenario: fila de manos levantadas
+    initPetSocket(this, s); // mascotas interactivas
     s.on('connect', () => {
       this.set({ connected: true });
       s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push
     });
     s.on('disconnect', () => this.set({ connected: false }));
+    bindNotes(this, s); // 📝 Tomar notas (resumen de reuniones con IA)
     s.on('force-reload', ({ by, message, in: secs = 8 } = {}) => {
       this.toast({ title: `🔄 ${by || 'Un admin'} publicó una actualización${message ? `: ${message}` : ''}. Se recarga en ${secs} s…`, action: { label: 'Ahora', run: () => this.hardReload() }, duration: secs * 1000 });
       clearTimeout(this.reloadTimer);
@@ -335,8 +342,13 @@ class Office {
       } else if (n.type === 'birthday') {
         this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
+      } else if (n.type === 'achievement') onAchievementNotification(this, n);
+      else if (n.type === 'santa') {
+        this.toast({ title: n.data.text || '🎁 Amigo secreto', action: { label: 'Ver', run: () => this.set({ modal: { type: 'santa' } }) }, duration: 9000 });
+        playSound('wave', this.state.prefs.audio.notifVolume);
       }
     });
+    s.on('achievement', (m) => forgetBadges(m.userId));
   }
 
   applyMediaPrefs() {

@@ -87,6 +87,8 @@ Variables de entorno:
 | `OFFICE_TIMEZONE` | Zona horaria de la oficina para el aviso de cumpleaños (por defecto `America/Mexico_City`) |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `PUBLIC_URL` | Entrar con Discord (vincular cuenta, entrar o aceptar invitación) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Notificaciones push (Web Push). Si faltan las llaves, se generan solas la primera vez y se guardan en la base de datos. `VAPID_SUBJECT` es un contacto `mailto:` o `https://` (por omisión `mailto:` + `ADMIN_EMAIL`) |
+| `ANTHROPIC_API_KEY` | Llave de la API de Claude para el resumen de reuniones con IA ("📝 Tomar notas" en las salas). Vacío = función desactivada. El admin también puede apagarla en Preferencias → Marca de la oficina |
+| `AI_MODEL` | Opcional: modelo de Claude para los resúmenes (por defecto `claude-sonnet-5-5`) |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY` | Copia de cada respaldo (y de los adjuntos del chat) en un almacenamiento compatible con S3: Cloudflare R2, AWS S3, Backblaze B2, MinIO. Vacío = desactivado. Ver [`DEPLOY.md`](DEPLOY.md#respaldos-fuera-del-servidor-cloudflare-r2) |

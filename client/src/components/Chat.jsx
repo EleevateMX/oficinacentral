@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Hash, ChevronDown, SquarePen, Hand, Navigation, Send, Bold, Italic, Code, Link2, Smile, AtSign, Plus, ChevronLeft, SmilePlus, Paperclip, FileText, Download } from 'lucide-react';
+import { NotesCard } from './MeetingNotes.jsx';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar, Empty } from './ui.jsx';
@@ -209,6 +210,8 @@ export function ChatView() {
                     <div className="msg-wave">
                       {m.userId === me.id ? <>Saludaste a <b>{other?.displayName}</b> 👋</> : <><b>{u?.displayName}</b> te saludó 👋</>}
                     </div>
+                  ) : m.kind === 'notes' ? (
+                    <NotesCard text={m.body} />
                   ) : (
                     <>
                       {m.body && <div className="msg-body"><Body text={m.body} users={users} meUsername={me.username} /></div>}

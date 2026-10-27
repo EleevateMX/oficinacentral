@@ -2,6 +2,8 @@
 import { TILE } from '@shared/map.js';
 import { CATALOG, objSize } from '@shared/catalog.js';
 import { getSheet, drawSprite, FRAME_W, FRAME_H } from './sprites.js';
+import { FULL_SHEET_W, SIT_POSE } from '@shared/sprite.js';
+import { drawJukebox, jukeboxPlaying } from './jukeboxDraw.js';
 
 const T = TILE;
 
@@ -868,6 +870,9 @@ D.wavingFlag = (ctx, x, y, w, h, o) => {
   if (!im) { ctx.fillStyle = '#fff'; hexPath(ctx, px + 1.5 + FW / 2, top + 2 + FH / 2 - 2 + wave(N / 2), 6); ctx.fill(); }
 };
 
+// Rocola (ver jukeboxDraw.js): brilla y se anima mientras suena
+D.jukebox = (ctx, x, y, w, h, o, c) => drawJukebox(ctx, x, y, w, h, o.color || c.color, ANIM_T, jukeboxPlaying.has(o.id));
+
 // Roll-up de pie: lona con degradado, logo grande, líneas de texto y base de aluminio
 D.rollupBanner = (ctx, x, y, w, h, o) => {
   const { p, s, d, l } = brandCols(o);
@@ -962,6 +967,57 @@ D.brandRug = (ctx, x, y, w, h, o) => {
   ctx.setLineDash([3, 4]); ctx.strokeStyle = s; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, cy, r - 9, r * 0.92 - 9, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   if (!drawLogo(ctx, cx, cy, r * 1.25)) { ctx.fillStyle = p; hexPath(ctx, cx, cy, r * 0.35); ctx.fill(); }
   ctx.restore();
+};
+
+// ---- Escenario con micrófono (ver shared/stage.js) ----
+function stageMicStand(ctx, cx, by, col) {
+  R(ctx, 'rgba(0,0,0,.25)', cx - 5, by - 1, 10, 2);
+  R(ctx, '#2a2a30', cx - 4, by - 2, 8, 2);
+  R(ctx, '#3a3a42', cx - 0.75, by - 20, 1.5, 18);
+  R(ctx, '#3a3a42', cx - 0.75, by - 20, 6, 1.5);
+  RR(ctx, '#1d1d22', cx + 3.5, by - 23, 4.5, 6, 2);
+  R(ctx, col, cx + 4, by - 20, 3.5, 1);
+}
+D.stage = (ctx, x, y, w, h, o) => {
+  const { p, s } = brandCols(o);
+  const dark = '#141414';
+  const face = 7;
+  // sombra y frente de la tarima
+  R(ctx, 'rgba(0,0,0,.22)', x + 3, y + h - 2, w - 2, face + 4);
+  RR(ctx, dark, x, y, w, h, 5);
+  // duela oscura
+  for (let j = 1; j * 8 < h - face; j++) R(ctx, '#1f1f25', x + 3, y + j * 8, w - 6, 1);
+  for (let i = 0; i * 24 < w; i++) R(ctx, '#232329', x + 12 + i * 24 + ((i % 2) * 6), y + 3, 1, h - face - 4);
+  // orilla rosa y frente con focos
+  ctx.strokeStyle = p; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(x + 1.5, y + 1.5, w - 3, h - face - 1, 4); ctx.stroke();
+  const g = ctx.createLinearGradient(x, y + h - face, x, y + h + 2);
+  g.addColorStop(0, shade(p, -0.1)); g.addColorStop(1, shade(p, -0.45));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x, y + h - face, w, face + 2, [0, 0, 5, 5]); ctx.fill();
+  const n = Math.max(4, Math.floor(w / 12));
+  const k = Math.floor(ANIM_T / 260);
+  for (let i = 0; i < n; i++) {
+    const on = (i + k) % 3 !== 0;
+    circle(ctx, on ? s : shade(s, -0.45), x + (i + 0.5) * (w / n), y + h - face / 2 + 1, 1.8);
+  }
+  // logo tenue al centro y bocinas atrás
+  ctx.save(); ctx.globalAlpha = 0.28;
+  const cy = y + (h - face) / 2;
+  if (!drawLogo(ctx, x + w / 2, cy, Math.min(h - face - 6, 42))) { ctx.strokeStyle = s; ctx.lineWidth = 2; hexPath(ctx, x + w / 2, cy, Math.min(14, (h - face) / 2 - 3)); ctx.stroke(); }
+  ctx.restore();
+  for (const sx of [x + 4, x + w - 14]) {
+    RR(ctx, '#0a0a0c', sx, y + 3, 10, 13, 2);
+    circle(ctx, '#2c2c34', sx + 5, y + 7, 2.2); circle(ctx, '#2c2c34', sx + 5, y + 12.5, 2.6);
+  }
+  stageMicStand(ctx, x + w / 2 - 4, y + h - face - 2, p);
+};
+D.stageMic = (ctx, x, y, w, h, o) => {
+  const { p } = brandCols(o);
+  ctx.save();
+  ctx.strokeStyle = p; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.ellipse(x + w / 2, y + h - 7, w / 2 - 3, 6, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  stageMicStand(ctx, x + w / 2 - 3, y + h - 6, p);
 };
 
 // Vitrina de trofeos (sala de juegos)
@@ -1358,7 +1414,8 @@ function seatChair(ctx, x, y, rot, s) {
     obox(ctx, seat, cx - 10, y + 4, 20, 10, 2);
     R(ctx, shade(seat, 0.14), cx - 8, y + 5, 16, 1);
     if (s.arms !== false) { arm(cx - 14, y + 7, 4, 10); arm(cx + 10, y + 7, 4, 10); }
-    const bh = s.tall ? 24 : 16;
+    // respaldo visto por detrás: arranca a la altura de los hombros de quien se sienta
+    const bh = s.tall ? 18 : 16;
     chairBack(ctx, cx - 10, y + 26 - bh, 20, bh, s, 'rear');
   } else {
     // mira a la derecha: respaldo a la izquierda
@@ -1969,13 +2026,19 @@ export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit
   // Parpadeo: la misma ficha con los ojos cerrados (no aplica a personajes dibujados ni lentes de sol)
   if (blink && !avatar?.sprite && avatar?.eyewear !== 'sunglasses' && (dir === 'down' || dir === 'left' || dir === 'right')) avatar = { ...avatar, eyes: 'sleepy' };
   if (sit) {
-    // Sentado: más abajo y sin piernas (quedan detrás del asiento)
-    const top = Math.round(by - FRAME_H + 4);
+    const sheet = getSheet(avatar);
+    // Sentado: cuadro propio (regazo y rodillas al frente, de lado la pierna doblada)
+    if (!pose && sheet && sheet.width >= FULL_SHEET_W) {
+      drawSprite(ctx, sheet, Math.round(cx - FRAME_W / 2), Math.round(by - FRAME_H + 1), dir, 0, 1, SIT_POSE);
+      return;
+    }
+    // Hojas subidas (sin cuadro de sentado) o una postura: más abajo y sin piernas
+    const top = Math.round(by - FRAME_H + 5);
     ctx.save();
     ctx.beginPath();
     ctx.rect(cx - FRAME_W, top - 2, FRAME_W * 2, FRAME_H - 8);
     ctx.clip();
-    drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), top, dir, 0, 1, pose);
+    drawSprite(ctx, sheet, Math.round(cx - FRAME_W / 2), top, dir, 0, 1, pose);
     ctx.restore();
     return;
   }

@@ -132,16 +132,19 @@ function special(R, d, col, t, moving, blink) {
 }
 
 // x, y: centro de los pies. face: 1 mira a la derecha, -1 a la izquierda. t en segundos.
-export function drawPet(ctx, kind, color, x, y, face, t, moving) {
+// fx (opcional, mascotas interactivas): { dy: salto extra, rot: giro (rad), sy: aplastado vertical, eyes: 'closed' }
+export function drawPet(ctx, kind, color, x, y, face, t, moving, fx) {
   const d = petDef(kind);
   if (!d || d.id === 'none') return;
   const col = HEX.test(color || '') ? color : d.color;
-  const hop = moving ? -Math.abs(Math.sin(t * 14)) * (d.kind === 'dog' || d.kind === 'cat' ? 1.2 : 2.5) : Math.sin(t * 2.2) * 0.4;
-  const blink = (t * 1000 + x * 37) % 3800 < 130;
+  const hop = (moving ? -Math.abs(Math.sin(t * 14)) * (d.kind === 'dog' || d.kind === 'cat' ? 1.2 : 2.5) : Math.sin(t * 2.2) * 0.4) + (fx?.dy || 0);
+  const blink = fx?.eyes === 'closed' || (t * 1000 + x * 37) % 3800 < 130;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,.18)';
-  ctx.beginPath(); ctx.ellipse(x, y, 7 * (d.size || 1), 2.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x, y, 7 * (d.size || 1) * (fx?.dy ? Math.max(0.5, 1 + fx.dy / 20) : 1), 2.2, 0, 0, Math.PI * 2); ctx.fill();
   ctx.translate(Math.round(x), Math.round(y + hop));
+  if (fx?.sy) ctx.scale(1, fx.sy);
+  if (fx?.rot) { ctx.translate(0, -6); ctx.rotate(fx.rot * face); ctx.translate(0, 6); }
   ctx.scale(face, 1);
   const R = (c, px, py, w, h) => { ctx.fillStyle = c; ctx.fillRect(px, py, w, h); };
   if (d.kind === 'dog' || d.kind === 'cat') quadruped(R, d, col, t, moving, blink);

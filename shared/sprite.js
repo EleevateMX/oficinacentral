@@ -53,7 +53,11 @@ export const POSE_DEFS = {
   flossB: { a: 'across', b: 'low', legs: 'wide' },
   squatUp: { a: 'up', b: 'up', legs: 'squat', bob: 2 },
   crouch: { a: 'low', b: 'low', legs: 'squat', bob: 2 },
+  // Sentado: cuerpo más abajo, manos en las piernas y muslos hacia el frente (de lado, rodillas al frente)
+  sit: { a: 'lap', b: 'lap', legs: 'sit', bob: 4 },
 };
+// Postura de estar sentado (las hojas subidas de 3 columnas no la tienen)
+export const SIT_POSE = 'sit';
 export const POSES = Object.keys(POSE_DEFS);
 export const POSE_COL0 = 5;
 export const FULL_COLS = POSE_COL0 + POSES.length;
@@ -256,7 +260,9 @@ function drawFrame(spec, dir, step, poseName = null) {
   const legTop = 39;
   const legColor = (y) => (bottom === 'pants' || (bottom === 'shorts' && y < legTop + 3) ? C.pants : C.skin);
   const legs = P?.legs || 'stand';
-  if (!side) {
+  if (legs === 'sit') {
+    // Las piernas sentado se pintan después del torso (ver más abajo)
+  } else if (!side) {
     const lift = (k) => ((contact === 1 && k === 0) || (contact === -1 && k === 1) ? 1
       : (legs === 'kickA' && k === 0) || (legs === 'kickB' && k === 1) ? 3 : 0);
     const spread = legs === 'wide' || legs === 'squat' ? 1 : 0;
@@ -280,7 +286,7 @@ function drawFrame(spec, dir, step, poseName = null) {
     f.rect(12 + off, 45, 5, 2, C.shoes);
     f.rect(12 + off, 46, 5, 1, shade(C.shoes, -0.25));
   }
-  if (bottom === 'skirt') {
+  if (bottom === 'skirt' && legs !== 'sit') {
     const sk = C.pants;
     if (!side) { f.rect(10, legTop - 1, 12, 2, sk); f.rect(9, legTop + 1, 14, 2, sk); f.rect(9, legTop + 2, 14, 1, shade(sk, -0.2)); }
     else { f.rect(11, legTop - 1, 10, 2, sk); f.rect(10, legTop + 1, 12, 2, sk); f.rect(10, legTop + 2, 12, 1, shade(sk, -0.2)); }
@@ -315,6 +321,7 @@ function drawFrame(spec, dir, step, poseName = null) {
     cross: { pts: [[7, t0 + 1], [9, t0 + 5], [16, t0 + 2]], hand: [18, t0 + 1, 2, 2], inFront: true },
     across: { pts: [[7, t0 + 1], [9, t0 + 5], [18, t0 + 7]], hand: [20, t0 + 7, 2, 2], inFront: true },
     head: { pts: [[7, t0 + 1], [4, t0 - 3], [5, t0 - 8]], hand: [6, t0 - 10, 2, 2] },
+    lap: { pts: [[7, t0 + 1], [7, t0 + 6], [9, t0 + 8]], hand: [10, t0 + 9, 2, 2], inFront: true },
   };
   const SIDE = {
     idle: { pts: [[16, t0 + 1], [16, t0 + 5]], hand: [16, t0 + 7, 2, 2] },
@@ -336,6 +343,7 @@ function drawFrame(spec, dir, step, poseName = null) {
     chest: { pts: [[16, t0 + 1], [14, t0 + 4], [11, t0 + 2]], hand: [9, t0 + 1, 2, 2] },
     belly: { pts: [[16, t0 + 1], [15, t0 + 5], [12, t0 + 6]], hand: [10, t0 + 5, 2, 2] },
     head: { pts: [[16, t0 + 1], [20, t0 - 3], [19, t0 - 8]], hand: [17, t0 - 10, 2, 2], layer: 'top' },
+    lap: { pts: [[16, t0 + 1], [15, t0 + 5], [12, t0 + 7]], hand: [10, t0 + 7, 2, 2] },
   };
   SIDE.low = SIDE.fwd; SIDE.across = SIDE.bwd; SIDE.cross = SIDE.chest;
   // Brazos según el paso o la postura
@@ -408,6 +416,37 @@ function drawFrame(spec, dir, step, poseName = null) {
       const ga = FRONT[armA] || FRONT.idle, gb = FRONT[armB] || FRONT.idle;
       if (armLayer(ga, false) === layer) paintArm(ga, false, false);
       if (armLayer(gb, false) === layer) paintArm(gb, true, false);
+    }
+  }
+  // Piernas sentado: de frente, muslos hacia la cámara (regazo), espinillas cortas y zapatos;
+  // de lado, muslo horizontal hacia el frente y la pierna colgando; de espaldas no se ven.
+  function drawSitLegs() {
+    const skirt = bottom === 'skirt';
+    const thigh = C.pants;
+    const shin = bottom === 'pants' ? C.pants : C.skin;
+    if (d === 'down') {
+      f.rect(10, 41, 12, 3, thigh);
+      f.rect(11, 41, 3, 1, shade(thigh, 0.14)); f.rect(18, 41, 3, 1, shade(thigh, 0.14));
+      f.rect(15, 42, 2, 2, shade(thigh, -0.22));
+      if (skirt) f.rect(9, 43, 14, 1, shade(thigh, -0.2));
+      for (const x of [11, 17]) {
+        f.rect(x, 44, 4, 1, shin);
+        f.rect(x - (x === 11 ? 1 : 0), 45, 5, 2, C.shoes);
+        f.rect(x - (x === 11 ? 1 : 0), 46, 5, 1, shade(C.shoes, -0.25));
+      }
+    } else if (d === 'left') {
+      // pierna lejana (más oscura) y luego la cercana
+      f.rect(6, 40, 12, 3, shade(thigh, -0.18));
+      f.rect(8, 43, 3, 2, shade(shin, -0.18));
+      f.rect(7, 45, 5, 1, shade(C.shoes, -0.2));
+      f.rect(5, 41, 14, 3, thigh);
+      f.rect(6, 41, 10, 1, shade(thigh, 0.12));
+      if (skirt) f.rect(12, 43, 7, 1, shade(thigh, -0.2));
+      f.rect(5, 44, 4, 1, shin);
+      f.rect(3, 45, 6, 2, C.shoes);
+      f.rect(3, 46, 6, 1, shade(C.shoes, -0.25));
+    } else {
+      f.rect(10, 43, 12, 2, shade(thigh, -0.1));
     }
   }
   drawArms('back');
@@ -498,6 +537,8 @@ function drawFrame(spec, dir, step, poseName = null) {
     f.rect(14, ty + 3, 4, 3, C.white); f.rect(15, ty + 4, 2, 1, C.accent);
   }
   if (spec.extra === 'backpack' && d === 'down') { f.rect(10, ty, 2, 7, shade(C.accent, -0.2)); f.rect(20, ty, 2, 7, shade(C.accent, -0.2)); }
+
+  if (legs === 'sit') drawSitLegs();
 
   drawArms('mid');
 

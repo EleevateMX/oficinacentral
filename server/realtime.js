@@ -6,8 +6,14 @@ import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../s
 import { initGames } from './games.js';
 import { EMOTES, PAIR_RANGE, cleanVariant } from '../shared/emotes.js';
 import { initBoards } from './boards.js';
+import { initNotes, startNotesTimer } from './notes.js';
+import { initPets } from './pets.js';
+import { initJukebox } from './jukebox.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
+import { trackConnect, trackArea, trackDisconnect, bumpCounter } from './stats.js';
+import { checkAchievements } from './achievements.js';
+import { initStage, initStageIO, stageCleanup } from './stage.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -86,6 +92,7 @@ export function disconnectUser(userId) {
 
 export function initRealtime(httpServer) {
   io = new Server(httpServer, { maxHttpBufferSize: 1e6 });
+  initStageIO(io, presence);
 
   io.use((socket, next) => {
     const token = parseCookies(socket.handshake.headers.cookie)[SESSION_COOKIE];
@@ -107,6 +114,7 @@ export function initRealtime(httpServer) {
     }
     p.sockets.add(socket);
     if (p.sockets.size === 1) shiftOnConnect(user);
+    if (p.sockets.size === 1) trackConnect(userId, areaAt(getFloor(p.floorId)?.state || { areas: [] }, p.x, p.y)?.id);
     db.prepare('UPDATE users SET last_active = ? WHERE id = ?').run(now(), userId);
 
     const all = {};
@@ -134,8 +142,10 @@ export function initRealtime(httpServer) {
       if (['up', 'down', 'left', 'right'].includes(m.dir)) p.dir = m.dir;
       socket.broadcast.emit('move', { id: userId, floorId, x, y, dir: p.dir, tp: !!m.tp || changingFloor });
       if (closedAreaIds().length) reopenEmptyRooms();
+      stageCleanup(userId); // fila de manos del escenario: sale si dejó el área
       // Cuando ya están los dos en una sala 1:1, la puerta se cierra sola (para no molestar a los demás)
       const here = areaAt(f, x, y);
+      trackArea(userId, here?.id);
       const inRoom = here ? [...presence.values()].filter((q) => q.floorId === floorId && areaAt(f, q.x, q.y)?.id === here.id).length : 0;
       if (here?.private && /1\s*:\s*1/.test(here.name) && !isAreaClosed(here.id) && inRoom >= 2) {
         setAreaClosed(here.id, true);
@@ -204,6 +214,7 @@ export function initRealtime(httpServer) {
       }
       lastEmote = t;
       io.emit('emote', { id: userId, kind: m.kind, target, variant: cleanVariant(m.variant) });
+      if (['dance', 'hug', 'highfive'].includes(m.kind)) bumpCounter(userId, `emote:${m.kind}`);
     });
 
     // Efecto de "regresar a mi escritorio": se reenvía a los demás para que lo vean
@@ -223,6 +234,10 @@ export function initRealtime(httpServer) {
 
     initBoards(io, socket, userId);
     initGames(io, socket, userId);
+    initNotes(io, socket, userId);
+    initStage(socket, userId);
+    initPets(io, socket, userId, presence);
+    initJukebox(io, socket, userId);
 
     // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
     let roomMsgTimes = [];
@@ -277,14 +292,17 @@ export function initRealtime(httpServer) {
       p.sockets.delete(socket);
       if (p.sockets.size === 0) {
         closeShift(userId);
+        try { trackDisconnect(userId); checkAchievements(userId); } catch (e) { console.error('[stats]', e.message); }
         savePosition(userId);
         presence.delete(userId);
+        stageCleanup(userId, { gone: true });
         io.emit('player', { id: userId, online: false });
         if (closedAreaIds().length) reopenEmptyRooms();
       }
     });
   });
 
+  startNotesTimer();
   // Guardar posiciones periódicamente
   setInterval(() => { for (const id of presence.keys()) savePosition(id); }, 60e3).unref();
   return io;

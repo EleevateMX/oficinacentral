@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush, Lock, Unlock, Users } from 'lucide-react';
+import MeetingNotes from './MeetingNotes.jsx';
+import { inNotesRoom } from '../lib/notes.js';
 import { office, useOffice } from '../lib/store.js';
 import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt, closedRoomAt } from '@shared/map.js';
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
+import { seatPose, STAND_EMOTES } from '../lib/seating.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
-import { buildHalloween, createNpcs, stepNpcs, drawHalloweenDecor, drawHalloweenWalkers, drawHalloweenSky } from '../lib/halloween.js';
+import { buildSeason, seasonObjects, interactSeason, drawSeasonGround, drawSeasonDecor, drawSeasonWalkers, drawSeasonSky, drawSeasonScreen } from '../lib/seasonal.js';
 import { EMOTE_BY_KEY } from '@shared/emotes.js';
 
 // Fecha de hoy ('MM-DD') para el gorrito de cumpleaños; se recalcula cada minuto
@@ -25,23 +28,33 @@ import RoomChat from './RoomChat.jsx';
 import Minimap from './Minimap.jsx';
 import Decorator from './Decorator.jsx';
 import { drawPet } from '../lib/pets.js';
+import { petStep, drawPetFxUnder, drawPetFxOver, petClick } from '../lib/petFx.js';
+import PetPanel from './PetPanel.jsx';
 import { pose, drawFxUnder, drawFxOver } from '../lib/fx.js';
 import { Avatar } from './ui.jsx';
+import { stageAt } from '@shared/stage.js';
+import { drawStageSpots } from '../lib/stageFx.js';
+import StagePanel from './StagePanel.jsx';
+import { JukeboxLayer } from './Jukebox.jsx';
+import { jukeboxActive } from '../lib/jukebox.js';
+import { SeasonPill } from './SeasonExtras.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
-const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar' };
+const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar', jukebox: 'Abrir rocola' };
 // Objetos con brillo o dibujo fino que se pintan nítidos en cada cuadro (además de los de marca)
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
 const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
 
+// Tamaño de un objeto (los de temporada traen el suyo)
+const sizeOf = (o) => (o.season ? { w: o.w, h: o.h } : objSize(o));
 // Objeto interactivo más cercano (pizarrón, tablero, pantalla) a menos de 2 casillas
 function nearInteractive(f, me) {
   let best = null;
-  for (const o of f.objects) {
-    const kind = CATALOG[o.type]?.interactive;
+  for (const o of [...f.objects, ...seasonObjects(f)]) {
+    const kind = o.season ? 'season' : CATALOG[o.type]?.interactive;
     if (!kind) continue;
-    const { w, h } = objSize(o);
+    const { w, h } = sizeOf(o);
     const dx = Math.max(o.x - me.x, 0, me.x - (o.x + w - 1));
     const dy = Math.max(o.y - me.y, 0, me.y - (o.y + h - 1));
     const d = Math.max(dx, dy);
@@ -51,10 +64,12 @@ function nearInteractive(f, me) {
 }
 
 export function interact(o) {
+  if (o.season) return interactSeason(o);
   const kind = CATALOG[o.type]?.interactive;
   if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
   else if (kind === 'game') office.set({ modal: { type: 'game', objectId: o.id, game: GAME_OF[o.type] } });
+  else if (kind === 'jukebox') office.set({ modal: { type: 'jukebox', objectId: o.id } });
   else if (kind === 'screen') {
     const st = office.state;
     const sc = st.talkingWith.find((id) => st.users[id]?.online && st.users[id]?.screen);
@@ -177,10 +192,8 @@ export default function MapView({ active }) {
 
   // Decoración de temporada: se arma al cambiar de piso o de temporada
   useEffect(() => {
-    if (!floor || config?.season !== 'halloween') { hwRef.current = null; return; }
-    const hw = buildHalloween(floor);
-    hwRef.current = { ...hw, npcs: perf === 'efficient' ? null : createNpcs(hw) };
-  }, [floor, config?.season, perf]);
+    hwRef.current = buildSeason(config?.season, floor, perf, config);
+  }, [floor, config?.season, perf, config?.anniversary?.date, config?.anniversary?.year, config?.officeName]);
 
   // Tamaño del canvas
   useEffect(() => {
@@ -359,7 +372,7 @@ export default function MapView({ active }) {
       if (t - (ambRef.current.check || 0) > 1000) {
         ambRef.current.check = t;
         const ar = areaAt(f, mine.x, mine.y);
-        setMusic(!!amb.music && !!ar && MUSIC_AREAS.test(ar.name), amb.musicVolume);
+        setMusic(!!amb.music && !!ar && MUSIC_AREAS.test(ar.name) && !jukeboxActive(), amb.musicVolume);
         ambRef.current.light = amb.dayNight ? daylight() : null;
       }
 
@@ -420,6 +433,7 @@ export default function MapView({ active }) {
         setAnimTime(performance.now());
         ctx.drawImage(staticRef.current.base, 0, 0);
         drawLive(animRef.current.under);
+        if (hwRef.current) drawSeasonGround(ctx, hwRef.current, v, f); // nieve en el pasto (debajo de los muebles)
         ctx.drawImage(staticRef.current.top, 0, 0);
         drawLive(animRef.current.top);
         setAnimTime(0);
@@ -427,7 +441,7 @@ export default function MapView({ active }) {
       // Temporada (Halloween): adornos en el piso
       const hw = hwRef.current;
       const viewRect = { x0: v.camX - v.w / 2 / v.zoom, x1: v.camX + v.w / 2 / v.zoom, y0: v.camY - v.h / 2 / v.zoom, y1: v.camY + v.h / 2 / v.zoom };
-      if (hw) drawHalloweenDecor(ctx, hw, t, viewRect);
+      if (hw) drawSeasonDecor(ctx, hw, t, viewRect, f);
 
       // Proyección en vivo: la pantalla compartida aparece sobre las TV de tu sala
       projRef.current = [];
@@ -579,10 +593,7 @@ export default function MapView({ active }) {
       const players = office.players;
       const list = Object.entries(players).filter(([, p]) => p.floorId === f.id).sort((a, b) => a[1].ry - b[1].ry);
       // Zombies y perritos de temporada (no en modo ahorro)
-      if (hw?.npcs) {
-        stepNpcs(hw.npcs, f, t, list.map(([, p]) => p));
-        drawHalloweenWalkers(ctx, hw.npcs, t, viewRect);
-      }
+      if (hw?.npcs) drawSeasonWalkers(ctx, hw, t, viewRect, f, list.map(([, p]) => p));
       for (const [id, p] of list) {
         const u = us[id];
         // Efecto de regresar al escritorio (Ctrl+D): el efecto dibuja al personaje
@@ -614,48 +625,42 @@ export default function MapView({ active }) {
         const pet = u?.avatar?.pet;
         if (pet && pet !== 'none') {
           const back = { up: [0.7, 0.6], down: [-0.7, -0.3], left: [0.8, 0.2], right: [-0.8, 0.2] }[p.dir] || [0.7, 0.2];
-          const tx = p.rx + back[0];
-          const ty = p.ry + back[1];
-          if (p.petX == null || Math.hypot(tx - p.petX, ty - p.petY) > 4) { p.petX = tx; p.petY = ty; }
-          const k = Math.min(1, Math.min(0.1, (t - (p.petT || t)) / 1000) * 5);
+          const pf = petStep(id, p, t); // comer, pelota, caricias, trucos (lib/petFx.js)
+          const tx = pf?.tx ?? p.rx + back[0];
+          const ty = pf?.ty ?? p.ry + back[1];
+          if (p.petX == null || Math.hypot(tx - p.petX, ty - p.petY) > (pf ? 9 : 4)) { p.petX = tx; p.petY = ty; }
+          const k = Math.min(1, Math.min(0.1, (t - (p.petT || t)) / 1000) * (pf?.speed || 5));
           p.petT = t;
           const pdx = (tx - p.petX) * k;
           p.petX += pdx; p.petY += (ty - p.petY) * k;
           if (Math.abs(pdx) > 0.003) p.petFace = pdx > 0 ? 1 : -1;
-          const petMoving = Math.hypot(tx - p.petX, ty - p.petY) > 0.08;
-          drawPet(ctx, pet, u.avatar.petColor, (p.petX + 0.5) * T, (p.petY + 1) * T - 3, p.petFace || 1, t / 1000, petMoving);
+          const petMoving = pf?.moving || Math.hypot(tx - p.petX, ty - p.petY) > 0.08;
+          drawPetFxUnder(ctx, id, p, t);
+          drawPet(ctx, pet, u.avatar.petColor, (p.petX + 0.5) * T, (p.petY + 1) * T - 3, (petMoving ? null : pf?.face) || p.petFace || 1, t / 1000, petMoving, pf?.fx);
+          drawPetFxOver(ctx, id, p, t, p.petFace || 1);
         }
         // Parpadeo cada pocos segundos (cada quien a su ritmo) y saltito al reaccionar
         const blink = !p.moving && (t + Number(id) * 1337) % 4200 < 140;
         const re = office.reactions[id];
         const hopY = re && re.until - performance.now() > 3000 ? -Math.abs(Math.sin((re.until - performance.now()) / 60)) * 4 : 0;
-        // Sentado de lado: se recorre hacia el cojín (lejos del respaldo) y baja un poco
-        const side = seat?.obj && (seat.dir === 'left' || seat.dir === 'right');
-        const sitDX = side ? (seat.dir === 'right' ? 4 : -4) : 0;
-        const sitDY = 0;
         // Acción en curso (bailar, saludar, guiño…)
         let em = !p.moving && office.emotes[id];
         if (em && em.until < t) { delete office.emotes[id]; em = null; }
         const emOther = em && em.target != null ? office.players[em.target] : null;
         const emPose = em ? emotePose(em, t, p, emOther) : null;
+        // Sentado (bailar, saltar, girar o abrazar lo ponen de pie; las demás acciones se hacen sentado)
+        const sitting = seat && !(em && STAND_EMOTES.has(em.kind));
+        const sp = sitting ? seatPose(seat, Math.round(p.rx), Math.round(p.ry)) : null;
+        const sitDX = sp ? sp.dx : 0, sitDY = sp ? sp.dy : 0;
         const ax = (p.rx + 0.5) * T + sitDX + (emPose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (emPose?.dy || 0);
-        drawAvatar(ctx, ax, ay, u?.avatar, emPose?.dir || seat?.dir || p.dir, emPose?.step || step, !!seat, blink || !!emPose?.blink, emPose?.pose || null);
-        if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (seat ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
-        if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!seat);
-        // Sentado de lado: el brazo de enfrente del sillón (o la base de la silla) queda delante de las piernas
-        if (side) {
+        drawAvatar(ctx, ax, ay, u?.avatar, (sitting && seat.dir) || emPose?.dir || p.dir, emPose?.step || step, !!sitting, blink || !!emPose?.blink, emPose?.pose || null);
+        if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (sitting ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
+        if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!sitting);
+        // Lo que del asiento queda entre el personaje y la cámara (respaldo por detrás, brazo cercano…)
+        if (sp?.front) {
           ctx.save();
           ctx.beginPath();
-          ctx.rect(seat.obj.x * T - 4, (seat.obj.y + objSize(seat.obj).h) * T - 9, objSize(seat.obj).w * T + 8, 12);
-          ctx.clip();
-          drawObject(ctx, seat.obj);
-          ctx.restore();
-        }
-        // Sentado mirando hacia arriba: el respaldo de la silla tapa la parte de abajo (como en Gather)
-        if (seat?.obj && seat.dir === 'up' && CATALOG[seat.obj.type]?.rotatable) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(seat.obj.x * T - 4, (seat.obj.y + 0.62) * T, T + 8, T * 0.6);
+          ctx.rect(sp.front.x, sp.front.y, sp.front.w, sp.front.h);
           ctx.clip();
           drawObject(ctx, seat.obj);
           ctx.restore();
@@ -663,12 +668,9 @@ export default function MapView({ active }) {
         ctx.globalAlpha = 1;
       }
 
+      drawStageSpots(ctx, f, t, T, viewRect); // reflectores del escenario
       // Fantasmas, murciélagos y un tinte morado de temporada
-      if (hw) {
-        if (hw.npcs) drawHalloweenSky(ctx, hw.npcs, t, viewRect);
-        ctx.fillStyle = 'rgba(70, 20, 110, 0.07)';
-        ctx.fillRect(0, 0, f.W * T, f.H * T);
-      }
+      if (hw) drawSeasonSky(ctx, hw, t, viewRect, f);
 
       // Luz según la hora: tinte y brillos de lámparas, neón y pantallas
       const light = ambRef.current.light;
@@ -735,7 +737,9 @@ export default function MapView({ active }) {
 
       // Etiquetas (en coordenadas de pantalla para que el texto sea nítido)
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+      if (hw) drawSeasonScreen(ctx, hw, t, v); // nieve, fuegos artificiales…
       ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left'; // algún dibujo de temporada lo deja centrado
       // Nombres de áreas
       if (v.zoom >= 0.3) {
         ctx.font = '700 12px "Public Sans", system-ui, sans-serif';
@@ -788,9 +792,9 @@ export default function MapView({ active }) {
       const near = !em && mine ? nearInteractive(f, mine) : null;
       if (near) {
         if (office.pendingInteract === near.o.id) { office.pendingInteract = null; interact(near.o); }
-        const { w: ow } = objSize(near.o);
+        const { w: ow } = sizeOf(near.o);
         const hp = worldToScreen(near.o.x + ow / 2, near.o.y - 0.6);
-        const txt = GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
+        const txt = near.o.label || GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         const tw = ctx.measureText(txt).width + 34;
         ctx.fillStyle = 'rgba(16,16,16,.88)';
@@ -819,7 +823,8 @@ export default function MapView({ active }) {
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
         // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
-        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946']].filter(Boolean);
+        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414'],
+          stageAt(f, p.x, p.y) && ['🎤 En el escenario', '#FE3377', '#fff'], office.state.stage?.queue?.includes(Number(id)) && ['✋ Mano levantada', '#FFCC00', '#141414']].filter(Boolean);
         if (tags.length) {
           ctx.font = '800 9px "Public Sans", system-ui, sans-serif';
           const ws = tags.map(([t]) => ctx.measureText(t).width + 10);
@@ -987,6 +992,8 @@ export default function MapView({ active }) {
       return;
     }
 
+    // Clic en una mascota (o lanzar la pelota) → lib/petFx.js
+    if (petClick(floor.id, w)) return;
     // Clic en una persona → tarjeta de perfil
     for (const [id, p] of Object.entries(office.players)) {
       if (p.floorId !== floor.id) continue;
@@ -998,7 +1005,7 @@ export default function MapView({ active }) {
       }
     }
     // Clic en un objeto interactivo: abrirlo si estás cerca o caminar hasta él
-    const io = floor.objects.find((o) => CATALOG[o.type]?.interactive && inRect({ x: o.x, y: o.y - 0.5, ...objSize(o), h: objSize(o).h + 0.5 }, w.x, w.y));
+    const io = [...floor.objects, ...seasonObjects(floor)].find((o) => (o.season || CATALOG[o.type]?.interactive) && inRect({ x: o.x, y: o.y - 0.5, ...sizeOf(o), h: sizeOf(o).h + 0.5 }, w.x, w.y));
     if (io) {
       const mine = office.players[me.id];
       const near = mine && nearInteractive(floor, mine);
@@ -1151,6 +1158,8 @@ export default function MapView({ active }) {
       <VideoStrip />
       <RoomChat />
       <ScreenStage />
+      <PetPanel />
+      <SeasonPill />
 
       {hoverDesk && !editMode && (
         <div className="desk-tip" ref={tipRef} style={{ left: hoverDesk.x, top: hoverDesk.y }}
@@ -1233,6 +1242,9 @@ export default function MapView({ active }) {
           </button>
         </div>
       )}
+      <MeetingNotes room={roomHere} hidden={!!editMode} />
+      {!myAway && !editMode && <StagePanel />}
+      <JukeboxLayer hidden={!!editMode} below={!!roomHere} />
       {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>

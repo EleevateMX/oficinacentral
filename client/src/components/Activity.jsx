@@ -4,6 +4,8 @@ import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar, Toggle, Empty } from './ui.jsx';
 import { fmtRelative, sameDay } from '../lib/time.js';
+import { ACHIEVEMENT_BY_ID } from '@shared/achievements.js';
+import { badgeTitle } from '../lib/achievements.js';
 
 const TEXT = {
   wave: (n, count) => `👋 ${n} te saludó${count > 1 ? ` ${count} veces` : ''}`,
@@ -11,6 +13,8 @@ const TEXT = {
   event: (n) => `📅 ${n} te invitó a una reunión`,
   birthday: (n) => `🎂 ${n} te felicitó por tu cumpleaños`,
   call: (n) => `📞 ${n} te llamó`,
+  achievement: (n, c, d) => `Conseguiste el logro «${badgeTitle(d?.id, d?.tier)}»${d?.count > 1 ? ` y ${d.count - 1} más` : ''}`,
+  santa: () => '',
 };
 const TITLE = { wave: 'Saludo de', mention: 'Mención de', event: 'Invitación de', birthday: 'Felicitación de', call: 'Llamada de' };
 
@@ -42,8 +46,16 @@ export default function ActivityPanel() {
   const open = async (g) => {
     for (const id of g.ids) api.post('/notifications/read', { id }).catch(() => {});
     office.set((st) => ({ notifications: st.notifications.map((n) => (g.ids.includes(n.id) ? { ...n, read: true } : n)) }));
+    if (g.type === 'santa') {
+      office.set({ modal: { type: 'santa' } });
+      return;
+    }
     if (g.type === 'event') {
       office.set({ view: 'calendar' });
+      return;
+    }
+    if (g.type === 'achievement') {
+      office.set({ modal: { type: 'achievements' } });
       return;
     }
     if (g.type === 'mention') {
@@ -72,12 +84,12 @@ export default function ActivityPanel() {
           return (
             <button key={g.id} className={`activity ${g.read ? '' : 'unread'}`} onClick={() => open(g)}>
               <div className="activity-top">
-                <span>{TITLE[g.type] || 'De'} {name}</span>
+                <span>{g.type === 'achievement' ? '🏅 Nuevo logro' : g.type === 'santa' ? '🎁 Amigo secreto' : `${TITLE[g.type] || 'De'} ${name}`}</span>
                 <span className="muted">{fmtRelative(g.createdAt)}</span>
               </div>
               <div className="activity-body">
-                <Avatar user={u} size={36} />
-                <span>{(TEXT[g.type] || (() => g.type))(name, g.count)}{g.type === 'event' && g.data.title ? `: ${g.data.title}` : ''}{g.type === 'mention' && g.data.preview ? `: “${g.data.preview}”` : ''}{g.type === 'birthday' && g.data.text ? `: “${g.data.text}”` : ''}</span>
+                {g.type === 'achievement' ? <span className="ach-activity-icon">{ACHIEVEMENT_BY_ID[g.data?.id]?.emoji || '🏅'}</span> : g.type === 'santa' ? <span className="santa-act-ico">🎁</span> : <Avatar user={u} size={36} />}
+                <span>{(TEXT[g.type] || (() => g.type))(name, g.count, g.data)}{g.type === 'event' && g.data.title ? `: ${g.data.title}` : ''}{g.type === 'mention' && g.data.preview ? `: “${g.data.preview}”` : ''}{g.type === 'birthday' && g.data.text ? `: “${g.data.text}”` : ''}{g.type === 'santa' ? g.data.text : ''}</span>
               </div>
             </button>
           );
