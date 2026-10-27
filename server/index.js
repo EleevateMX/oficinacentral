@@ -8,6 +8,9 @@ import { loadWorld } from './world.js';
 import { api } from './api.js';
 import { initRealtime } from './realtime.js';
 import { scheduleBackups } from './backup.js';
+import { alert, watchProcess } from './alerts.js';
+
+watchProcess();
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -53,8 +56,13 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     server.close();
     try { db.close(); } catch { /* ya cerrada */ }
-    process.exit(0);
+    alert('La oficina se está apagando', `Señal ${sig} (actualización o reinicio)`, { level: 'warn', key: 'shutdown' })
+      .finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
   });
 }
 
-server.listen(PORT, () => console.log(`Oficina lista en http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Oficina lista en http://localhost:${PORT}`);
+  alert('La oficina está en línea', `Puerto ${PORT} · Node ${process.version}`, { level: 'info', key: 'startup' });
+});

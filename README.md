@@ -77,6 +77,7 @@ Variables de entorno:
 | `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Servidor de medios LiveKit (propio o LiveKit Cloud). Vacío = conexión directa P2P |
+| `ALERT_WEBHOOK_URL` | Webhook de Discord o Slack para avisos de errores, reinicios y caídas |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |

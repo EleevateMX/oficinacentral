@@ -238,3 +238,16 @@ además manda una versión ligera a quien tenga mala conexión.
 4. Comprueba en la app: al compartir pantalla, en `docker compose logs livekit` aparece `participant active`.
 
 Para volver al modo directo, deja `LIVEKIT_URL` vacío y quita `--profile livekit`.
+
+
+---
+
+## Avisos de errores y caídas
+
+1. **Errores** (la app falla, se reinicia o hay errores repetidos en el navegador de alguien):
+   crea un webhook en un canal privado de Discord (*Editar canal → Integraciones → Webhooks → Nuevo*), copia la URL
+   y ponla en `ALERT_WEBHOOK_URL`. También funciona con un webhook de Slack. Los avisos repetidos se agrupan (uno cada 10 minutos).
+2. **Caídas** (el servidor completo deja de responder): la app no puede avisar si está apagada, así que usa un monitor externo
+   gratuito como **UptimeRobot** o **Better Stack**:
+   - Monitor HTTP(s) a `https://tu-dominio/api/health` cada 1–5 minutos (responde `{"ok":true,…}`).
+   - Notificación al mismo canal de Discord (ambos servicios aceptan webhooks de Discord) o por correo/SMS.

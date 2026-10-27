@@ -18,6 +18,7 @@ services:
       TURN_SECRET: ${TURN_SECRET:?Define TURN_SECRET en .env}
       TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       # Vacío = audio y pantallas directo entre personas (P2P)
       LIVEKIT_URL: ${LIVEKIT_URL:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}

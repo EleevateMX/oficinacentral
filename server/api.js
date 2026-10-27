@@ -8,6 +8,7 @@ import {
 } from './auth.js';
 import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
 import * as world from './world.js';
+import { alert } from './alerts.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 
 export const api = express.Router();
@@ -86,7 +87,7 @@ const notificationRow = (r) => ({ id: r.id, type: r.type, actorId: r.actor_id, d
 // ---------- Configuración pública ----------
 api.get('/health', (req, res) => {
   db.prepare('SELECT 1').get();
-  res.json({ ok: true });
+  res.json({ ok: true, uptime: Math.round(process.uptime()), online: presence.size });
 });
 
 // Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
@@ -251,6 +252,22 @@ api.get('/livekit/token', (req, res) => {
   if (!livekitEnabled()) return fail(res, 404, 'LiveKit no está configurado');
   res.setHeader('Cache-Control', 'no-store');
   res.json({ url: process.env.LIVEKIT_URL, token: livekitToken(req.user) });
+});
+
+// Errores del navegador: se registran y, si se repiten, avisan al webhook
+const clientErrRate = new Map();
+api.post('/client-errors', (req, res) => {
+  const now_ = Date.now();
+  const list = (clientErrRate.get(req.user.id) || []).filter((t) => now_ - t < 60e3);
+  if (list.length >= 5) return res.json({ ok: true });
+  list.push(now_);
+  clientErrRate.set(req.user.id, list);
+  const msg = String(req.body?.message || '').slice(0, 300);
+  const stack = String(req.body?.stack || '').slice(0, 1500);
+  const where = String(req.body?.url || '').slice(0, 200);
+  const ua = String(req.headers['user-agent'] || '').slice(0, 160);
+  if (msg) alert(`Error en el navegador: ${msg}`, `${req.user.display_name} · ${where}\n${ua}\n${stack}`, { level: 'warn', key: `client:${msg}` });
+  res.json({ ok: true });
 });
 
 api.get('/ice', wrap(async (req, res) => {
@@ -865,6 +882,6 @@ api.post('/desks/:id/release', wrap((req, res) => {
 api.use((err, req, res, next) => {
   if (err instanceof world.WorldError) return fail(res, err.status, err.message);
   if (err?.type === 'entity.too.large') return fail(res, 413, 'El contenido es demasiado grande');
-  console.error(err);
+  alert(`Error 500 en ${req.method} ${req.path}`, err?.stack || String(err), { key: `500:${req.path}:${err?.message}` });
   fail(res, 500, 'Error interno del servidor');
 });
