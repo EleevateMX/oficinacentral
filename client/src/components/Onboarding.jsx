@@ -87,7 +87,7 @@ export default function Onboarding() {
         <div className="onb-foot">
           <label className="onb-check"><input type="checkbox" checked={hide} onChange={(e) => setHide(e.target.checked)} /> No mostrar después</label>
           <div className="row gap8">
-            {step >= 0 && <button className="btn" onClick={finish}>Saltar</button>}
+            <button className="btn" onClick={finish}>Saltar</button>
             <button className="btn primary" onClick={() => (step === -1 ? saveName() : step < STEPS.length - 1 ? setStep(step + 1) : finish())}>
               {step === STEPS.length - 1 ? '¡Listo!' : 'Siguiente'} <ArrowRight size={15} />
             </button>

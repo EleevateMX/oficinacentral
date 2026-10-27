@@ -55,6 +55,9 @@ async function enter(username, password) {
   await page.click('button.btn.primary');
   await page.locator('.map-wrap > canvas').waitFor({ state: 'visible', timeout: 15000 });
   await page.waitForFunction(() => window.__office?.state.ready && window.__office.media, null, { timeout: 15000 });
+  // La primera vez sale "Primeros pasos": se salta
+  const skip = page.locator('.onb button', { hasText: 'Saltar' });
+  await skip.waitFor({ timeout: 5000 }).then(() => skip.click()).catch(() => {});
   return { context, page, errors };
 }
 
