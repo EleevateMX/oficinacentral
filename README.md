@@ -1,7 +1,13 @@
-# GTAHUB Office — Oficina central
+# Nuvora — Oficina virtual
 
 Oficina virtual privada estilo Gather: un mapa 2D donde cada persona tiene su avatar, se acerca a otros para hablar
 por audio/video, tiene su escritorio decorable, chat, calendario y actividad. **Solo se entra por invitación de un administrador.**
+
+## Marca
+
+El producto es **Nuvora** (identidad del Manual de marca v2: paleta profundo, verde, mandarina, uva y crema; Albert Sans y Public Sans; Nuvi como anfitriona).
+Cada oficina elige su tema en **Preferencias → Marca de la oficina**: *Nuvora*, *GTAHUB* (azul índigo y login oscuro) o *Personalizado* (color y logo propios).
+La firma “by nuvora” se mantiene en el inicio de sesión.
 
 ## Qué incluye
 
@@ -66,7 +72,7 @@ Variables de entorno:
 | `PORT` | Puerto HTTP (por defecto 3000) |
 | `DATA_DIR` | Carpeta de la base de datos (por defecto `./data`) |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NAME`, `ADMIN_EMAIL` | Primer administrador (solo si no hay usuarios) |
-| `OFFICE_NAME` | Nombre que aparece en el panel (por defecto GTAHUB) |
+| `OFFICE_NAME`, `OFFICE_THEME` | Nombre y tema inicial de la oficina (`nuvora`, `gtahub` o `custom`). Después se cambian en Preferencias → Marca de la oficina |
 | `TURN_SECRET`, `TURN_URLS` | Servidor TURN propio (coturn) con credenciales temporales |
 | `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |

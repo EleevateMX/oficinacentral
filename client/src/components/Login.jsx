@@ -15,7 +15,7 @@ export function PasswordInput({ value, onChange, autoComplete = 'current-passwor
   );
 }
 
-export default function Login({ onLogin }) {
+export default function Login({ config, onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,7 +35,7 @@ export default function Login({ onLogin }) {
   };
 
   return (
-    <AuthLayout title="GTAHUB Office" subtitle="Oficina virtual privada del equipo">
+    <AuthLayout config={config} title={config.theme === 'gtahub' ? `${config.officeName} Office` : config.officeName} subtitle="Oficina virtual privada del equipo">
       <form onSubmit={submit} className="auth-form">
         <label htmlFor="u">Usuario</label>
         <input id="u" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />

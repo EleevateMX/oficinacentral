@@ -1,12 +1,13 @@
-# Oficina + HTTPS (Caddy) + servidor TURN (coturn) en un solo VPS.
+# Nuvora: oficina + HTTPS (Caddy) + servidor TURN (coturn) en un solo VPS.
 # Uso: copia .env.example a .env, rellénalo y ejecuta: docker compose up -d --build
 services:
   app:
     build: .
-    image: oficinacentral:latest
+    image: nuvora:latest
     restart: unless-stopped
     environment:
-      OFFICE_NAME: ${OFFICE_NAME:-GTAHUB}
+      OFFICE_NAME: ${OFFICE_NAME:-Mi oficina}
+      OFFICE_THEME: ${OFFICE_THEME:-nuvora}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}

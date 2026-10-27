@@ -3,7 +3,7 @@ import { api } from '../lib/api.js';
 import AuthLayout from './AuthLayout.jsx';
 import { PasswordInput } from './Login.jsx';
 
-export default function InviteAccept({ token, onDone }) {
+export default function InviteAccept({ token, config, onDone }) {
   const [invite, setInvite] = useState(undefined);
   const [form, setForm] = useState({ displayName: '', username: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
@@ -32,10 +32,10 @@ export default function InviteAccept({ token, onDone }) {
     }
   };
 
-  if (invite === undefined) return <AuthLayout title="GTAHUB Office" subtitle="Revisando invitación…" />;
+  if (invite === undefined) return <AuthLayout config={config} title={config.officeName} subtitle="Revisando invitación…" />;
   if (invite.error) {
     return (
-      <AuthLayout title="Invitación no válida" subtitle={invite.error}>
+      <AuthLayout config={config} title="Invitación no válida" subtitle={invite.error} host="Pídele a quien te invitó un enlace nuevo; cada enlace sirve una sola vez.">
         <a className="btn primary block" href="/">Ir al inicio de sesión</a>
       </AuthLayout>
     );
@@ -43,7 +43,9 @@ export default function InviteAccept({ token, onDone }) {
 
   return (
     <AuthLayout
-      title="Únete a GTAHUB Office"
+      config={config}
+      title={`Únete a ${config.officeName}`}
+      host="¡Bienvenida, bienvenido! Crea tu cuenta y elige tu personaje."
       subtitle={invite.invitedBy ? `${invite.invitedBy} te invitó a la oficina` : 'Te invitaron a la oficina'}
     >
       <form onSubmit={submit} className="auth-form">

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2,
+  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
@@ -8,6 +8,8 @@ import { listDevices } from '../../lib/media.js';
 import { playSound } from '../../lib/sounds.js';
 import { Toggle, Select, Row, Radio, Avatar, Empty, AvatarCanvas } from '../ui.jsx';
 import { fmtDate } from '../../lib/time.js';
+import { THEMES } from '../../lib/themes.js';
+import { OfficeMark, ByNuvora } from '../brand.jsx';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -21,6 +23,7 @@ const SECTIONS = [
   { id: 'performance', label: 'Rendimiento', icon: Zap },
   { id: 'account', label: 'Cuenta', icon: KeyRound },
   { group: 'Oficina' },
+  { id: 'brand', label: 'Marca de la oficina', icon: Palette, admin: true },
   { id: 'members', label: 'Miembros', icon: UserCog },
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
@@ -68,6 +71,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'members' && <Members initialTab={modal?.tab} />}
             {cur === 'office' && <OfficeAdmin />}
             {cur === 'characters' && <CharactersAdmin />}
+            {cur === 'brand' && <BrandAdmin />}
           </div>
         </section>
       </div>
@@ -572,7 +576,7 @@ function CharactersAdmin() {
       </Section>
       <Section title="Subir personaje">
         <form className="form narrow" onSubmit={upload}>
-          <input placeholder="Nombre (ej. Mascota GTAHUB)" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} required />
+          <input placeholder="Nombre (ej. Pirata del equipo)" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} required />
           <input ref={fileRef} type="file" accept="image/png" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
           <button className="btn primary" disabled={busy || !file}><Upload size={15} /> {busy ? 'Subiendo…' : 'Subir'}</button>
         </form>
@@ -588,6 +592,67 @@ function CharactersAdmin() {
             </div>
           ))}
         </div>
+      </Section>
+    </>
+  );
+}
+
+// ---------- Marca de la oficina ----------
+function BrandAdmin() {
+  const config = useOffice((s) => s.config);
+  const [name, setName] = useState(config.officeName || '');
+  const fileRef = useRef(null);
+
+  const save = (body) => api.patch('/admin/office', body).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  const upload = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      await api.put('/admin/office/logo', { dataUrl: await readAsDataUrl(f) });
+    } catch (err) {
+      office.toast({ title: err.message, kind: 'error' });
+    }
+  };
+
+  return (
+    <>
+      <Section title="Nombre">
+        <Row title="Nombre de la oficina" desc="Aparece en el panel, en el inicio de sesión y en las invitaciones">
+          <div className="row gap8">
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+            <button className="btn" disabled={!name.trim() || name === config.officeName} onClick={() => save({ officeName: name })}>Guardar</button>
+          </div>
+        </Row>
+      </Section>
+      <Section title="Tema">
+        <div className="theme-grid">
+          {THEMES.map((t) => (
+            <button key={t.id} className={`theme-card ${config.theme === t.id ? 'on' : ''}`} onClick={() => save({ theme: t.id })} aria-pressed={config.theme === t.id}>
+              <div className="theme-swatches">
+                {(t.id === 'custom' ? [config.accent || '#157A6E', '#ffffff', '#F3F4EE', '#0A2B2C'] : t.swatches).map((c, i) => <span key={i} style={{ background: c }} />)}
+              </div>
+              <b>{t.name}</b>
+              <span className="muted small">{t.desc}</span>
+            </button>
+          ))}
+        </div>
+        {config.theme === 'custom' && (
+          <Row title="Color principal" desc="Botones, selección y acentos">
+            <input type="color" value={config.accent || '#157A6E'} onChange={(e) => save({ accent: e.target.value })} aria-label="Color principal" />
+          </Row>
+        )}
+      </Section>
+      <Section title="Logo">
+        <Row title="Logo de la oficina" desc="Cuadrado, idealmente SVG o PNG con fondo transparente. Si no subes uno, se usa el del tema.">
+          <div className="row gap8">
+            <span className="logo-preview"><OfficeMark config={config} size={36} /></span>
+            <button className="btn" onClick={() => fileRef.current.click()}><Upload size={15} /> Subir</button>
+            {config.logoUrl && <button className="btn danger-text" onClick={() => api.del('/admin/office/logo')}>Quitar</button>}
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden onChange={upload} />
+          </div>
+        </Row>
+        <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
     </>
   );

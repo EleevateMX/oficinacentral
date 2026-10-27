@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import express from 'express';
-import { db, now, tx } from './db.js';
+import { db, now, tx, getSetting, setSetting } from './db.js';
 import {
   hashPassword, verifyPassword, createSession, destroySession, destroyUserSessions, userFromToken,
   parseCookies, sessionCookie, SESSION_COOKIE, loginRateLimited, clearLoginAttempts,
@@ -86,8 +86,30 @@ api.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
+// Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
+const THEMES = ['nuvora', 'gtahub', 'custom'];
+
+function officeConfig() {
+  const logoV = getSetting('logo_v');
+  return {
+    officeName: getSetting('office_name') || process.env.OFFICE_NAME || 'Mi oficina',
+    theme: getSetting('theme') || process.env.OFFICE_THEME || 'nuvora',
+    accent: getSetting('accent') || null,
+    logoUrl: getSetting('logo') ? `/api/office/logo?v=${logoV}` : null,
+  };
+}
+
 api.get('/config', (req, res) => {
-  res.json({ officeName: process.env.OFFICE_NAME || 'GTAHUB' });
+  res.json(officeConfig());
+});
+
+api.get('/office/logo', (req, res) => {
+  const m = /^data:(image\/(png|jpeg|webp|svg\+xml));base64,(.+)$/.exec(getSetting('logo') || '');
+  if (!m) return res.status(404).end();
+  res.setHeader('Content-Type', m[1]);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  if (m[2] === 'svg+xml') res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+  res.send(Buffer.from(m[3], 'base64'));
 });
 
 // Servidores ICE para WebRTC. Con TURN_SECRET se generan credenciales temporales
@@ -313,6 +335,41 @@ const inviteRow = (r) => ({
   token: r.token, email: r.email, role: r.role, note: r.note, createdAt: r.created_at, expiresAt: r.expires_at,
   createdBy: r.created_by, usedBy: r.used_by, usedAt: r.used_at, revoked: !!r.revoked,
   status: r.revoked ? 'revoked' : r.used_by ? 'used' : r.expires_at < now() ? 'expired' : 'pending',
+});
+
+admin.patch('/office', (req, res) => {
+  const b = req.body || {};
+  if (b.officeName !== undefined) {
+    const name = String(b.officeName).trim().slice(0, 40);
+    if (!name) return fail(res, 400, 'La oficina necesita un nombre');
+    setSetting('office_name', name);
+  }
+  if (b.theme !== undefined) {
+    if (!THEMES.includes(b.theme)) return fail(res, 400, 'Tema inválido');
+    setSetting('theme', b.theme);
+  }
+  if (b.accent !== undefined) {
+    if (b.accent !== null && !/^#[0-9a-fA-F]{6}$/.test(b.accent)) return fail(res, 400, 'Color inválido');
+    setSetting('accent', b.accent);
+  }
+  emitAll('office', officeConfig());
+  res.json(officeConfig());
+});
+
+admin.put('/office/logo', (req, res) => {
+  const dataUrl = String(req.body?.dataUrl || '');
+  if (!/^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(dataUrl)) return fail(res, 400, 'Sube un PNG, JPG, WEBP o SVG');
+  if (dataUrl.length > 400_000) return fail(res, 413, 'El logo es muy grande (máx. ~300 KB)');
+  setSetting('logo', dataUrl);
+  setSetting('logo_v', Date.now());
+  emitAll('office', officeConfig());
+  res.json(officeConfig());
+});
+
+admin.delete('/office/logo', (req, res) => {
+  setSetting('logo', null);
+  emitAll('office', officeConfig());
+  res.json(officeConfig());
 });
 
 admin.get('/invites', (req, res) => {

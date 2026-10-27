@@ -185,7 +185,7 @@ export function ChatView() {
       <div className="messages" ref={scrollRef} onScroll={onScroll}>
         {hasMore && <button className="btn tiny load-more" onClick={loadMore}>Cargar mensajes anteriores</button>}
         {!loading && !messages.length && (
-          <Empty title={isDM ? `Este es el inicio de tu conversación con ${other.displayName}` : `Bienvenido a #${channel?.name}`}>
+          <Empty mascota={{ nombre: 'nuvi', pose: 'wave' }} title={isDM ? `Este es el inicio de tu conversación con ${other.displayName}` : `Bienvenido a #${channel?.name}`}>
             {isDM ? 'Salúdale con 👋 o escribe un mensaje.' : 'Escribe el primer mensaje del canal.'}
           </Empty>
         )}

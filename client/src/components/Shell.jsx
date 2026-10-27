@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
+import { Boot } from './brand.jsx';
 import PeoplePanel from './PeoplePanel.jsx';
 import MapView from './MapView.jsx';
 import { ChatPanel, ChatView } from './Chat.jsx';
@@ -32,7 +33,7 @@ export default function Shell({ session, onLogout }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!ready) {
-    return <div className="boot"><img src="/logo.svg" alt="" /><p>Entrando a la oficina…</p></div>;
+    return <Boot text="Entrando a la oficina…" />;
   }
 
   const panel = { map: <PeoplePanel />, chat: <ChatPanel />, calendar: <CalendarPanel />, activity: <ActivityPanel /> }[view];

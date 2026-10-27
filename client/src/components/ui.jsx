@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { X, ChevronDown } from 'lucide-react';
 import { drawAvatarPreview, drawAvatarFace } from '../lib/render.js';
 import { onSpritesLoaded } from '../lib/sprites.js';
+import { Mascota } from './brand.jsx';
 
 export const STATUS = {
   active: { label: 'Activo', color: 'var(--green)' },
@@ -133,9 +134,11 @@ export function Kbd({ children }) {
   return <kbd className="kbd">{children}</kbd>;
 }
 
-export function Empty({ title, children }) {
+export function Empty({ title, children, mascota }) {
+  const showMascot = mascota && document.documentElement.dataset.brand !== 'gtahub';
   return (
     <div className="empty">
+      {showMascot && <Mascota nombre={mascota.nombre || 'nuvi'} pose={mascota.pose || 'idle'} face={mascota.face || 'smile'} size={mascota.size || 96} />}
       <div className="empty-title">{title}</div>
       {children && <div className="empty-desc">{children}</div>}
     </div>

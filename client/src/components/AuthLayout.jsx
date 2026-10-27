@@ -1,18 +1,28 @@
 import React from 'react';
+import { Mascota, OfficeMark, ByNuvora, Logo } from './brand.jsx';
 
-export default function AuthLayout({ title, subtitle, children }) {
+export default function AuthLayout({ config = {}, title, subtitle, children, host }) {
+  const isNuvora = (config.theme || 'nuvora') === 'nuvora';
+  const hasOwnMark = config.logoUrl || config.theme === 'gtahub';
   return (
     <div className="auth">
-      <div className="auth-card">
+      <main className="auth-card">
         <div className="auth-brand">
-          <img src="/logo.svg" alt="" />
+          {hasOwnMark ? <OfficeMark config={config} size={44} /> : <Logo size={26} />}
           <div>
             <h1>{title}</h1>
-            <p>{subtitle}</p>
+            {subtitle && <p>{subtitle}</p>}
           </div>
         </div>
         {children}
-      </div>
+        <div className="auth-by"><ByNuvora variante={config.theme === 'gtahub' ? 'negativo' : 'positivo'} /></div>
+      </main>
+      {isNuvora && (
+        <aside className="auth-host" aria-hidden="true">
+          <Mascota nombre="nuvi" pose="wave" face="smile" size={170} />
+          <p>{host || 'Hola, soy Nuvi. Aquí está tu equipo: entra y saluda.'}</p>
+        </aside>
+      )}
     </div>
   );
 }

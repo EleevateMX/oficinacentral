@@ -238,9 +238,9 @@ export default function MapView({ active }) {
       const space = talkSpace(f, mine.x, mine.y);
       if (space?.startsWith('desk:')) {
         const d = f.desks.find((x) => `desk:${x.id}` === space);
-        if (d) { ctx.fillStyle = 'rgba(80,110,255,.10)'; ctx.fillRect(d.zone.x * T, d.zone.y * T, d.zone.w * T, d.zone.h * T); }
+        if (d) { ctx.fillStyle = 'rgba(21,122,110,.12)'; ctx.fillRect(d.zone.x * T, d.zone.y * T, d.zone.w * T, d.zone.h * T); }
       } else if (!space && office.state.talkingWith.length) {
-        ctx.strokeStyle = 'rgba(80,110,255,.35)';
+        ctx.strokeStyle = 'rgba(21,122,110,.45)';
         ctx.setLineDash([4, 4]);
         ctx.lineWidth = 1.5;
         ctx.strokeRect((mine.rx - PROXIMITY_RADIUS) * T, (mine.ry - PROXIMITY_RADIUS) * T, (PROXIMITY_RADIUS * 2 + 1) * T, (PROXIMITY_RADIUS * 2 + 1) * T);
@@ -251,9 +251,9 @@ export default function MapView({ active }) {
       if (em === 'build') {
         for (const a of f.areas) {
           const sel = edS.areaTarget === a.id;
-          ctx.fillStyle = a.private ? 'rgba(124,92,255,.12)' : 'rgba(46,160,90,.08)';
+          ctx.fillStyle = a.private ? 'rgba(91,63,184,.10)' : 'rgba(46,160,90,.08)';
           ctx.fillRect(a.x * T, a.y * T, a.w * T, a.h * T);
-          ctx.strokeStyle = sel ? '#4f5bd5' : a.private ? 'rgba(124,92,255,.7)' : 'rgba(46,160,90,.6)';
+          ctx.strokeStyle = sel ? '#157A6E' : a.private ? 'rgba(91,63,184,.7)' : 'rgba(46,160,90,.6)';
           ctx.lineWidth = sel ? 3 : 1.5;
           ctx.setLineDash(sel ? [] : [6, 4]);
           ctx.strokeRect(a.x * T + 1, a.y * T + 1, a.w * T - 2, a.h * T - 2);
@@ -286,7 +286,7 @@ export default function MapView({ active }) {
         drawObject(ctx, { ...edS.placing, ...pos });
         ctx.globalAlpha = 1;
         const { w: ow, h: oh } = objSize({ ...edS.placing });
-        ctx.strokeStyle = '#4f5bd5';
+        ctx.strokeStyle = '#157A6E';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(pos.x * T, pos.y * T, ow * T, oh * T);
       }
@@ -297,7 +297,7 @@ export default function MapView({ active }) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2.5;
         ctx.strokeRect(selObj.x * T - 2, selObj.y * T - 2, w * T + 4, h * T + 4);
-        ctx.strokeStyle = '#4f5bd5';
+        ctx.strokeStyle = '#157A6E';
         ctx.lineWidth = 1;
         ctx.strokeRect(selObj.x * T - 2, selObj.y * T - 2, w * T + 4, h * T + 4);
       }
@@ -305,7 +305,7 @@ export default function MapView({ active }) {
       const hov = input.current.hover;
       if (em && hov && hov.id !== edS.selected && !edS.placing) {
         const { w, h } = objSize(hov);
-        ctx.strokeStyle = 'rgba(79,91,213,.8)';
+        ctx.strokeStyle = 'rgba(21,122,110,.85)';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(hov.x * T - 1, hov.y * T - 1, w * T + 2, h * T + 2);
       }
@@ -313,9 +313,9 @@ export default function MapView({ active }) {
       const ad = input.current.areaDrag;
       if (ad) {
         const r = normRect(ad);
-        ctx.fillStyle = 'rgba(79,91,213,.15)';
+        ctx.fillStyle = 'rgba(21,122,110,.15)';
         ctx.fillRect(r.x * T, r.y * T, r.w * T, r.h * T);
-        ctx.strokeStyle = '#4f5bd5';
+        ctx.strokeStyle = '#157A6E';
         ctx.lineWidth = 2;
         ctx.strokeRect(r.x * T, r.y * T, r.w * T, r.h * T);
       }
@@ -336,19 +336,19 @@ export default function MapView({ active }) {
       ctx.textBaseline = 'middle';
       // Nombres de áreas
       if (v.zoom >= 0.6) {
-        ctx.font = '500 12px Inter, system-ui, sans-serif';
+        ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         for (const a of f.areas) {
           const p = worldToScreen(a.x + 0.3, a.y + 0.45);
           const label = a.private ? `🔒 ${a.name}` : `👥 ${a.name}`;
           const w = ctx.measureText(label).width + 14;
           ctx.fillStyle = 'rgba(255,255,255,.72)';
           ctx.beginPath(); ctx.roundRect(p.x, p.y - 10, w, 20, 10); ctx.fill();
-          ctx.fillStyle = 'rgba(40,44,52,.75)';
+          ctx.fillStyle = 'rgba(10,43,44,.8)';
           ctx.fillText(label, p.x + 7, p.y + 1);
         }
       }
       const now = performance.now();
-      ctx.font = '600 12px Inter, system-ui, sans-serif';
+      ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
       for (const [id, p] of list) {
         const u = us[id];
         if (!u) continue;
@@ -357,9 +357,9 @@ export default function MapView({ active }) {
         const w = ctx.measureText(name).width + 24;
         const y = sp.y - 34 * v.zoom / 1.5 + 4;
         const isMe = Number(id) === meU.id;
-        ctx.fillStyle = isMe ? 'rgba(79,91,213,.92)' : 'rgba(20,22,28,.82)';
+        ctx.fillStyle = isMe ? 'rgba(21,122,110,.95)' : 'rgba(10,43,44,.85)';
         ctx.beginPath(); ctx.roundRect(sp.x - w / 2, y - 11, w, 22, 6); ctx.fill();
-        ctx.fillStyle = p.status === 'busy' ? '#f59f00' : p.status === 'away' ? '#adb5bd' : '#2fd36b';
+        ctx.fillStyle = p.status === 'busy' ? '#FF8A3D' : p.status === 'away' ? '#adb5bd' : '#2fd36b';
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
@@ -373,7 +373,7 @@ export default function MapView({ active }) {
           ctx.globalAlpha = k;
           ctx.font = '26px system-ui';
           ctx.fillText(r.emoji, sp.x - 14, y - 30 - (1 - (r.until - now) / 3500) * 16);
-          ctx.font = '600 12px Inter, system-ui, sans-serif';
+          ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
           ctx.globalAlpha = 1;
         }
       }

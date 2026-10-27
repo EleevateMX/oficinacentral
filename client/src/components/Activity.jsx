@@ -63,7 +63,7 @@ export default function ActivityPanel() {
         </div>
       </div>
       <div className="panel-scroll">
-        {!groups.length && <Empty title="Nada por aquí">Los saludos, menciones e invitaciones aparecerán aquí.</Empty>}
+        {!groups.length && <Empty mascota={{ nombre: 'nuvi', face: 'calm', size: 84 }} title="Todo al día">Los saludos, menciones e invitaciones aparecerán aquí.</Empty>}
         {groups.map((g) => {
           const u = users[g.actorId];
           const name = u?.displayName || 'Alguien';

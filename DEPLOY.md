@@ -1,4 +1,4 @@
-# Montar la oficina en un VPS con Docker
+# Montar Nuvora en un VPS con Docker
 
 Guía para dejar la oficina en línea 24/7 sin depender de una PC física.
 Todo corre en un solo servidor:
@@ -93,6 +93,7 @@ Rellena:
 | `PUBLIC_IP` | `203.0.113.10` | IP pública del VPS |
 | `ADMIN_PASSWORD` | (una contraseña larga) | solo se usa la primera vez |
 | `TURN_SECRET` | (lo de `openssl rand -hex 32`) | no lo compartas |
+| `OFFICE_NAME`, `OFFICE_THEME` | `GTAHUB`, `gtahub` | nombre y tema iniciales; luego se cambian desde la app |
 
 ---
 
@@ -107,8 +108,9 @@ docker compose logs -f app # Ctrl+C para salir
 Abre `https://oficina.gtahub.gg`, entra con `admin` y la contraseña de `ADMIN_PASSWORD`, y:
 
 1. Cambia tu contraseña en **Preferencias → Cuenta**.
-2. Edita tu perfil (nombre, foto, avatar).
-3. Invita al equipo desde **Invitar personas** (o Preferencias → Miembros → Invitaciones). Cada enlace sirve una vez.
+2. En **Preferencias → Marca de la oficina** elige el tema (Nuvora, GTAHUB o personalizado) y sube el logo si quieres.
+3. Edita tu perfil (nombre, foto, avatar).
+4. Invita al equipo desde **Invitar personas** (o Preferencias → Miembros → Invitaciones). Cada enlace sirve una vez.
 
 ### Probar que las llamadas funcionan
 

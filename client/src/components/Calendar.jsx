@@ -34,7 +34,7 @@ export function CalendarPanel() {
       <div className="panel-head"><h2>Calendario</h2></div>
       <div className="search"><input placeholder="Buscar eventos" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <div className="panel-scroll">
-        {!groups.length && <Empty title="Sin eventos próximos">Crea una reunión con “Nueva reunión”.</Empty>}
+        {!groups.length && <Empty mascota={{ nombre: 'rumi', size: 84 }} title="Sin eventos próximos">Crea una reunión con “Nueva reunión”.</Empty>}
         {groups.map((g) => (
           <div key={g.label}>
             <div className="group-label">{g.label}</div>

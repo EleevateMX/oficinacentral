@@ -1,9 +1,9 @@
 {
-  "name": "oficinacentral",
+  "name": "nuvora",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Oficina virtual privada estilo Gather: mapa 2D, chat, calendario, actividad y acceso solo por invitación.",
+  "description": "Nuvora: oficina virtual privada con mapa 2D, audio y video por cercanía, chat y calendario. Acceso solo por invitación.",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --watch-path=server --watch-path=shared server/index.js",

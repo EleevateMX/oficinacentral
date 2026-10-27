@@ -149,10 +149,25 @@ CREATE TABLE IF NOT EXISTS characters (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 INSERT OR IGNORE INTO channels (name) VALUES ('general'), ('social');
 `);
 
 export const now = () => Date.now();
+
+export function getSetting(key, fallback = null) {
+  const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return r ? r.value : fallback;
+}
+
+export function setSetting(key, value) {
+  if (value === null || value === undefined) db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+  else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(value));
+}
 
 export function tx(fn) {
   db.exec('BEGIN');

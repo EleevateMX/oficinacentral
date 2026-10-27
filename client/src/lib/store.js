@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { MediaManager } from './media.js';
 import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable } from '@shared/map.js';
 import { playSound } from './sounds.js';
+import { applyBrand } from './themes.js';
 
 export const DEFAULT_PREFS = {
   colorMode: 'light',
@@ -39,7 +40,7 @@ class Office {
       ready: false,
       me: null,
       prefs: DEFAULT_PREFS,
-      config: { officeName: 'GTAHUB', iceServers: [] },
+      config: { officeName: 'Mi oficina', iceServers: [] },
       users: {},
       floors: [],
       characters: [],
@@ -83,6 +84,7 @@ class Office {
       api.get('/config'), api.get('/ice'), api.get('/users'), api.get('/floors'), api.get('/chat'), api.get('/notifications'),
     ]);
     const byId = Object.fromEntries(users.users.map((u) => [u.id, u]));
+    applyBrand(config);
     this.set({ config: { ...config, iceServers: ice.iceServers }, users: byId, floors: floors.floors, chat, notifications: notifications.notifications });
     this.loadCharacters();
     this.connect();
@@ -201,6 +203,10 @@ class Office {
     s.on('message', (m) => this.onMessage(m));
     s.on('channels', () => this.refreshChat());
     s.on('characters', () => this.loadCharacters());
+    s.on('office', (c) => {
+      applyBrand(c);
+      this.set((st) => ({ config: { ...st.config, ...c } }));
+    });
     s.on('events', () => this.loadEvents());
     s.on('notification', (n) => {
       this.set((st) => ({ notifications: [n, ...st.notifications] }));
