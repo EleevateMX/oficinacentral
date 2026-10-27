@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId } from './world.js';
-import { isWalkable, nearestWalkable } from '../shared/map.js';
+import { isWalkable, nearestWalkable, canTalk } from '../shared/map.js';
 import { initBoards } from './boards.js';
 
 let io = null;
@@ -124,6 +124,23 @@ export function initRealtime(httpServer) {
     });
 
     initBoards(io, socket, userId);
+
+    // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
+    let roomMsgTimes = [];
+    socket.on('room-msg', (m) => {
+      const text = String(m?.text || '').trim().slice(0, 500);
+      if (!text) return;
+      const t = Date.now();
+      roomMsgTimes = roomMsgTimes.filter((x) => t - x < 10e3);
+      if (roomMsgTimes.length >= 8) return;
+      roomMsgTimes.push(t);
+      const f = getFloor(p.floorId)?.state;
+      if (!f) return;
+      const to = [userId];
+      for (const [id, q] of presence) if (id !== userId && canTalk(f, { ...p, floorId: p.floorId }, q)) to.push(id);
+      const msg = { from: userId, text, at: t, id: `${userId}-${t}`, to: to.length - 1 };
+      for (const id of to) io.to(`user:${id}`).emit('room-msg', msg);
+    });
 
     // Anotaciones sobre una pantalla compartida: se reenvían a quienes la ven
     socket.on('annot:join', (sharer) => socket.join(`annot:${Number(sharer)}`));

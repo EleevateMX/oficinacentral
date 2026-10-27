@@ -10,6 +10,7 @@ import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser
 import * as world from './world.js';
 import { alert } from './alerts.js';
 import * as sec from './security.js';
+import { registerFileRoutes, getFiles } from './files.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 
 export const api = express.Router();
@@ -399,6 +400,8 @@ api.post('/me/password', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+registerFileRoutes(api, { fail });
+
 // ---------- Verificación en dos pasos ----------
 api.post('/me/2fa/setup', wrap((req, res) => {
   if (req.user.totp_enabled) return fail(res, 400, 'Ya tienes activada la verificación en dos pasos');
@@ -642,9 +645,20 @@ function parseConv(conv, userId) {
   return { dm: dmKey(userId, id), otherId: id, key: `d:${dmKey(userId, id)}` };
 }
 
+function reactionsOf(messageId) {
+  const map = new Map();
+  for (const x of db.prepare('SELECT emoji, user_id FROM message_reactions WHERE message_id = ? ORDER BY rowid').all(messageId)) {
+    if (!map.has(x.emoji)) map.set(x.emoji, []);
+    map.get(x.emoji).push(x.user_id);
+  }
+  return [...map].map(([emoji, users]) => ({ emoji, users }));
+}
+
 const messageRow = (r) => ({
   id: r.id, userId: r.user_id, kind: r.kind, body: r.body, createdAt: r.created_at,
   conv: r.channel_id ? `c:${r.channel_id}` : null, dm: r.dm_key,
+  attachments: r.attachments ? parseJSON(r.attachments, []) : [],
+  reactions: reactionsOf(r.id),
 });
 
 function lastRead(userId, key) {
@@ -681,9 +695,9 @@ api.get('/messages', (req, res) => {
   res.json({ messages: rows.reverse().map(messageRow), hasMore: rows.length === 60 });
 });
 
-function postMessage(user, c, body, kind = 'text') {
-  const id = Number(db.prepare('INSERT INTO messages (channel_id, dm_key, user_id, kind, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(c.channelId ?? null, c.dm ?? null, user.id, kind, body, now()).lastInsertRowid);
+function postMessage(user, c, body, kind = 'text', attachments = []) {
+  const id = Number(db.prepare('INSERT INTO messages (channel_id, dm_key, user_id, kind, body, created_at, attachments) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(c.channelId ?? null, c.dm ?? null, user.id, kind, body, now(), attachments.length ? JSON.stringify(attachments) : null).lastInsertRowid);
   const msg = messageRow(db.prepare('SELECT * FROM messages WHERE id = ?').get(id));
   if (c.channelId) {
     emitAll('message', msg);
@@ -706,9 +720,30 @@ api.post('/messages', wrap((req, res) => {
   const c = parseConv(req.body?.conv, req.user.id);
   if (!c) return fail(res, 400, 'Conversación inválida');
   const body = String(req.body?.body || '').trim();
-  if (!body) return fail(res, 400, 'Mensaje vacío');
+  const attachments = Array.isArray(req.body?.files) ? getFiles(req.body.files, req.user.id) : [];
+  if (!body && !attachments.length) return fail(res, 400, 'Mensaje vacío');
   if (body.length > 4000) return fail(res, 400, 'Mensaje demasiado largo');
-  res.json({ message: postMessage(req.user, c, body) });
+  res.json({ message: postMessage(req.user, c, body, 'text', attachments) });
+}));
+
+// Reacciones con emoji: tocar la misma quita la tuya
+api.post('/messages/:id/react', wrap((req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(Number(req.params.id));
+  if (!m) return fail(res, 404, 'Mensaje no encontrado');
+  const uid = req.user.id;
+  if (m.dm_key && !m.dm_key.split(':').map(Number).includes(uid)) return fail(res, 403, 'No puedes ver ese mensaje');
+  const emoji = String(req.body?.emoji || '').trim();
+  if (!emoji || emoji.length > 16 || /[\s<>]/.test(emoji)) return fail(res, 400, 'Emoji inválido');
+  const had = db.prepare('SELECT 1 FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').get(m.id, uid, emoji);
+  if (had) db.prepare('DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(m.id, uid, emoji);
+  else {
+    if (db.prepare('SELECT COUNT(DISTINCT emoji) AS n FROM message_reactions WHERE message_id = ?').get(m.id).n >= 20) return fail(res, 400, 'Demasiadas reacciones');
+    db.prepare('INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(m.id, uid, emoji);
+  }
+  const payload = { id: m.id, reactions: reactionsOf(m.id) };
+  if (m.channel_id) emitAll('reaction', payload);
+  else for (const id of m.dm_key.split(':').map(Number)) emitToUser(id, 'reaction', payload);
+  res.json(payload);
 }));
 
 api.post('/reads', (req, res) => {

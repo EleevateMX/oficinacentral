@@ -60,6 +60,9 @@ class Office {
       watching: [], // pantallas que estoy viendo (máx. 4), como "Ver transmisión" en Discord
       stageOpen: false,
       stageLayout: 'focus', // 'focus' | 'grid'
+      roomChat: [], // mensajes de la sala (no se guardan)
+      roomChatOpen: false,
+      roomUnread: 0,
       talkingWith: [],
       space: null,
       modal: null, // { type: 'prefs', section } | { type: 'profile' } | { type: 'invite' } ...
@@ -218,6 +221,8 @@ class Office {
       }
     });
     s.on('message', (m) => this.onMessage(m));
+    s.on('reaction', (r) => this.dispatch('reaction', r));
+    s.on('room-msg', (m) => this.onRoomMsg(m));
     s.on('channels', () => this.refreshChat());
     s.on('characters', () => this.loadCharacters());
     s.on('office', (c) => {
@@ -325,6 +330,24 @@ class Office {
     if (prev.length !== ids.length || prev.some((v, i) => v !== ids[i]) || space !== this.state.space) {
       this.set({ talkingWith: ids, space });
     }
+  }
+
+  // ---------- Chat de la sala ----------
+  bubbles = {}; // id -> { text, until } globito sobre el personaje
+
+  onRoomMsg(m) {
+    this.bubbles[m.from] = { text: m.text.length > 60 ? `${m.text.slice(0, 58)}…` : m.text, until: performance.now() + 6000 };
+    const mine = m.from === this.state.me.id;
+    this.set((st) => ({
+      roomChat: [...st.roomChat, m].slice(-80),
+      roomUnread: st.roomChatOpen || mine ? 0 : st.roomUnread + 1,
+    }));
+    if (!mine && !this.state.roomChatOpen && this.state.prefs.notifications.chatSound !== 'none') playSound('message', this.state.prefs.audio.notifVolume * 0.6);
+  }
+
+  sendRoomMsg(text) {
+    const t = String(text || '').trim();
+    if (t) this.socket?.emit('room-msg', { text: t });
   }
 
   // ---------- Transmisiones (pantallas compartidas) ----------
