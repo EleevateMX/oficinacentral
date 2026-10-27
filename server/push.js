@@ -137,6 +137,11 @@ function fmtWhen(ts, userId) {
 // Avisos de notify() (tabla notifications)
 export function pushNotification(userId, type, actorId, data = {}) {
   try {
+    // Amigo secreto: anónimo, el texto ya viene armado
+    if (type === 'santa') {
+      pushLater(userId, { title: '🎁 Amigo secreto', body: clip(data.text || ''), tag: `santa-${data.kind || ''}`, url: '/?view=santa' });
+      return;
+    }
     const who = displayName(actorId);
     if (type === 'call') {
       pushLater(userId, { title: `📞 ${who} te está llamando`, body: 'Toca para ir con esa persona', tag: `call-${actorId}`, url: `/?conv=d:${actorId}` });

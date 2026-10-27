@@ -17,6 +17,7 @@ import { fmtDate } from '../../lib/time.js';
 import { THEMES } from '../../lib/themes.js';
 import { OfficeMark, ByNuvora } from '../brand.jsx';
 import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
+import { AnniversarySettings } from '../SeasonExtras.jsx';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -1095,13 +1096,16 @@ function BrandAdmin() {
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
       <Section title="Decoración de temporada">
-        <Row title="Temporada" desc="Adornos, personajes y ambiente especiales en el mapa (calabazas, zombies, perritos, ofrenda…). En automático se pone sola en su fecha.">
+        <Row title="Temporada" desc="Adornos, personajes y ambiente especiales en el mapa (Halloween: calabazas, zombies y ofrenda; Navidad, del 1 de dic. al 6 de ene.: nieve, árbol y Amigo secreto; Aniversario: pastel, fuegos artificiales y foto grupal). En automático se pone sola en su fecha.">
           <select value={config.seasonSetting || 'auto'} onChange={(e) => save({ season: e.target.value })}>
             <option value="auto">Automática (según la fecha)</option>
             <option value="halloween">🎃 Halloween y Día de Muertos</option>
+            <option value="navidad">🎄 Navidad (con Amigo secreto)</option>
+            <option value="aniversario">🎂 Aniversario</option>
             <option value="none">Sin decoración</option>
           </select>
         </Row>
+        <AnniversarySettings config={config} save={save} />
       </Section>
       <Section title="Resumen de reuniones con IA">
         <Row title="Permitir “📝 Tomar notas” en las salas" desc={config.aiNotesReady

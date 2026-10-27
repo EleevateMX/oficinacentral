@@ -17,7 +17,8 @@ import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
 import { addScore, topScores, SCORE_GAMES } from './games.js';
-import { activeSeason, SEASON_SETTINGS } from '../shared/seasons.js';
+import { activeSeason, SEASON_SETTINGS, validMD } from '../shared/seasons.js';
+import { registerSantaRoutes } from './santa.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 import { notesConfig, stopAllNotes } from './notes.js';
 import { registerStatsRoutes } from './stats.js';
@@ -126,7 +127,9 @@ export function officeConfig() {
     discordLogin: discordEnabled(),
     // Decoración de temporada (Halloween…): lo que eligió el admin y la que toca hoy
     seasonSetting: getSetting('season') || 'auto',
-    season: activeSeason(getSetting('season') || 'auto'),
+    season: activeSeason(getSetting('season') || 'auto', new Date(), { anniversary: getSetting('anniversary_date') }),
+    // Aniversario de la comunidad: fecha 'MM-DD' y año de fundación (para "N años")
+    anniversary: { date: getSetting('anniversary_date') || null, year: Number(getSetting('anniversary_year')) || null },
     // Resumen de reuniones con IA: si el admin lo permite y si el servidor tiene llave
     ...notesConfig(),
   };
@@ -692,6 +695,15 @@ admin.patch('/office', (req, res) => {
     setSetting('ai_notes', b.aiNotes ? '1' : '0');
     if (!b.aiNotes) stopAllNotes();
   }
+  if (b.anniversaryDate !== undefined) {
+    if (b.anniversaryDate && !validMD(b.anniversaryDate)) return fail(res, 400, 'Fecha de aniversario inválida (MM-DD)');
+    setSetting('anniversary_date', b.anniversaryDate || null);
+  }
+  if (b.anniversaryYear !== undefined) {
+    const y = Number(b.anniversaryYear) || null;
+    if (y && (y < 1990 || y > new Date().getFullYear())) return fail(res, 400, 'Año de fundación inválido');
+    setSetting('anniversary_year', y);
+  }
   if (b.shifts !== undefined) {
     if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');
     const list = [...new Set(b.shifts.map((x) => String(x).trim().slice(0, 30)).filter(Boolean))].slice(0, 30);
@@ -994,6 +1006,7 @@ api.post('/call/:userId/answer', wrap((req, res) => {
 
 // ---------- Notificaciones ----------
 registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push/test
+registerSantaRoutes(api, { fail, notify, requireAdmin, wrap }); // /santa… (amigo secreto)
 
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);

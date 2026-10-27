@@ -11,7 +11,7 @@ import { seatPose, STAND_EMOTES } from '../lib/seating.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
-import { buildHalloween, createNpcs, stepNpcs, drawHalloweenDecor, drawHalloweenWalkers, drawHalloweenSky } from '../lib/halloween.js';
+import { buildSeason, seasonObjects, interactSeason, drawSeasonGround, drawSeasonDecor, drawSeasonWalkers, drawSeasonSky, drawSeasonScreen } from '../lib/seasonal.js';
 import { EMOTE_BY_KEY } from '@shared/emotes.js';
 
 // Fecha de hoy ('MM-DD') para el gorrito de cumpleaños; se recalcula cada minuto
@@ -37,6 +37,7 @@ import { drawStageSpots } from '../lib/stageFx.js';
 import StagePanel from './StagePanel.jsx';
 import { JukeboxLayer } from './Jukebox.jsx';
 import { jukeboxActive } from '../lib/jukebox.js';
+import { SeasonPill } from './SeasonExtras.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
@@ -45,13 +46,15 @@ const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', scr
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
 const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
 
+// Tamaño de un objeto (los de temporada traen el suyo)
+const sizeOf = (o) => (o.season ? { w: o.w, h: o.h } : objSize(o));
 // Objeto interactivo más cercano (pizarrón, tablero, pantalla) a menos de 2 casillas
 function nearInteractive(f, me) {
   let best = null;
-  for (const o of f.objects) {
-    const kind = CATALOG[o.type]?.interactive;
+  for (const o of [...f.objects, ...seasonObjects(f)]) {
+    const kind = o.season ? 'season' : CATALOG[o.type]?.interactive;
     if (!kind) continue;
-    const { w, h } = objSize(o);
+    const { w, h } = sizeOf(o);
     const dx = Math.max(o.x - me.x, 0, me.x - (o.x + w - 1));
     const dy = Math.max(o.y - me.y, 0, me.y - (o.y + h - 1));
     const d = Math.max(dx, dy);
@@ -61,6 +64,7 @@ function nearInteractive(f, me) {
 }
 
 export function interact(o) {
+  if (o.season) return interactSeason(o);
   const kind = CATALOG[o.type]?.interactive;
   if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
@@ -188,10 +192,8 @@ export default function MapView({ active }) {
 
   // Decoración de temporada: se arma al cambiar de piso o de temporada
   useEffect(() => {
-    if (!floor || config?.season !== 'halloween') { hwRef.current = null; return; }
-    const hw = buildHalloween(floor);
-    hwRef.current = { ...hw, npcs: perf === 'efficient' ? null : createNpcs(hw) };
-  }, [floor, config?.season, perf]);
+    hwRef.current = buildSeason(config?.season, floor, perf, config);
+  }, [floor, config?.season, perf, config?.anniversary?.date, config?.anniversary?.year, config?.officeName]);
 
   // Tamaño del canvas
   useEffect(() => {
@@ -431,6 +433,7 @@ export default function MapView({ active }) {
         setAnimTime(performance.now());
         ctx.drawImage(staticRef.current.base, 0, 0);
         drawLive(animRef.current.under);
+        if (hwRef.current) drawSeasonGround(ctx, hwRef.current, v, f); // nieve en el pasto (debajo de los muebles)
         ctx.drawImage(staticRef.current.top, 0, 0);
         drawLive(animRef.current.top);
         setAnimTime(0);
@@ -438,7 +441,7 @@ export default function MapView({ active }) {
       // Temporada (Halloween): adornos en el piso
       const hw = hwRef.current;
       const viewRect = { x0: v.camX - v.w / 2 / v.zoom, x1: v.camX + v.w / 2 / v.zoom, y0: v.camY - v.h / 2 / v.zoom, y1: v.camY + v.h / 2 / v.zoom };
-      if (hw) drawHalloweenDecor(ctx, hw, t, viewRect);
+      if (hw) drawSeasonDecor(ctx, hw, t, viewRect, f);
 
       // Proyección en vivo: la pantalla compartida aparece sobre las TV de tu sala
       projRef.current = [];
@@ -590,10 +593,7 @@ export default function MapView({ active }) {
       const players = office.players;
       const list = Object.entries(players).filter(([, p]) => p.floorId === f.id).sort((a, b) => a[1].ry - b[1].ry);
       // Zombies y perritos de temporada (no en modo ahorro)
-      if (hw?.npcs) {
-        stepNpcs(hw.npcs, f, t, list.map(([, p]) => p));
-        drawHalloweenWalkers(ctx, hw.npcs, t, viewRect);
-      }
+      if (hw?.npcs) drawSeasonWalkers(ctx, hw, t, viewRect, f, list.map(([, p]) => p));
       for (const [id, p] of list) {
         const u = us[id];
         // Efecto de regresar al escritorio (Ctrl+D): el efecto dibuja al personaje
@@ -670,11 +670,7 @@ export default function MapView({ active }) {
 
       drawStageSpots(ctx, f, t, T, viewRect); // reflectores del escenario
       // Fantasmas, murciélagos y un tinte morado de temporada
-      if (hw) {
-        if (hw.npcs) drawHalloweenSky(ctx, hw.npcs, t, viewRect);
-        ctx.fillStyle = 'rgba(70, 20, 110, 0.07)';
-        ctx.fillRect(0, 0, f.W * T, f.H * T);
-      }
+      if (hw) drawSeasonSky(ctx, hw, t, viewRect, f);
 
       // Luz según la hora: tinte y brillos de lámparas, neón y pantallas
       const light = ambRef.current.light;
@@ -741,6 +737,7 @@ export default function MapView({ active }) {
 
       // Etiquetas (en coordenadas de pantalla para que el texto sea nítido)
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+      if (hw) drawSeasonScreen(ctx, hw, t, v); // nieve, fuegos artificiales…
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left'; // algún dibujo de temporada lo deja centrado
       // Nombres de áreas
@@ -795,9 +792,9 @@ export default function MapView({ active }) {
       const near = !em && mine ? nearInteractive(f, mine) : null;
       if (near) {
         if (office.pendingInteract === near.o.id) { office.pendingInteract = null; interact(near.o); }
-        const { w: ow } = objSize(near.o);
+        const { w: ow } = sizeOf(near.o);
         const hp = worldToScreen(near.o.x + ow / 2, near.o.y - 0.6);
-        const txt = GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
+        const txt = near.o.label || GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         const tw = ctx.measureText(txt).width + 34;
         ctx.fillStyle = 'rgba(16,16,16,.88)';
@@ -1008,7 +1005,7 @@ export default function MapView({ active }) {
       }
     }
     // Clic en un objeto interactivo: abrirlo si estás cerca o caminar hasta él
-    const io = floor.objects.find((o) => CATALOG[o.type]?.interactive && inRect({ x: o.x, y: o.y - 0.5, ...objSize(o), h: objSize(o).h + 0.5 }, w.x, w.y));
+    const io = [...floor.objects, ...seasonObjects(floor)].find((o) => (o.season || CATALOG[o.type]?.interactive) && inRect({ x: o.x, y: o.y - 0.5, ...sizeOf(o), h: sizeOf(o).h + 0.5 }, w.x, w.y));
     if (io) {
       const mine = office.players[me.id];
       const near = mine && nearInteractive(floor, mine);
@@ -1162,6 +1159,7 @@ export default function MapView({ active }) {
       <RoomChat />
       <ScreenStage />
       <PetPanel />
+      <SeasonPill />
 
       {hoverDesk && !editMode && (
         <div className="desk-tip" ref={tipRef} style={{ left: hoverDesk.x, top: hoverDesk.y }}

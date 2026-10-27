@@ -132,9 +132,10 @@ export function stepNpcs(npcs, f, now, players) {
         n.x += DIRV[dir][0]; n.y += DIRV[dir][1];
         if (dir === 'left') n.face = -1; if (dir === 'right') n.face = 1;
       }
-      if (Math.random() < 0.04) n.say = { text: LINES[n.kind][Math.floor(Math.random() * LINES[n.kind].length)], until: now + 2200 };
+      const lines = n.lines || LINES[n.kind];
+      if (lines && Math.random() < 0.04) n.say = { text: lines[Math.floor(Math.random() * lines.length)], until: now + 2200 };
     }
-    const k = n.kind === 'zombie' ? 0.04 : 0.12;
+    const k = n.ease || (n.kind === 'zombie' ? 0.04 : 0.12);
     n.rx += (n.x - n.rx) * k; n.ry += (n.y - n.ry) * k;
     n.moving = Math.abs(n.x - n.rx) + Math.abs(n.y - n.ry) > 0.05;
     if (n.kind === 'dog' && near && !n.say && Math.random() < 0.004) n.say = { text: '❤️', until: now + 1600 };

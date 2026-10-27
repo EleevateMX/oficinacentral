@@ -343,6 +343,10 @@ class Office {
         this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
       } else if (n.type === 'achievement') onAchievementNotification(this, n);
+      else if (n.type === 'santa') {
+        this.toast({ title: n.data.text || '🎁 Amigo secreto', action: { label: 'Ver', run: () => this.set({ modal: { type: 'santa' } }) }, duration: 9000 });
+        playSound('wave', this.state.prefs.audio.notifVolume);
+      }
     });
     s.on('achievement', (m) => forgetBadges(m.userId));
   }

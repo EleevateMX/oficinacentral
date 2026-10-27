@@ -5,6 +5,8 @@ import Notices from './Notices.jsx';
 import Feedback from './Feedback.jsx';
 import Achievements from './Achievements.jsx';
 import JukeboxModal from './Jukebox.jsx';
+import SecretSanta from './SecretSanta.jsx';
+import { AnniversaryPhoto } from './SeasonExtras.jsx';
 import React, { useEffect, useState } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
@@ -92,6 +94,8 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'feedback' && <Feedback />}
       {modal?.type === 'achievements' && <Achievements userId={modal.userId} tab={modal.tab} />}
       {modal?.type === 'jukebox' && <JukeboxModal objectId={modal.objectId} />}
+      {modal?.type === 'santa' && <SecretSanta />}
+      {modal?.type === 'anniversaryPhoto' && <AnniversaryPhoto />}
       {onboarding && !modal && <Onboarding />}
       {!modal && <AppBanner mobile={mobile} />}
       <IncomingCall />

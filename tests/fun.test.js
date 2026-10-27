@@ -179,7 +179,27 @@ test('temporada: Halloween en su fecha y el admin puede cambiarla', async () => 
   assert.equal(activeSeason('auto', new Date(2026, 6, 1)), null);
   assert.equal(activeSeason('none', new Date(2026, 9, 31)), null);
   assert.equal(activeSeason('halloween', new Date(2026, 6, 1)), 'halloween');
+  // Navidad: del 1 de diciembre al 6 de enero
+  assert.equal(activeSeason('auto', new Date(2026, 11, 1)), 'navidad');
+  assert.equal(activeSeason('auto', new Date(2027, 0, 6)), 'navidad');
+  assert.equal(activeSeason('auto', new Date(2027, 0, 7)), null);
+  assert.equal(activeSeason('navidad', new Date(2026, 6, 1)), 'navidad');
+  // Aniversario: ese día y los 2 anteriores (gana a las demás temporadas)
+  assert.equal(activeSeason('auto', new Date(2026, 5, 15), { anniversary: '06-15' }), 'aniversario');
+  assert.equal(activeSeason('auto', new Date(2026, 5, 13), { anniversary: '06-15' }), 'aniversario');
+  assert.equal(activeSeason('auto', new Date(2026, 5, 12), { anniversary: '06-15' }), null);
+  assert.equal(activeSeason('auto', new Date(2026, 5, 16), { anniversary: '06-15' }), null);
+  assert.equal(activeSeason('auto', new Date(2026, 11, 31), { anniversary: '01-01' }), 'aniversario');
+  assert.equal(activeSeason('auto', new Date(2026, 9, 31), { anniversary: '10-31' }), 'aniversario');
+  assert.equal(activeSeason('none', new Date(2026, 5, 15), { anniversary: '06-15' }), null);
+  assert.equal(activeSeason('aniversario', new Date(2026, 6, 1)), 'aniversario');
   const admin = await adminClient(srv.url);
+  assert.equal((await admin.patch('/admin/office', { season: 'navidad' })).data.season, 'navidad');
+  assert.equal((await admin.patch('/admin/office', { anniversaryDate: '13-01' })).status, 400);
+  assert.equal((await admin.patch('/admin/office', { anniversaryYear: 1800 })).status, 400);
+  const an = await admin.patch('/admin/office', { season: 'aniversario', anniversaryDate: '06-15', anniversaryYear: 2019 });
+  assert.equal(an.data.season, 'aniversario');
+  assert.deepEqual(an.data.anniversary, { date: '06-15', year: 2019 });
   assert.equal((await admin.patch('/admin/office', { season: 'none' })).data.season, null);
   assert.equal((await admin.patch('/admin/office', { season: 'halloween' })).data.season, 'halloween');
   assert.equal((await admin.patch('/admin/office', { season: 'navidad-falsa' })).status, 400);

@@ -1373,3 +1373,77 @@ body.pet-aiming canvas { cursor: crosshair !important; }
 .map-wrap:has(.video-strip .tile) .jb-pill.below { top: 166px; }
 .map-wrap:has(.video-strip .tile.screen) .jb-pill { top: 172px; }
 .shell.mobile .map-wrap .jb-pill { top: auto; }
+/* ===== Temporadas: Navidad (Amigo secreto) y Aniversario ===== */
+.season-pill { position: absolute; top: 14px; left: 14px; z-index: 6; display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 8px; border-radius: 999px; background: rgba(20,20,20,.9); color: #fff; box-shadow: 0 6px 22px rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(6px); cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.season-pill:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(0,0,0,.34); }
+.season-pill-ico { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: linear-gradient(135deg, #d62828, #FE3377); }
+.season-pill.party .season-pill-ico { background: linear-gradient(135deg, #FE3377, #FFCC00); }
+.season-pill-text { display: flex; flex-direction: column; line-height: 1.15; text-align: left; }
+.season-pill-text b { font-size: 13px; }
+.season-pill-text small { font-size: 11px; color: #FFCC00; font-weight: 600; }
+.season-pill-dot { position: absolute; top: 4px; left: 32px; width: 10px; height: 10px; border-radius: 50%; background: #FFCC00; box-shadow: 0 0 0 2px #141414; animation: season-pulse 1.6s ease-in-out infinite; }
+@keyframes season-pulse { 50% { transform: scale(1.35); } }
+@media (max-width: 720px) { .season-pill { top: 10px; left: 10px; padding: 5px 12px 5px 5px; } .season-pill-ico { width: 26px; height: 26px; font-size: 15px; } .season-pill-text small { display: none; } }
+
+.santa-modal .modal-body { position: relative; display: flex; flex-direction: column; gap: 12px; }
+.santa-modal .modal-head { background: linear-gradient(120deg, #b51d2a, #FE3377 60%, #ff7a59); color: #fff; }
+.santa-modal .modal-head h2 { color: #fff; }
+.santa-modal .modal-head .icon-btn { color: #fff; }
+.santa-loading { padding: 24px; text-align: center; }
+.santa-hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: 14px; background: radial-gradient(circle at 90% 10%, rgba(255,204,0,.25), transparent 50%), linear-gradient(135deg, #141414, #2a1420); color: #fff; flex-wrap: wrap; }
+.santa-name { font-size: 18px; font-weight: 800; }
+.santa-facts { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 12px; color: rgba(255,255,255,.82); }
+.santa-people { display: flex; align-items: center; }
+.santa-people .avatar { margin-left: -8px; box-shadow: 0 0 0 2px #1f141a; border-radius: 50%; }
+.santa-people .avatar:first-child { margin-left: 0; }
+.santa-count { margin-left: 8px; font-size: 12px; font-weight: 700; color: #FFCC00; white-space: nowrap; }
+.santa-card { border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); }
+.santa-card textarea { width: 100%; resize: vertical; }
+.santa-sub { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.big-santa { align-self: flex-start; padding: 10px 18px; font-size: 14px; }
+.santa-card.giftee { background: linear-gradient(180deg, rgba(254,51,119,.08), transparent 70%), var(--panel); border-color: rgba(254,51,119,.35); }
+.santa-giftee { display: flex; align-items: center; gap: 12px; }
+.santa-giftee-name { font-size: 20px; font-weight: 800; }
+.santa-wish { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+.santa-wish-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin-bottom: 4px; }
+.santa-wish-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+.santa-wish-text a { color: var(--accent); text-decoration: underline; }
+.santa-threads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .santa-threads { grid-template-columns: 1fr; } }
+.santa-thread { border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.santa-thread-head { display: flex; flex-direction: column; font-size: 13px; }
+.santa-msgs { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto; }
+.santa-msg { align-self: flex-start; max-width: 85%; background: var(--panel-2); border-radius: 12px 12px 12px 4px; padding: 6px 10px; font-size: 13px; word-break: break-word; }
+.santa-msg.mine { align-self: flex-end; background: #FE3377; color: #fff; border-radius: 12px 12px 4px 12px; }
+.santa-input { display: flex; gap: 6px; }
+.santa-input input { flex: 1; min-width: 0; }
+.santa-form { display: flex; flex-direction: column; gap: 10px; }
+.santa-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); flex: 1; min-width: 150px; }
+.santa-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.santa-form-actions { justify-content: flex-end; }
+.santa-admin { border: 1px dashed var(--border); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.santa-admin .wrap { flex-wrap: wrap; }
+.santa-excl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.santa-excl .santa-sub { width: 100%; }
+.santa-excl .chip { padding: 3px 6px 3px 10px; }
+.chip-x { display: inline-grid; place-items: center; }
+.santa-excl-add { width: 100%; flex-wrap: wrap; }
+.santa-peek { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
+.santa-peek button { align-self: flex-start; margin-top: 4px; }
+.santa-reveal { border-radius: 14px; padding: 14px; background: radial-gradient(circle at 50% 0%, rgba(255,204,0,.22), transparent 60%), linear-gradient(160deg, #1d0b16, #141414); color: #fff; display: flex; flex-direction: column; gap: 10px; }
+.santa-reveal-title { font-weight: 800; font-size: 16px; text-align: center; }
+.santa-reveal-mine { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; color: #FFCC00; flex-wrap: wrap; }
+.santa-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: center; }
+.santa-link { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.08); border-radius: 999px; padding: 3px 10px 3px 3px; font-size: 13px; font-weight: 700; opacity: 0; animation: santa-pop .45s cubic-bezier(.2,1.4,.4,1) forwards; }
+.santa-link.loop { opacity: 0; background: rgba(254,51,119,.25); }
+.santa-arrow { opacity: 0; animation: santa-pop .35s ease forwards; font-size: 13px; }
+@keyframes santa-pop { from { opacity: 0; transform: translateY(8px) scale(.6); } to { opacity: 1; transform: none; } }
+.santa-act-ico { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: linear-gradient(135deg, #d62828, #FE3377); flex: none; }
+.anniv-modal .modal-head { background: linear-gradient(120deg, #FE3377, #ff7a59 55%, #FFCC00); }
+.anniv-modal .modal-head h2, .anniv-modal .modal-head .icon-btn { color: #141414; }
+.anniv-photo { border-radius: 12px; overflow: hidden; background: #141414; aspect-ratio: 16 / 10; display: grid; place-items: center; }
+.anniv-photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.anniv-loading { color: #fff; font-weight: 600; }
+.anniv-modal .modal-foot { flex-wrap: wrap; align-items: center; gap: 8px; }
+.anniv-year { width: 84px; }
+.anniv-settings { flex-wrap: wrap; }
