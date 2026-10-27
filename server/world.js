@@ -1,6 +1,6 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx, getSetting, setSetting } from './db.js';
-import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS } from '../shared/map.js';
+import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, areaAt } from '../shared/map.js';
 import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 import { AREA_SHAPES } from '../shared/map.js';
 
@@ -105,6 +105,76 @@ function addReceptionExtras(floorId) {
   for (const [type, x, y, o] of RECEPTION_EXTRAS) {
     if (!exists.get(floorId, type, x, y)) ins.run(floorId, type, x, y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, now());
   }
+}
+
+// Renovar el mapa de un piso con la versión más nueva de su plantilla.
+// Se conservan: los escritorios reclamados (con su modelo, color, silla y decoración,
+// en el mismo departamento si existe), las áreas con el mismo nombre (líderes y
+// reservaciones), y la decoración abierta. Lo demás se reemplaza por la plantilla.
+export function resetFloorLayout(floorId) {
+  const f = getFloor(floorId);
+  if (!f) throw new WorldError('Piso no encontrado', 404);
+  if (!TEMPLATES[f.template]) throw new WorldError('Este piso no tiene plantilla');
+  const t = getTemplate(f.template);
+  const inside = (o, z) => o.x >= z.x && o.y >= z.y && o.x < z.x + z.w && o.y < z.y + z.h;
+  const saved = [];
+  for (const d of f.state.desks) {
+    const owner = f.claims.get(d.id);
+    if (!owner) continue;
+    const chair = f.state.objects.find((o) => CHAIR_TYPES.includes(o.type) && o.deskId == null && inside(o, d.zone));
+    saved.push({
+      owner,
+      area: areaAt(f.state, d.object.x, d.object.y)?.name || null,
+      type: d.object.type, color: d.object.color,
+      chair: chair ? { type: chair.type, color: chair.color } : null,
+      decor: db.prepare('SELECT * FROM objects WHERE desk_id = ?').all(d.id).map((o) => ({ ...o, dx: o.x - d.object.x, dy: o.y - d.object.y })),
+    });
+  }
+  let moved = 0;
+  tx(() => {
+    // Áreas: se actualizan las que tienen el mismo nombre, se agregan las nuevas y se quitan las que ya no van
+    const old = db.prepare('SELECT * FROM areas WHERE floor_id = ?').all(floorId);
+    const byName = new Map(old.map((a) => [a.name, a]));
+    const keep = new Set();
+    const upd = db.prepare('UPDATE areas SET x = ?, y = ?, w = ?, h = ?, color = ?, private = ?, shape = ? WHERE id = ?');
+    const ins = db.prepare('INSERT INTO areas (floor_id, name, x, y, w, h, color, private, shape) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const a of t.areas) {
+      const prev = byName.get(a.name);
+      if (prev) { upd.run(a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, a.shape || 'soft', prev.id); keep.add(prev.id); }
+      else ins.run(floorId, a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, a.shape || 'soft');
+    }
+    for (const a of old) {
+      if (keep.has(a.id)) continue;
+      db.prepare('UPDATE events SET area_id = NULL WHERE area_id = ?').run(a.id);
+      db.prepare('DELETE FROM areas WHERE id = ?').run(a.id);
+    }
+    // Objetos: todos los de la plantilla
+    db.prepare('DELETE FROM objects WHERE floor_id = ?').run(floorId);
+    const insO = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, desk_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const o of t.objects) insO.run(floorId, o.type, o.x, o.y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, null, null, now());
+    const g = rebuild(floorId);
+    // Escritorios reclamados: al mismo departamento si se puede
+    const free = new Set(g.state.desks.map((d) => d.id));
+    const areaOf = (d) => areaAt(g.state, d.object.x, d.object.y)?.name || null;
+    const pick = (area) => {
+      const same = g.state.desks.find((d) => free.has(d.id) && area && areaOf(d) === area);
+      return same || g.state.desks.find((d) => free.has(d.id));
+    };
+    const claim = db.prepare('INSERT INTO desk_claims (desk_id, owner_id, claimed_at) VALUES (?, ?, ?)');
+    for (const s0 of saved) {
+      const d = pick(s0.area);
+      if (!d) continue;
+      free.delete(d.id);
+      claim.run(d.id, s0.owner, now());
+      if (DESK_TYPES.includes(s0.type)) db.prepare('UPDATE objects SET type = ?, color = ? WHERE id = ?').run(s0.type, s0.color, d.id);
+      const ch = s0.chair && g.state.objects.find((o) => CHAIR_TYPES.includes(o.type) && inside(o, d.zone));
+      if (ch) db.prepare('UPDATE objects SET type = ?, color = ? WHERE id = ?').run(s0.chair.type, s0.chair.color, ch.id);
+      for (const o of s0.decor) insO.run(floorId, o.type, d.object.x + o.dx, d.object.y + o.dy, o.w, o.h, o.rot, o.color, d.id, o.created_by, o.created_at);
+      if (areaOf(d) !== s0.area) moved++;
+    }
+  });
+  if (f.template === 'hq') furnishDesks(floorId);
+  return { floor: rebuild(floorId), kept: saved.length, moved };
 }
 
 export function getFloor(id) {

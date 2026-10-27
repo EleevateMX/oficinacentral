@@ -97,6 +97,7 @@ export default function MapView({ active }) {
   const hoverRef = useRef(null);
   const tipTimer = useRef(null);
   const tipRef = useRef(null);
+  const deskIndRef = useRef(null);
   const tipOver = useRef(false);
   const hideTip = () => {
     clearTimeout(tipTimer.current);
@@ -596,6 +597,31 @@ export default function MapView({ active }) {
         else keepTip();
       }
 
+      // Mi escritorio fuera de la pantalla: una flechita en el borde que apunta hacia él
+      const ind = deskIndRef.current;
+      if (ind) {
+        const myDeskId = Object.entries(f.claims || {}).find(([, uid]) => uid === meU.id)?.[0];
+        const md = myDeskId && f.desks.find((d) => d.id === Number(myDeskId));
+        let show = false;
+        if (md && !em) {
+          const { w: dw, h: dh } = objSize(md.object);
+          const c = worldToScreen(md.object.x + dw / 2, md.object.y + dh / 2);
+          const m = 56;
+          if (c.x < 0 || c.y < 0 || c.x > v.w || c.y > v.h) {
+            show = true;
+            const cx = v.w / 2;
+            const cy = v.h / 2;
+            const dx = c.x - cx;
+            const dy = c.y - cy;
+            const k = Math.min((cx - m) / Math.abs(dx || 1e-6), (cy - m) / Math.abs(dy || 1e-6));
+            ind.style.left = `${cx + dx * k}px`;
+            ind.style.top = `${cy + dy * k}px`;
+            ind.style.setProperty('--ang', `${Math.atan2(dy, dx)}rad`);
+          }
+        }
+        ind.style.display = show ? 'flex' : 'none';
+      }
+
       // Etiquetas (en coordenadas de pantalla para que el texto sea nítido)
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
       ctx.textBaseline = 'middle';
@@ -1066,6 +1092,10 @@ export default function MapView({ active }) {
         <button className="icon-btn" title="Ver todo el mapa" onClick={fitMap}><MapIcon size={18} /></button>
       </div>
 
+      <button ref={deskIndRef} className="desk-ind" style={{ display: 'none' }} onClick={() => office.goHome()} title="Ir a mi escritorio (Ctrl+D)">
+        <span className="desk-ind-arrow" aria-hidden="true" />
+        <Armchair size={14} /> Mi escritorio
+      </button>
       {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>
