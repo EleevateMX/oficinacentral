@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../lib/api.js';
 import AuthLayout from './AuthLayout.jsx';
+import DiscordButton from './DiscordButton.jsx';
 import { returnInfo, discordMessage } from '../App.jsx';
 
 // Logo de Discord (marca) para el botón de entrar
@@ -88,7 +89,7 @@ export default function Login({ config, onLogin }) {
         {config.discordLogin && (
           <>
             <div className="auth-or"><span>o</span></div>
-            <a className="btn block discord-btn" href="/api/auth/discord?mode=login"><DiscordIcon /> Entrar con Discord</a>
+            <DiscordButton mode="login"><DiscordIcon /> Entrar con Discord</DiscordButton>
           </>
         )}
         <p className="auth-foot">¿No tienes cuenta? Pide una invitación a un administrador.</p>

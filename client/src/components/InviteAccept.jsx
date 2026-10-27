@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import AuthLayout from './AuthLayout.jsx';
+import DiscordButton from './DiscordButton.jsx';
 import { PasswordInput, DiscordIcon } from './Login.jsx';
 
 export default function InviteAccept({ token, config, onDone }) {
@@ -66,7 +67,7 @@ export default function InviteAccept({ token, config, onDone }) {
               {config.discordLogin && (
           <>
             <div className="auth-or"><span>o</span></div>
-            <a className="btn block discord-btn" href={`/api/auth/discord?mode=invite&invite=${encodeURIComponent(token)}`}><DiscordIcon /> Crear cuenta con Discord</a>
+            <DiscordButton mode="invite" invite={token}><DiscordIcon /> Crear cuenta con Discord</DiscordButton>
           </>
         )}
       </form>

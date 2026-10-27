@@ -930,3 +930,7 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 
 .status-input { width: calc(100% - 16px); margin: 6px 8px 4px; font-size: 13px; padding: 7px 10px; }
 .pet-preview { display: block; margin-top: 10px; border-radius: 12px; background: var(--bg-soft, rgba(127,127,127,.1)); image-rendering: pixelated; }
+
+.discord-wait { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; text-align: center;
+  background: color-mix(in srgb, #5865F2 14%, transparent); color: var(--text); }
+.discord-wait b { letter-spacing: 3px; font-size: 15px; }

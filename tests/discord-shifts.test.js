@@ -104,3 +104,47 @@ test('reporte de turnos suma horas por persona y turno, recortadas al rango', as
   assert.equal(db2.prepare('SELECT COUNT(*) AS n FROM shift_log WHERE user_id = ? AND ended_at IS NULL').get(m.user.id).n, 0);
   db2.close();
 });
+
+test('app instalada en el celular: entra con un pase tras confirmar el código en el navegador', async () => {
+  nextProfile = { id: '111', username: 'kevin_gh', global_name: 'Kevin GH' };
+  const app = new Client(srv.url);
+  const st = await app.post('/auth/discord/start', { mode: 'login', handoff: true });
+  assert.equal(st.status, 200);
+  assert.match(st.data.code, /^[0-9A-F]{4}$/);
+  const state = new URL(st.data.url).searchParams.get('state');
+  assert.equal((await app.get(`/auth/discord/handoff/${st.data.hid}`)).data.status, 'pending');
+
+  // Discord regresa a otro navegador (sin la cookie de la app): pide confirmar el código
+  const cb = await fetch(`${srv.url}/api/auth/discord/callback?code=abc&state=${state}`, { redirect: 'manual' });
+  assert.equal(cb.status, 200);
+  const html = await cb.text();
+  assert.ok(html.includes(st.data.code));
+  assert.equal(cb.headers.getSetCookie().some((c) => c.startsWith('oc_sid=')), false);
+  assert.equal((await app.get(`/auth/discord/handoff/${st.data.hid}`)).data.status, 'pending');
+
+  // Un token de confirmación falso no sirve
+  const bad = await fetch(`${srv.url}/api/auth/discord/handoff/confirm`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `h=${st.data.hid}&t=falso` });
+  assert.ok((await bad.text()).includes('ya no es válido'));
+
+  const t = html.match(/name="t" value="([^"]+)"/)[1];
+  const ok = await fetch(`${srv.url}/api/auth/discord/handoff/confirm`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `h=${st.data.hid}&t=${t}` });
+  assert.ok((await ok.text()).includes('Listo'));
+
+  // La app recoge la sesión una sola vez
+  const done = await app.get(`/auth/discord/handoff/${st.data.hid}`);
+  assert.equal(done.data.status, 'done');
+  assert.equal(done.data.query, 'discord=ok');
+  assert.equal((await app.get('/auth/me')).data.user.discordName, 'kevin_gh');
+  assert.equal((await app.get(`/auth/discord/handoff/${st.data.hid}`)).status, 404);
+});
+
+test('mismo navegador con pase: entra ahí y la app también recibe la sesión', async () => {
+  nextProfile = { id: '111', username: 'kevin_gh', global_name: 'Kevin GH' };
+  const app = new Client(srv.url);
+  const st = await app.post('/auth/discord/start', { mode: 'login', handoff: true });
+  const state = new URL(st.data.url).searchParams.get('state');
+  const cb = await fetch(`${srv.url}/api/auth/discord/callback?code=abc&state=${state}`, { headers: { cookie: `oc_dstate=${app.cookies.get('oc_dstate')}` }, redirect: 'manual' });
+  assert.equal(cb.headers.get('location'), '/?discord=ok');
+  assert.equal((await app.get(`/auth/discord/handoff/${st.data.hid}`)).data.status, 'done');
+  assert.equal((await app.get('/auth/me')).status, 200);
+});
