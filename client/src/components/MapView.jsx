@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush, Lock, Unlock, Users } from 'lucide-react';
+import MeetingNotes from './MeetingNotes.jsx';
+import { inNotesRoom } from '../lib/notes.js';
 import { office, useOffice } from '../lib/store.js';
 import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt, closedRoomAt } from '@shared/map.js';
 import { videoFor, activeScreens } from '../lib/screens.js';
@@ -819,7 +821,7 @@ export default function MapView({ active }) {
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
         // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
-        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946']].filter(Boolean);
+        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414']].filter(Boolean);
         if (tags.length) {
           ctx.font = '800 9px "Public Sans", system-ui, sans-serif';
           const ws = tags.map(([t]) => ctx.measureText(t).width + 10);
@@ -1233,6 +1235,7 @@ export default function MapView({ active }) {
           </button>
         </div>
       )}
+      <MeetingNotes room={roomHere} hidden={!!editMode} />
       {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>

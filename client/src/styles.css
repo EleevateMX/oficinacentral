@@ -1140,3 +1140,25 @@ body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
 .hear-row { display: flex; align-items: center; gap: 8px; }
 .hear-empty { padding: 4px 8px 6px; }
 .hear-note { padding: 6px 8px 4px; border-top: 1px solid var(--border, rgba(127,127,127,.2)); margin-top: 4px; line-height: 1.4; }
+
+/* ---------- Resumen de reuniones con IA (📝 Tomar notas) ---------- */
+.notes-start { position: absolute; left: 12px; top: 52px; z-index: 18; display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px;
+  background: rgba(16,16,20,.9); color: #fff; font-weight: 600; font-size: 12.5px; box-shadow: 0 6px 20px rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.12); cursor: pointer; }
+.notes-start:hover { background: #141414; border-color: var(--accent); }
+.notes-pill { position: absolute; left: 12px; top: 52px; z-index: 18; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border-radius: 14px; max-width: min(300px, calc(100% - 24px));
+  background: #FFCC00; color: #141414; box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 12.5px; }
+.notes-pill .notes-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.notes-pill small { font-size: 11px; opacity: .75; white-space: normal; }
+.notes-pill .notes-warn { opacity: 1; font-weight: 600; color: #8a1238; }
+.notes-pill .btn { border-radius: 999px; background: #141414; color: #fff; border-color: #141414; flex-shrink: 0; }
+.notes-dot { width: 8px; height: 8px; border-radius: 50%; background: #FE3377; flex-shrink: 0; animation: notes-pulse 1.4s ease-in-out infinite; }
+@keyframes notes-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
+.shell.mobile .notes-start, .shell.mobile .notes-pill { top: auto; bottom: 104px; left: 8px; }
+.notes-card { margin-top: 2px; max-width: 560px; border: 1px solid var(--border); border-left: 4px solid #FFCC00; border-radius: 12px; background: var(--panel); padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+.notes-card-head { font-weight: 700; font-size: 14.5px; }
+.notes-card-meta { font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+.notes-card-title { font-weight: 700; font-size: 16px; margin: 4px 0 2px; }
+.notes-card-sec { font-weight: 800; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 10px 0 2px; }
+.notes-card-li { position: relative; padding-left: 16px; }
+.notes-card-li::before { content: ''; position: absolute; left: 4px; top: .65em; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; }
+.notes-card-foot { margin-top: 10px; font-size: 11.5px; color: var(--text-2); }

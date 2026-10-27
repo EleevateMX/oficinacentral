@@ -19,6 +19,7 @@ import { PET_IDS, cleanPetName } from '../shared/pets.js';
 import { addScore, topScores, SCORE_GAMES } from './games.js';
 import { activeSeason, SEASON_SETTINGS } from '../shared/seasons.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
+import { notesConfig, stopAllNotes } from './notes.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -124,6 +125,8 @@ export function officeConfig() {
     // Decoración de temporada (Halloween…): lo que eligió el admin y la que toca hoy
     seasonSetting: getSetting('season') || 'auto',
     season: activeSeason(getSetting('season') || 'auto'),
+    // Resumen de reuniones con IA: si el admin lo permite y si el servidor tiene llave
+    ...notesConfig(),
   };
 }
 
@@ -683,6 +686,10 @@ admin.patch('/office', (req, res) => {
     if (!SEASON_SETTINGS.includes(b.season)) return fail(res, 400, 'Temporada inválida');
     setSetting('season', b.season);
   }
+  if (b.aiNotes !== undefined) {
+    setSetting('ai_notes', b.aiNotes ? '1' : '0');
+    if (!b.aiNotes) stopAllNotes();
+  }
   if (b.shifts !== undefined) {
     if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');
     const list = [...new Set(b.shifts.map((x) => String(x).trim().slice(0, 30)).filter(Boolean))].slice(0, 30);
@@ -882,7 +889,7 @@ api.get('/messages', (req, res) => {
   res.json({ messages: rows.reverse().map(messageRow), hasMore: rows.length === 60 });
 });
 
-function postMessage(user, c, body, kind = 'text', attachments = []) {
+export function postMessage(user, c, body, kind = 'text', attachments = []) {
   const id = Number(db.prepare('INSERT INTO messages (channel_id, dm_key, user_id, kind, body, created_at, attachments) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(c.channelId ?? null, c.dm ?? null, user.id, kind, body, now(), attachments.length ? JSON.stringify(attachments) : null).lastInsertRowid);
   const msg = messageRow(db.prepare('SELECT * FROM messages WHERE id = ?').get(id));

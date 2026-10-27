@@ -9,6 +9,7 @@ import { FX, pickFx } from './fx.js';
 import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
 import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes.js';
 import { DANCES } from './emoteFx.js';
+import { bindNotes } from './notes.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -164,6 +165,7 @@ class Office {
       s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push
     });
     s.on('disconnect', () => this.set({ connected: false }));
+    bindNotes(this, s); // 📝 Tomar notas (resumen de reuniones con IA)
     s.on('force-reload', ({ by, message, in: secs = 8 } = {}) => {
       this.toast({ title: `🔄 ${by || 'Un admin'} publicó una actualización${message ? `: ${message}` : ''}. Se recarga en ${secs} s…`, action: { label: 'Ahora', run: () => this.hardReload() }, duration: secs * 1000 });
       clearTimeout(this.reloadTimer);

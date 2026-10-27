@@ -1100,6 +1100,13 @@ function BrandAdmin() {
           </select>
         </Row>
       </Section>
+      <Section title="Resumen de reuniones con IA">
+        <Row title="Permitir “📝 Tomar notas” en las salas" desc={config.aiNotesReady
+          ? 'Dentro de una sala con 2 o más personas, cualquiera puede activarlo; todos ven el aviso y cualquiera lo apaga. Al terminar, el resumen con acuerdos y pendientes llega por mensaje directo a quienes participaron.'
+          : 'No disponible: falta configurar ANTHROPIC_API_KEY en el servidor (variables de entorno). Sin la llave el botón no aparece.'}>
+          <Toggle checked={config.aiNotes !== false && !!config.aiNotesReady} disabled={!config.aiNotesReady} onChange={(v) => save({ aiNotes: v })} />
+        </Row>
+      </Section>
       <ShiftsAdmin shifts={config.shifts || []} save={save} />
       <ShiftReport />
     </>

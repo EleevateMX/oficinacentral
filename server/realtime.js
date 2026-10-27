@@ -6,6 +6,7 @@ import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../s
 import { initGames } from './games.js';
 import { EMOTES, PAIR_RANGE, cleanVariant } from '../shared/emotes.js';
 import { initBoards } from './boards.js';
+import { initNotes, startNotesTimer } from './notes.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
 
@@ -223,6 +224,7 @@ export function initRealtime(httpServer) {
 
     initBoards(io, socket, userId);
     initGames(io, socket, userId);
+    initNotes(io, socket, userId);
 
     // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
     let roomMsgTimes = [];
@@ -285,6 +287,7 @@ export function initRealtime(httpServer) {
     });
   });
 
+  startNotesTimer();
   // Guardar posiciones periódicamente
   setInterval(() => { for (const id of presence.keys()) savePosition(id); }, 60e3).unref();
   return io;
