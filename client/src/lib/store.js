@@ -154,10 +154,21 @@ class Office {
       s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push
     });
     s.on('disconnect', () => this.set({ connected: false }));
+    s.on('force-reload', ({ by, message, in: secs = 8 } = {}) => {
+      this.toast({ title: `🔄 ${by || 'Un admin'} publicó una actualización${message ? `: ${message}` : ''}. Se recarga en ${secs} s…`, action: { label: 'Ahora', run: () => this.hardReload() }, duration: secs * 1000 });
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = setTimeout(() => this.hardReload(), secs * 1000);
+    });
     s.on('connect_error', (e) => {
       if (e.message === 'unauthorized') window.location.reload();
     });
-    s.on('hello', async ({ you, players }) => {
+    s.on('hello', async ({ you, players, version }) => {
+      // Si el servidor ya tiene una versión nueva, se avisa (se reconectó tras una actualización)
+      if (version && this.appVersion && version !== this.appVersion && !this.updateNotified) {
+        this.updateNotified = true;
+        this.toast({ title: '✨ Hay una versión nueva de la oficina', action: { label: 'Actualizar', run: () => this.hardReload() }, duration: 60e3 });
+      }
+      if (version) this.appVersion = this.appVersion || version;
       this.lastWatchKey = null;
       this.players = {};
       for (const [id, p] of Object.entries(players)) this.players[id] = { ...p, rx: p.x, ry: p.y };
@@ -578,6 +589,18 @@ class Office {
   }
 
   // ---------- Utilidades UI ----------
+  // Recarga dura: borra la caché de la app y vuelve a cargar todo del servidor
+  async hardReload() {
+    try {
+      if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k);
+      const reg = await navigator.serviceWorker?.getRegistration();
+      await reg?.update();
+    } catch { /* sigue con la recarga */ }
+    const u = new URL(window.location.href);
+    u.searchParams.set('v', Date.now().toString(36));
+    window.location.replace(u.toString());
+  }
+
   toast(t) {
     const id = Math.random().toString(36).slice(2);
     this.set((st) => ({ toasts: [...st.toasts, { id, ...t }] }));

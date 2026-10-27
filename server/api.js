@@ -604,6 +604,16 @@ admin.get('/invites', (req, res) => {
   res.json({ invites: db.prepare('SELECT * FROM invites ORDER BY created_at DESC').all().map(inviteRow) });
 });
 
+// Actualizar global: todos los que estén conectados recargan la app (para publicar cambios al instante)
+let lastReload = 0;
+admin.post('/reload-all', (req, res) => {
+  if (Date.now() - lastReload < 30e3) return fail(res, 429, 'Espera unos segundos antes de volver a actualizar a todos.');
+  lastReload = Date.now();
+  const message = String(req.body?.message || '').trim().slice(0, 140);
+  emitAll('force-reload', { by: req.user.display_name, message, in: 8 });
+  res.json({ ok: true, online: presence.size });
+});
+
 admin.post('/invites', (req, res) => {
   const role = req.body?.role === 'admin' ? 'admin' : 'member';
   const days = Math.min(30, Math.max(1, Number(req.body?.days) || 7));

@@ -5,6 +5,7 @@ import { getFloor, defaultFloorId } from './world.js';
 import { isWalkable, nearestWalkable, canTalk } from '../shared/map.js';
 import { initBoards } from './boards.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
+import { APP_VERSION } from './version.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -88,7 +89,7 @@ export function initRealtime(httpServer) {
 
     const all = {};
     for (const [id] of presence) all[id] = publicPresence(id);
-    socket.emit('hello', { you: userId, players: all });
+    socket.emit('hello', { you: userId, players: all, version: APP_VERSION });
     socket.broadcast.emit('player', { id: userId, ...publicPresence(userId) });
 
     socket.on('move', (m) => {

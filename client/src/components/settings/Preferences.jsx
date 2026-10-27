@@ -912,6 +912,7 @@ function BulkInvites({ reload }) {
 function OfficeAdmin() {
   const floors = useOffice((s) => s.floors);
   return (
+    <>
     <Section>
       <p>
         La oficina crece con el equipo: puedes <b>crear departamentos</b> (áreas) dibujándolos en el mapa,
@@ -924,6 +925,36 @@ function OfficeAdmin() {
       </ul>
       <p className="muted">Pisos actuales: {floors.map((f) => f.name).join(', ')}</p>
       <button className="btn primary" onClick={() => office.set({ modal: null, view: 'map', editMode: 'build' })}>Abrir editor de oficina</button>
+    </Section>
+    <ReloadAll />
+    </>
+  );
+}
+
+// Actualizar global: todos recargan la app (útil después de publicar una versión nueva)
+function ReloadAll() {
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    if (!window.confirm('Se recargará la oficina de todas las personas conectadas en unos segundos. ¿Continuar?')) return;
+    setBusy(true);
+    try {
+      const r = await api.post('/admin/reload-all', { message: msg });
+      office.toast({ title: `Listo: ${r.online} ${r.online === 1 ? 'persona recibió' : 'personas recibieron'} la actualización.` });
+      setMsg('');
+    } catch (e) {
+      office.toast({ title: e.message, kind: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section title="Actualizar a todos">
+      <p className="muted">Recarga la app de todas las personas conectadas (borra la caché), para que vean la versión más reciente al instante. Verán un aviso y la recarga ocurre en 8 segundos.</p>
+      <input placeholder="Mensaje opcional: Ya hay mascotas 🐶" value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={140} />
+      <div className="row gap8" style={{ marginTop: 8 }}>
+        <button className="btn primary" disabled={busy} onClick={run}>Actualizar a todos</button>
+      </div>
     </Section>
   );
 }
