@@ -87,6 +87,8 @@ Variables de entorno:
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Notificaciones push (Web Push). Si faltan las llaves, se generan solas la primera vez y se guardan en la base de datos. `VAPID_SUBJECT` es un contacto `mailto:` o `https://` (por omisión `mailto:` + `ADMIN_EMAIL`) |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY` | Copia de cada respaldo (y de los adjuntos del chat) en un almacenamiento compatible con S3: Cloudflare R2, AWS S3, Backblaze B2, MinIO. Vacío = desactivado. Ver [`DEPLOY.md`](DEPLOY.md#respaldos-fuera-del-servidor-cloudflare-r2) |
+| `BACKUP_S3_REGION`, `BACKUP_S3_PREFIX`, `BACKUP_S3_KEEP` | Región (`auto` para R2), carpeta dentro del bucket (`nuvora/`) y cuántos respaldos guardar ahí (30) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |
 | `INSECURE_COOKIES=1` | Solo para pruebas en producción sin HTTPS |
 
@@ -96,7 +98,9 @@ Notas importantes:
 - El audio/video es **P2P** (malla). Funciona bien para grupos pequeños por conversación (hasta ~8 personas).
   En redes corporativas estrictas hace falta un servidor **TURN** (por ejemplo coturn), configurado así:
   `ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.tudominio.com:3478","username":"u","credential":"p"}]'`
-- Respalda la carpeta `data/` (contiene la base de datos SQLite).
+- Respalda la carpeta `data/` (contiene la base de datos SQLite y los adjuntos en `data/uploads/`), o configura `BACKUP_S3_*`.
+  `npm run backup` crea un respaldo ahora, `npm run backup -- --list` lista los respaldos y
+  `npm run restore -- <archivo | s3:clave | --latest>` restaura uno (con la app apagada).
 
 ## Estructura
 
