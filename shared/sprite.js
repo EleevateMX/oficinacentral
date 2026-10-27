@@ -6,6 +6,12 @@
 // Los pies quedan en la fila 46 de cada cuadro. Cualquier hoja con este formato
 // (hecha a mano en Aseprite/Piskel o generada aquí) funciona en la oficina.
 //
+// Los personajes generados por código usan además una hoja "completa" (renderFullSheet)
+// que empieza igual que la de 3 columnas y agrega más cuadros a la derecha:
+//   3 = paso A en el aire, 4 = paso B en el aire (ciclo de caminar de 4 cuadros)
+//   5… = posturas para las acciones (POSES: brazos arriba, saludar, aplaudir…)
+// Las hojas subidas (3 columnas) siguen funcionando: sin esos cuadros se usa el normal.
+//
 // Un avatar es una "ficha": piezas (peinado, ropa, accesorios…) + colores libres.
 // Cualquier color hexadecimal es válido, así que las combinaciones no tienen fin.
 
@@ -14,6 +20,54 @@ export const FRAME_H = 48;
 export const SHEET_W = FRAME_W * 3;
 export const SHEET_H = FRAME_H * 4;
 export const DIRS = ['down', 'left', 'right', 'up'];
+
+// Ciclo de caminar: paso 0 = quieto; 1 = contacto A, 2 = en el aire, 3 = contacto B, 4 = en el aire.
+// Columna de cada paso en la hoja completa y en una hoja de 3 columnas.
+export const WALK_COLS = [0, 1, 3, 2, 4];
+export const WALK_COLS_LEGACY = [0, 1, 1, 2, 2];
+
+// Posturas de las acciones. "a" es el brazo principal (el de la izquierda de la pantalla
+// visto de frente; el más cercano visto de lado) y "b" el otro. legs/bob: piernas y altura.
+export const POSE_DEFS = {
+  armsUp: { a: 'up', b: 'up' },
+  wave1: { a: 'wave1', b: 'idle' },
+  wave2: { a: 'wave2', b: 'idle' },
+  pointA: { a: 'point', b: 'hip' },
+  pointB: { a: 'hip', b: 'point' },
+  clapOpen: { a: 'clapOpen', b: 'clapOpen' },
+  clapShut: { a: 'clapShut', b: 'clapShut' },
+  hips: { a: 'hip', b: 'hip' },
+  flex: { a: 'flex', b: 'flex' },
+  armsOut: { a: 'out', b: 'out' },
+  heart: { a: 'chest', b: 'chest' },
+  belly: { a: 'belly', b: 'belly' },
+  reach: { a: 'out', b: 'idle' },
+  highfive: { a: 'hi', b: 'idle' },
+  robotA: { a: 'robotUp', b: 'robotDown' },
+  robotB: { a: 'robotDown', b: 'robotUp' },
+  cross: { a: 'cross', b: 'cross' },
+  handsHead: { a: 'head', b: 'head' },
+  shuffleA: { a: 'low', b: 'low', legs: 'kickA' },
+  shuffleB: { a: 'low', b: 'low', legs: 'kickB' },
+  flossA: { a: 'low', b: 'across', legs: 'wide' },
+  flossB: { a: 'across', b: 'low', legs: 'wide' },
+  squatUp: { a: 'up', b: 'up', legs: 'squat', bob: 2 },
+  crouch: { a: 'low', b: 'low', legs: 'squat', bob: 2 },
+};
+export const POSES = Object.keys(POSE_DEFS);
+export const POSE_COL0 = 5;
+export const FULL_COLS = POSE_COL0 + POSES.length;
+export const FULL_SHEET_W = FRAME_W * FULL_COLS;
+
+// Columna de la hoja para un paso/postura; cols = columnas que tiene la hoja.
+export function frameCol(step = 0, pose = null, cols = 3) {
+  if (pose && cols >= FULL_COLS) {
+    const i = POSES.indexOf(pose);
+    if (i >= 0) return POSE_COL0 + i;
+  }
+  const s = Math.max(0, Math.min(4, Math.round(step) || 0));
+  return (cols >= 5 ? WALK_COLS : WALK_COLS_LEGACY)[s];
+}
 
 // Piezas disponibles (el orden es el de los selectores)
 export const PARTS = {
@@ -153,8 +207,11 @@ class Frame {
 }
 
 // ---------- dibujo de un personaje ----------
-function drawFrame(spec, dir, step) {
+function drawFrame(spec, dir, step, poseName = null) {
   const f = new Frame();
+  const P = (poseName && POSE_DEFS[poseName]) || null;
+  const walk = P ? 0 : Math.max(0, Math.min(4, step | 0));
+  const contact = walk === 1 ? 1 : walk === 3 ? -1 : 0; // 1: pie A al frente, -1: pie B
   const C = {
     skin: hexToRgb(spec.skin, '#f6c9a0'),
     hair: hexToRgb(spec.hair, '#1b1720'),
@@ -173,7 +230,7 @@ function drawFrame(spec, dir, step) {
   const topD = shade(C.top, -0.2);
   const topL = shade(C.top, 0.15);
   const side = dir === 'left' || dir === 'right';
-  const bob = step !== 0 ? -1 : 0;
+  const bob = P ? P.bob || 0 : walk === 2 || walk === 4 ? -1 : 0;
   const top = spec.top || 'tee';
   const hs = spec.hairStyle || 'short';
   const longHair = hs === 'long' || hs === 'bob';
@@ -198,10 +255,15 @@ function drawFrame(spec, dir, step) {
   const bottom = spec.bottom || 'pants';
   const legTop = 39;
   const legColor = (y) => (bottom === 'pants' || (bottom === 'shorts' && y < legTop + 3) ? C.pants : C.skin);
+  const legs = P?.legs || 'stand';
   if (!side) {
-    const lift = (k) => (step === 1 && k === 0) || (step === 2 && k === 1);
-    [[11, 0], [17, 1]].forEach(([x, k]) => {
-      const up = lift(k) ? 1 : 0;
+    const lift = (k) => ((contact === 1 && k === 0) || (contact === -1 && k === 1) ? 1
+      : (legs === 'kickA' && k === 0) || (legs === 'kickB' && k === 1) ? 3 : 0);
+    const spread = legs === 'wide' || legs === 'squat' ? 1 : 0;
+    const legX = (k) => (k === 0 ? 11 - spread - (legs === 'kickA' ? 2 : 0) : 17 + spread + (legs === 'kickB' ? 2 : 0));
+    [0, 1].forEach((k) => {
+      const x = legX(k);
+      const up = lift(k);
       for (let y = legTop; y < legTop + 6 - up; y++) {
         f.rect(x, y, 4, 1, legColor(y));
         f.set(x, y, shade(legColor(y), 0.1));
@@ -210,7 +272,8 @@ function drawFrame(spec, dir, step) {
       f.rect(x - (k === 0 ? 1 : 0), 46 - up, 5, 1, shade(C.shoes, -0.25));
     });
   } else {
-    const off = step === 1 ? 2 : step === 2 ? -2 : 0;
+    const off = contact === 1 ? 2 : contact === -1 ? -2
+      : legs === 'kickA' ? 3 : legs === 'kickB' ? -3 : legs === 'wide' ? 2 : legs === 'squat' ? 1 : 0;
     for (let y = legTop; y < legTop + 6; y++) f.rect(15 - off, y, 4, 1, shade(legColor(y), -0.15));
     f.rect(14 - off, 45, 5, 2, shade(C.shoes, -0.2));
     for (let y = legTop; y < legTop + 6; y++) f.rect(13 + off, y, 4, 1, legColor(y));
@@ -222,6 +285,132 @@ function drawFrame(spec, dir, step) {
     if (!side) { f.rect(10, legTop - 1, 12, 2, sk); f.rect(9, legTop + 1, 14, 2, sk); f.rect(9, legTop + 2, 14, 1, shade(sk, -0.2)); }
     else { f.rect(11, legTop - 1, 10, 2, sk); f.rect(10, legTop + 1, 12, 2, sk); f.rect(10, legTop + 2, 12, 1, shade(sk, -0.2)); }
   }
+
+  // ===== Brazos (geometría) =====
+  // Cada brazo es una línea de 2 px (manga) que termina en una manita de piel.
+  // Coordenadas del brazo izquierdo de la pantalla (de frente) o del cercano (de lado);
+  // el otro brazo de frente es el espejo (x → 31 - x).
+  const sleeve = top === 'tank' ? C.skin : top === 'varsity' ? C.accent : C.top;
+  const shortSleeve = top === 'tee' || top === 'uniform';
+  const t0 = 30 + bob;
+  const FRONT = {
+    idle: { pts: [[7, t0 + 1], [7, t0 + 5]], hand: [7, t0 + 7, 2, 2] },
+    fwd: { pts: [[7, t0 + 1], [7, t0 + 3], [6, t0 + 6]], hand: [5, t0 + 8, 3, 2] },
+    bwd: { pts: [[7, t0 + 1], [7, t0 + 3]], hand: [7, t0 + 5, 2, 2], dim: true },
+    up: { pts: [[7, t0 + 1], [5, t0 - 3], [5, t0 - 10]], hand: [4, t0 - 13, 3, 3], layer: 'top' },
+    wave1: { pts: [[7, t0 + 1], [5, t0 - 3], [3, t0 - 10]], hand: [2, t0 - 13, 3, 3], finger: [[1, t0 - 11]], layer: 'top' },
+    wave2: { pts: [[7, t0 + 1], [5, t0 - 3], [6, t0 - 10]], hand: [6, t0 - 13, 3, 3], finger: [[9, t0 - 11]], layer: 'top' },
+    hi: { pts: [[7, t0 + 1], [5, t0 - 3], [4, t0 - 10]], hand: [3, t0 - 13, 3, 3], finger: [[2, t0 - 11]], layer: 'top' },
+    point: { pts: [[7, t0 + 1], [4, t0 - 2], [2, t0 - 6]], hand: [1, t0 - 8, 2, 2], finger: [[1, t0 - 9], [0, t0 - 10]], layer: 'top' },
+    out: { pts: [[7, t0 + 1], [3, t0]], hand: [1, t0 - 1, 2, 3] },
+    hip: { pts: [[7, t0 + 1], [5, t0 + 3], [5, t0 + 4], [7, t0 + 6]], hand: [8, t0 + 6, 2, 2] },
+    flex: { pts: [[7, t0 + 1], [4, t0 + 1], [3, t0 - 1], [3, t0 - 3]], hand: [2, t0 - 6, 3, 3], bump: [5, t0], layer: 'top' },
+    robotUp: { pts: [[7, t0 + 1], [3, t0 + 1], [3, t0 - 4]], hand: [3, t0 - 7, 2, 3], layer: 'top' },
+    robotDown: { pts: [[7, t0 + 1], [3, t0 + 1], [3, t0 + 6]], hand: [3, t0 + 8, 2, 2] },
+    low: { pts: [[7, t0 + 1], [5, t0 + 4], [4, t0 + 6]], hand: [3, t0 + 8, 2, 2] },
+    clapOpen: { pts: [[7, t0 + 1], [7, t0 + 4], [10, t0 + 4]], hand: [11, t0 + 2, 2, 3], inFront: true },
+    clapShut: { pts: [[7, t0 + 1], [8, t0 + 5], [12, t0 + 4]], hand: [14, t0 + 2, 2, 3], inFront: true },
+    chest: { pts: [[7, t0 + 1], [8, t0 + 4], [11, t0 + 3]], hand: [13, t0 + 1, 2, 3], inFront: true },
+    belly: { pts: [[7, t0 + 1], [8, t0 + 5], [11, t0 + 6]], hand: [12, t0 + 5, 3, 2], inFront: true },
+    cross: { pts: [[7, t0 + 1], [9, t0 + 5], [16, t0 + 2]], hand: [18, t0 + 1, 2, 2], inFront: true },
+    across: { pts: [[7, t0 + 1], [9, t0 + 5], [18, t0 + 7]], hand: [20, t0 + 7, 2, 2], inFront: true },
+    head: { pts: [[7, t0 + 1], [4, t0 - 3], [5, t0 - 8]], hand: [6, t0 - 10, 2, 2] },
+  };
+  const SIDE = {
+    idle: { pts: [[16, t0 + 1], [16, t0 + 5]], hand: [16, t0 + 7, 2, 2] },
+    fwd: { pts: [[16, t0 + 1], [15, t0 + 3], [12, t0 + 5]], hand: [10, t0 + 6, 2, 2] },
+    bwd: { pts: [[16, t0 + 1], [17, t0 + 3], [19, t0 + 5]], hand: [20, t0 + 6, 2, 2] },
+    // de lado, el brazo levantado pasa por detrás de la cara (sobre el pelo) para no taparla
+    up: { pts: [[16, t0 + 1], [18, t0 - 4], [19, t0 - 10]], hand: [18, t0 - 13, 3, 3], layer: 'top' },
+    wave1: { pts: [[16, t0 + 1], [18, t0 - 4], [21, t0 - 10]], hand: [21, t0 - 13, 3, 3], layer: 'top' },
+    wave2: { pts: [[16, t0 + 1], [18, t0 - 4], [17, t0 - 10]], hand: [16, t0 - 13, 3, 3], layer: 'top' },
+    hi: { pts: [[16, t0 + 1], [11, t0 - 3], [6, t0 - 6]], hand: [3, t0 - 9, 3, 3], layer: 'top' },
+    point: { pts: [[16, t0 + 1], [12, t0 - 3], [8, t0 - 7]], hand: [7, t0 - 9, 2, 2], finger: [[6, t0 - 10], [5, t0 - 11]], layer: 'top' },
+    out: { pts: [[16, t0 + 1], [5, t0 + 1]], hand: [3, t0, 2, 3] },
+    hip: { pts: [[16, t0 + 1], [19, t0 + 4], [17, t0 + 6]], hand: [15, t0 + 6, 2, 2] },
+    flex: { pts: [[16, t0 + 1], [11, t0 + 1], [11, t0 - 3]], hand: [10, t0 - 6, 3, 3], layer: 'top' },
+    robotUp: { pts: [[16, t0 + 1], [16, t0 + 4], [10, t0 + 4]], hand: [8, t0 + 3, 2, 3] },
+    robotDown: { pts: [[16, t0 + 1], [16, t0 + 5]], hand: [16, t0 + 7, 2, 2] },
+    clapOpen: { pts: [[16, t0 + 1], [13, t0 + 5], [9, t0 + 4]], hand: [7, t0 + 3, 2, 3] },
+    clapShut: { pts: [[16, t0 + 1], [13, t0 + 5], [8, t0 + 3]], hand: [6, t0 + 2, 2, 3] },
+    chest: { pts: [[16, t0 + 1], [14, t0 + 4], [11, t0 + 2]], hand: [9, t0 + 1, 2, 2] },
+    belly: { pts: [[16, t0 + 1], [15, t0 + 5], [12, t0 + 6]], hand: [10, t0 + 5, 2, 2] },
+    head: { pts: [[16, t0 + 1], [20, t0 - 3], [19, t0 - 8]], hand: [17, t0 - 10, 2, 2], layer: 'top' },
+  };
+  SIDE.low = SIDE.fwd; SIDE.across = SIDE.bwd; SIDE.cross = SIDE.chest;
+  // Brazos según el paso o la postura
+  let armA = 'idle', armB = 'idle';
+  if (P) { armA = P.a; armB = P.b; }
+  else if (contact) {
+    // De frente se balancea el brazo contrario a la pierna que avanza; de lado, el cercano va al frente con el paso A
+    if (side) { armA = contact === 1 ? 'fwd' : 'bwd'; armB = contact === 1 ? 'bwd' : 'fwd'; }
+    else { armA = contact === 1 ? 'bwd' : 'fwd'; armB = contact === 1 ? 'fwd' : 'bwd'; }
+  }
+  const linePts = (pts) => {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      let [x0, y0] = pts[i];
+      const [x1, y1] = pts[i + 1];
+      const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+      let err = dx + dy;
+      for (;;) {
+        out.push([x0, y0]);
+        if (x0 === x1 && y0 === y1) break;
+        const e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+      }
+    }
+    if (!out.length) out.push(pts[0]);
+    return out;
+  };
+  // Dibuja un brazo en su propia capa y lo pega con un contorno donde tapa al cuerpo
+  const paintArm = (g, mirror, far) => {
+    const a = new Frame();
+    const mx = (x, w = 1) => (mirror ? 31 - x - w + 1 : x);
+    const ox = far ? 1 : 0, oy = far ? -1 : 0;
+    const dark = far || mirror || g.dim;
+    const slv = dark ? shade(sleeve, -0.15) : sleeve;
+    const skin = dark ? skinD : C.skin;
+    linePts(g.pts).forEach(([x, y], i) => {
+      a.rect(mx(x + ox, 2), y + oy, 2, 2, shortSleeve && i > 3 ? skin : slv);
+    });
+    if (g.bump) a.rect(mx(g.bump[0] + ox), g.bump[1] + oy, 1, 1, slv);
+    const [hx, hy2, hw, hh] = g.hand;
+    a.rect(mx(hx + ox, hw), hy2 + oy, hw, hh, skin);
+    for (const [x, y] of g.finger || []) a.set(mx(x + ox), y + oy, skin);
+    // Contorno solo encima de lo ya dibujado (el borde exterior lo pone outline())
+    // ropa muy oscura: el borde va más claro para que el brazo se lea encima del torso
+    const ink = lum(sleeve) < 60 ? shade(sleeve, 0.3) : shade(sleeve, -0.6);
+    const skinInk = shade(C.skin, -0.55);
+    const filled = [];
+    for (let i = 0; i < a.px.length; i++) if (a.px[i]) filled.push(i);
+    for (const i of filled) {
+      const x = i % FRAME_W, y = (i - x) / FRAME_W;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        if (!a.get(nx, ny) && f.get(nx, ny)) f.set(nx, ny, a.px[i] === skin ? skinInk : ink);
+      }
+    }
+    for (const i of filled) f.px[i] = a.px[i];
+  };
+  const armLayer = (g, far) => {
+    if (side && far) return 'back';
+    if (d === 'up' && g.inFront) return 'back';
+    if (d === 'up' && g === FRONT.head) return 'top';
+    return g.layer || 'mid';
+  };
+  function drawArms(layer) {
+    if (side) {
+      const ga = SIDE[armA] || SIDE.idle, gb = SIDE[armB] || SIDE.idle;
+      if (armLayer(gb, true) === layer) paintArm(gb, false, true);
+      if (armLayer(ga, false) === layer) paintArm(ga, false, false);
+    } else {
+      const ga = FRONT[armA] || FRONT.idle, gb = FRONT[armB] || FRONT.idle;
+      if (armLayer(ga, false) === layer) paintArm(ga, false, false);
+      if (armLayer(gb, false) === layer) paintArm(gb, true, false);
+    }
+  }
+  drawArms('back');
 
   // ===== Torso =====
   const tx = side ? 11 : 9;
@@ -310,19 +499,7 @@ function drawFrame(spec, dir, step) {
   }
   if (spec.extra === 'backpack' && d === 'down') { f.rect(10, ty, 2, 7, shade(C.accent, -0.2)); f.rect(20, ty, 2, 7, shade(C.accent, -0.2)); }
 
-  // ===== Brazos =====
-  const swing = step === 1 ? 1 : step === 2 ? -1 : 0;
-  const sleeve = top === 'tank' ? C.skin : top === 'varsity' ? C.accent : C.top;
-  if (!side) {
-    f.rect(7, ty + 1 + swing, 2, 6, sleeve);
-    f.rect(23, ty + 1 - swing, 2, 6, shade(sleeve, -0.15));
-    f.rect(7, ty + 7 + swing, 2, 2, C.skin);
-    f.rect(23, ty + 7 - swing, 2, 2, skinD);
-  } else {
-    const ax = 15 + swing * 2;
-    f.rect(ax, ty + 1, 3, 6, shade(sleeve, -0.08));
-    f.rect(ax, ty + 7, 3, 2, C.skin);
-  }
+  drawArms('mid');
 
   // ===== Cabeza =====
   f.rrect(7, hy, 18, 17, 4, C.skin);
@@ -516,28 +693,41 @@ function drawFrame(spec, dir, step) {
     f.rect(9, hy, 14, 1, C.accent);
   }
 
+  drawArms('top');
+
   f.outline();
   return dir === 'right' ? f.mirror() : f;
 }
 
-// Devuelve los píxeles RGBA de la hoja completa (96×192)
-export function renderSheet(spec) {
+function paintSheet(spec, cols) {
   const s = normalizeSpec(spec);
-  const out = new Uint8ClampedArray(SHEET_W * SHEET_H * 4);
+  const W = FRAME_W * cols;
+  const out = new Uint8ClampedArray(W * SHEET_H * 4);
   DIRS.forEach((dir, row) => {
-    for (let col = 0; col < 3; col++) {
-      const fr = drawFrame(s, dir, col);
+    for (let col = 0; col < cols; col++) {
+      // columnas 0-4: quieto + ciclo de caminar; 5…: posturas
+      const fr = col < POSE_COL0 ? drawFrame(s, dir, WALK_COLS.indexOf(col)) : drawFrame(s, dir, 0, POSES[col - POSE_COL0]);
       for (let y = 0; y < FRAME_H; y++) {
         for (let x = 0; x < FRAME_W; x++) {
           const c = fr.get(x, y);
           if (!c) continue;
-          const i = ((row * FRAME_H + y) * SHEET_W + col * FRAME_W + x) * 4;
+          const i = ((row * FRAME_H + y) * W + col * FRAME_W + x) * 4;
           out[i] = c[0]; out[i + 1] = c[1]; out[i + 2] = c[2]; out[i + 3] = 255;
         }
       }
     }
   });
   return out;
+}
+
+// Píxeles RGBA de la hoja clásica de 3 columnas (96×192): el mismo formato que las hojas subidas
+export function renderSheet(spec) {
+  return paintSheet(spec, 3);
+}
+
+// Hoja completa: las 3 columnas clásicas + pasos en el aire + posturas de las acciones
+export function renderFullSheet(spec) {
+  return { data: paintSheet(spec, FULL_COLS), width: FULL_SHEET_W, height: SHEET_H };
 }
 
 export const COLOR_KEYS = ['skin', 'hair', 'eyeColor', 'shirt', 'accent', 'pants', 'shoes', 'hatColor'];

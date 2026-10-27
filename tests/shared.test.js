@@ -3,7 +3,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { TEMPLATES, getTemplate, composeFloor, isWalkable } from '../shared/map.js';
 import { CATALOG, objSize, CHAIR_TYPES } from '../shared/catalog.js';
-import { PRESETS, normalizeSpec, renderSheet, SHEET_W, SHEET_H } from '../shared/sprite.js';
+import { PRESETS, normalizeSpec, renderSheet, renderFullSheet, frameCol, POSES, FULL_COLS, SHEET_W, SHEET_H } from '../shared/sprite.js';
 
 const templateIds = Object.keys(TEMPLATES);
 
@@ -139,6 +139,36 @@ describe('sprites', () => {
       assert.ok(opaque > 0, 'la hoja no tiene píxeles visibles');
     });
   }
+
+  test('hoja completa: empieza igual que la clásica y agrega caminar de 4 cuadros y posturas', () => {
+    const spec = normalizeSpec({ preset: 'dev' });
+    const classic = renderSheet(spec);
+    const full = renderFullSheet(spec);
+    assert.equal(full.width, 32 * FULL_COLS);
+    assert.equal(full.height, 192);
+    assert.equal(full.data.length, full.width * full.height * 4);
+    // las 3 primeras columnas son idénticas a la hoja clásica
+    for (let y = 0; y < 192; y += 3) for (let x = 0; x < 96; x++) {
+      for (let k = 0; k < 4; k++) assert.equal(full.data[(y * full.width + x) * 4 + k], classic[(y * 96 + x) * 4 + k]);
+    }
+    // cada postura tiene píxeles y es distinta del cuadro quieto
+    const frame = (col, row) => {
+      const out = [];
+      for (let y = 0; y < 48; y++) for (let x = 0; x < 32; x++) out.push(full.data[((row * 48 + y) * full.width + col * 32 + x) * 4 + 3] ? full.data[((row * 48 + y) * full.width + col * 32 + x) * 4] : -1);
+      return out.join(',');
+    };
+    const idle = frame(0, 0);
+    for (const p of POSES) assert.notEqual(frame(frameCol(0, p, FULL_COLS), 0), idle, `postura ${p}`);
+  });
+
+  test('frameCol: hojas subidas de 3 columnas usan los cuadros clásicos', () => {
+    assert.deepEqual([0, 1, 2, 3, 4].map((s) => frameCol(s, null, 3)), [0, 1, 1, 2, 2]);
+    assert.deepEqual([0, 1, 2, 3, 4].map((s) => frameCol(s, null, FULL_COLS)), [0, 1, 3, 2, 4]);
+    assert.equal(frameCol(0, 'armsUp', 3), 0);
+    assert.equal(frameCol(2, 'armsUp', 3), 1);
+    assert.ok(frameCol(0, 'armsUp', FULL_COLS) >= 5);
+    assert.equal(frameCol(0, 'no-existe', FULL_COLS), 0);
+  });
 
   test('normalizeSpec tolera avatares vacíos o con datos inválidos', () => {
     const s = normalizeSpec({ hairStyle: 'no-existe', skin: 'rojo' });

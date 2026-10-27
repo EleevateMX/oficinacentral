@@ -1964,7 +1964,8 @@ export function sortObjects(objects) {
 
 // ---------------- Avatares ----------------
 // cx = centro horizontal, by = base (pies). El sprite mide 32×48.
-export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false, blink = false) {
+// step: 0 quieto, 1-4 ciclo de caminar. pose: postura de una acción (ver POSES en shared/sprite.js).
+export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false, blink = false, pose = null) {
   // Parpadeo: la misma ficha con los ojos cerrados (no aplica a personajes dibujados ni lentes de sol)
   if (blink && !avatar?.sprite && avatar?.eyewear !== 'sunglasses' && (dir === 'down' || dir === 'left' || dir === 'right')) avatar = { ...avatar, eyes: 'sleepy' };
   if (sit) {
@@ -1974,7 +1975,7 @@ export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit
     ctx.beginPath();
     ctx.rect(cx - FRAME_W, top - 2, FRAME_W * 2, FRAME_H - 8);
     ctx.clip();
-    drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), top, dir, 0);
+    drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), top, dir, 0, 1, pose);
     ctx.restore();
     return;
   }
@@ -1982,16 +1983,16 @@ export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit
   ctx.beginPath();
   ctx.ellipse(cx, by - 1, 10, 3.5, 0, 0, Math.PI * 2);
   ctx.fill();
-  drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), Math.round(by - FRAME_H + 1), dir, step);
+  drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), Math.round(by - FRAME_H + 1), dir, step, 1, pose);
 }
 
 // Vista previa: el cuadro quieto en la dirección pedida, escalado a número entero.
-export function drawAvatarPreview(canvas, avatar, dir = 'down', step = 0) {
+export function drawAvatarPreview(canvas, avatar, dir = 'down', step = 0, pose = null) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
   const k = Math.max(1, Math.floor(Math.min(canvas.width / FRAME_W, canvas.height / FRAME_H)));
-  drawSprite(ctx, getSheet(avatar), Math.round((canvas.width - FRAME_W * k) / 2), Math.round((canvas.height - FRAME_H * k) / 2), dir, step, k);
+  drawSprite(ctx, getSheet(avatar), Math.round((canvas.width - FRAME_W * k) / 2), Math.round((canvas.height - FRAME_H * k) / 2), dir, step, k, pose);
 }
 
 // Solo la cara (para usar como foto de perfil cuando no hay foto)

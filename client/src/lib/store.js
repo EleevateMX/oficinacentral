@@ -7,7 +7,8 @@ import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
 import { FX, pickFx } from './fx.js';
 import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
-import { EMOTES, PAIR_RANGE } from '@shared/emotes.js';
+import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes.js';
+import { DANCES } from './emoteFx.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -43,7 +44,7 @@ class Office {
     this.admitted = new Set(); // salas cerradas donde me dejaron pasar
     this.pendingDoor = null; // "Ir a su lado" hacia alguien en sala cerrada
     this.reactions = {}; // id -> { emoji, until }
-    this.emotes = {}; // id -> { kind, start, until, target } (bailar, saludar…)
+    this.emotes = {}; // id -> { kind, start, until, target, variant } (bailar, saludar…)
     this.pendingEmote = null;
     this.fx = {}; // id -> efecto de Ctrl+D en curso
     this.floorCache = new Map();
@@ -275,7 +276,7 @@ class Office {
     s.on('fx', ({ id, kind, from, to }) => {
       if (FX[kind]) this.fx[id] = { kind, from, to, start: performance.now(), dur: FX[kind].dur };
     });
-    s.on('emote', ({ id, kind, target }) => this.startEmote(id, kind, target));
+    s.on('emote', ({ id, kind, target, variant }) => this.startEmote(id, kind, target, variant));
     s.on('react', ({ id, emoji }) => {
       this.reactions[id] = { emoji, until: performance.now() + 3500 };
     });
@@ -384,11 +385,11 @@ class Office {
   }
 
   // ---------- Acciones del personaje ----------
-  startEmote(id, kind, target) {
+  startEmote(id, kind, target, variant) {
     const def = EMOTES[kind];
     if (!def) return;
     const now = performance.now();
-    this.emotes[id] = { kind, target, start: now, until: now + def.dur };
+    this.emotes[id] = { kind, target, start: now, until: now + def.dur, variant: cleanVariant(variant) };
     if (def.pair && target != null) {
       this.emotes[target] = { kind, target: id, start: now, until: now + def.dur };
       if (target === this.state.me.id) {
@@ -414,8 +415,12 @@ class Office {
         return;
       }
     }
-    this.socket.emit('emote', { kind, target: def.pair ? target : undefined });
-    this.startEmote(this.state.me.id, kind, def.pair ? target : undefined);
+    // Variante al azar (p. ej. qué baile): viaja con la acción para que todos vean la misma
+    const prev = this.emotes[this.state.me.id]?.variant;
+    let variant = Math.floor(Math.random() * EMOTE_VARIANTS);
+    if (kind === 'dance' && prev != null && variant % DANCES.length === prev % DANCES.length) variant = (variant + 1) % EMOTE_VARIANTS;
+    this.socket.emit('emote', { kind, target: def.pair ? target : undefined, variant });
+    this.startEmote(this.state.me.id, kind, def.pair ? target : undefined, variant);
   }
 
   async changeFloor(floorId, target) {

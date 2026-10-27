@@ -135,8 +135,10 @@ test('acciones del personaje: solo y entre dos (cerca)', async () => {
     d.emit('move', { floorId: 1, x: 50, y: 56, tp: true });
     await new Promise((r) => setTimeout(r, 150));
     const got = once(d, 'emote', (m) => m.id === admin.user.id);
-    a.emit('emote', { kind: 'dance' });
-    assert.equal((await got).kind, 'dance');
+    a.emit('emote', { kind: 'dance', variant: 3 });
+    const m = await got;
+    assert.equal(m.kind, 'dance');
+    assert.equal(m.variant, 3, 'la variante (qué baile) se reenvía a todos');
     // Lejos: no se puede abrazar
     let far = false;
     const onFar = (m) => { if (m.kind === 'hug') far = true; };
@@ -153,6 +155,11 @@ test('acciones del personaje: solo y entre dos (cerca)', async () => {
     a.emit('emote', { kind: 'hug', target: dani.user.id });
     const h = await hug;
     assert.equal(h.target, dani.user.id);
+    // Variante inválida: la acción pasa, pero sin variante
+    await new Promise((r) => setTimeout(r, 750));
+    const odd = once(d, 'emote', (m) => m.kind === 'wave');
+    a.emit('emote', { kind: 'wave', variant: 'hack' });
+    assert.equal((await odd).variant, undefined);
     // Acción que no existe: se ignora
     let bad = false;
     d.on('emote', (m) => { if (m.kind === 'nope') bad = true; });

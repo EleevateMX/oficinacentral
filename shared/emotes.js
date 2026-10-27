@@ -1,5 +1,7 @@
 // Acciones del personaje (bailar, saludar, guiño…) y acciones entre dos (chocar los cinco, abrazo).
 // dur: cuánto dura la animación en ms. key: atajo de teclado en el mapa.
+// variant (opcional): número entero 0-9 que elige quien la hace (p. ej. qué rutina de baile);
+// el servidor lo valida y lo reenvía para que todos vean la misma.
 export const EMOTES = {
   dance: { label: 'Bailar', emoji: '💃', key: 'B', dur: 5000 },
   wave: { label: 'Saludar', emoji: '👋', key: 'H', dur: 2400 },
@@ -20,3 +22,6 @@ export const PAIR_EMOTES = Object.keys(EMOTES).filter((k) => EMOTES[k].pair);
 export const EMOTE_BY_KEY = Object.fromEntries(SOLO_EMOTES.map((k) => [EMOTES[k].key, k]));
 // Distancia máxima (en casillas) para una acción entre dos
 export const PAIR_RANGE = 2;
+// Variantes posibles (0 … EMOTE_VARIANTS - 1) y validación
+export const EMOTE_VARIANTS = 10;
+export const cleanVariant = (v) => (Number.isInteger(v) && v >= 0 && v < EMOTE_VARIANTS ? v : undefined);
