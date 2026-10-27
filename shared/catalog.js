@@ -11,7 +11,7 @@ export const CATEGORIES = [
   { id: 'comida', name: 'Comida' },
   { id: 'plantas', name: 'Plantas' },
   { id: 'deco', name: 'Decoración' },
-  { id: 'gtahub', name: 'GTAHUB' },
+  { id: 'gtahub', name: 'Marca' },
   { id: 'muebles', name: 'Muebles' },
   { id: 'salas', name: 'Salas' },
   { id: 'exterior', name: 'Exterior' },
@@ -76,6 +76,7 @@ export const CATALOG = {
   planter: f('Jardinera', 'plantas', 3, 1, { colorable: true, color: '#c99c72' }),
   armchair: f('Sillón', 'muebles', 1, 1, { colorable: true, color: '#FFCC00', rotatable: true }),
   bigScreen: f('Pantalla gigante', 'salas', 5, 1, { colorable: true, color: '#101010' }),
+  flagPole: f('Asta con bandera', 'gtahub', 1, 1, { colorable: true, brand: true }),
 
   // Decoraciones de escritorio (no bloquean, posición libre)
   monitor: d('Monitor', 'tech', 0.75, 0.75, { colorable: true, color: '#2b2f3a' }),
@@ -142,6 +143,15 @@ export const CATALOG = {
   hexBadge: d('Insignia hexagonal', 'gtahub', 0.5, 0.5, { colorable: true, color: '#FFCC00' }),
   cubeLogo: d('Cubo isométrico', 'gtahub', 0.5, 0.5, { colorable: true, color: '#FE3377' }),
   hexNeon: d('Neón hexagonal', 'gtahub', 1, 0.75, { colorable: true, color: '#FE3377' }),
+  // Marca: sin color elegido toman los colores del tema de la oficina (GTAHUB, Nuvora o propio)
+  bunting: d('Banderines', 'gtahub', 4, 0.75, { colorable: true, brand: true }),
+  wallBanner: d('Estandarte', 'gtahub', 1, 1.5, { colorable: true, brand: true }),
+  neonLogo: d('Neón con el nombre', 'gtahub', 3, 0.75, { colorable: true, brand: true }),
+  floorLogo: d('Logo en el piso', 'gtahub', 3, 3, { colorable: true, brand: true, under: true }),
+  poster: d('Póster', 'gtahub', 1, 1.25, { colorable: true, brand: true }),
+  fairyLights: d('Luces colgantes', 'gtahub', 4, 0.5, { colorable: true, brand: true }),
+  balloons: d('Globos', 'gtahub', 1, 1.5, { colorable: true, brand: true }),
+  deskFlag: d('Banderita de escritorio', 'gtahub', 0.5, 0.75, { colorable: true, brand: true }),
   // Piso (alrededor de tu lugar)
   floorPlant: d('Planta grande', 'piso', 1, 1),
   floorLamp: d('Lámpara de pie', 'piso', 0.5, 1, { colorable: true, color: '#f4a261' }),

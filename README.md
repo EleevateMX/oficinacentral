@@ -124,3 +124,6 @@ client/src/      interfaz (React + Vite)
   coloca muebles y decoración dentro de su área, cambia su alfombra y su forma, y puede activar **"Que mi equipo también decore"**
   para que quienes tienen escritorio ahí añadan decoración (cada quien mueve solo lo suyo). Nadie toca el escritorio de otra persona.
   Límite de 150 objetos por departamento.
+- **Marca en el salón**: banderines, estandartes, neón con el nombre de la oficina, logo en el piso, pósters, luces, globos,
+  banderitas de escritorio y astas con bandera. Si no se les elige color toman los del tema (rosa, amarillo y negro en GTAHUB;
+  verde y mandarina en Nuvora) y los muros llevan una franja del color de la marca.

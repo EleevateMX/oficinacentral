@@ -5,6 +5,10 @@ import { getSheet, drawSprite, FRAME_W, FRAME_H } from './sprites.js';
 
 const T = TILE;
 
+// Colores de marca de la oficina (los fija el mapa según el tema; ver themes.js → mapBrand)
+let BRAND = { name: 'NUVORA', primary: '#157A6E', secondary: '#FF8A3D', dark: '#0A2B2C', light: '#F3F4EE', walls: null };
+export function setRenderBrand(b) { BRAND = { ...BRAND, ...b }; }
+
 const hash = (x, y, s = 0) => {
   let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -136,13 +140,16 @@ function pattern(ctx, x, y, i, j, base, alt) {
 function drawWall(ctx, f, i, j) {
   const x = i * T, y = j * T;
   const below = j + 1 < f.H ? f.walls[j + 1][i] === true : false;
+  const w = BRAND.walls;
   if (below) {
-    R(ctx, '#46515d', x, y, T, T);
-    R(ctx, '#3d4752', x, y, T, 2);
+    R(ctx, w ? w.cap : '#46515d', x, y, T, T);
+    R(ctx, w ? shade(w.cap, -0.04) : '#3d4752', x, y, T, 2);
   } else {
-    R(ctx, '#66727f', x, y, T, T);
-    R(ctx, '#7c8894', x, y, T, 3);
-    R(ctx, '#56616d', x, y + T - 4, T, 4);
+    R(ctx, w ? w.face : '#66727f', x, y, T, T);
+    R(ctx, w ? w.top : '#7c8894', x, y, T, 3);
+    R(ctx, w ? w.base : '#56616d', x, y + T - 4, T, 4);
+    // Franja de color de la marca en los muros que dan a una sala
+    if (w && f.walls[j - 1]?.[i] === true) R(ctx, w.stripe, x, y + T - 7, T, 2);
   }
 }
 
@@ -845,6 +852,135 @@ D.bigScreen = (ctx, x, y, w, h, o, c) => {
   g.addColorStop(0, '#2a3a8c'); g.addColorStop(0.5, '#FE3377'); g.addColorStop(1, '#FFCC00');
   ctx.fillStyle = g; ctx.fillRect(x + 5, y - 3, w - 10, h - 6);
   R(ctx, 'rgba(255,255,255,.25)', x + 8, y - 1, w / 3, 2);
+};
+
+// ----- Marca (toman los colores del tema si no se eligió color) -----
+const brandCols = (o) => {
+  const p = o.color || BRAND.primary;
+  return { p, s: o.color ? shade(o.color, 0.25) : BRAND.secondary, d: BRAND.dark, l: BRAND.light };
+};
+D.bunting = (ctx, x, y, w, h, o) => {
+  const { p, s, l } = brandCols(o);
+  const sag = 7;
+  const at = (t) => ({ x: x + w * t, y: y + 2 + 4 * sag * t * (1 - t) });
+  ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y + 2); ctx.quadraticCurveTo(x + w / 2, y + 2 + sag * 2, x + w, y + 2); ctx.stroke();
+  const n = Math.max(3, Math.floor(w / 11));
+  const cols = [p, s, l];
+  for (let k = 0; k < n; k++) {
+    const a = at((k + 0.5) / n);
+    ctx.fillStyle = cols[k % 3];
+    ctx.beginPath(); ctx.moveTo(a.x - 4.5, a.y); ctx.lineTo(a.x + 4.5, a.y); ctx.lineTo(a.x, a.y + 11); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.12)';
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x + 4.5, a.y); ctx.lineTo(a.x, a.y + 11); ctx.closePath(); ctx.fill();
+  }
+};
+D.wallBanner = (ctx, x, y, w, h, o) => {
+  const { p, s, d, l } = brandCols(o);
+  R(ctx, 'rgba(0,0,0,.15)', x + 6, y + 4, w - 8, h - 10);
+  R(ctx, '#2b2b2b', x + 1, y + 1, w - 2, 3);
+  circle(ctx, s, x + 2, y + 2, 2); circle(ctx, s, x + w - 2, y + 2, 2);
+  ctx.fillStyle = p;
+  ctx.beginPath(); ctx.moveTo(x + 5, y + 4); ctx.lineTo(x + w - 5, y + 4); ctx.lineTo(x + w - 5, y + h - 4); ctx.lineTo(x + w / 2, y + h - 11); ctx.lineTo(x + 5, y + h - 4); ctx.closePath(); ctx.fill();
+  R(ctx, shade(p, -0.18), x + w - 9, y + 4, 4, h - 12);
+  R(ctx, d, x + 5, y + 7, w - 10, 2);
+  ctx.fillStyle = l; hexPath(ctx, x + w / 2, y + h / 2 - 3, 7); ctx.fill();
+  ctx.fillStyle = p; hexPath(ctx, x + w / 2, y + h / 2 - 3, 4.5); ctx.fill();
+  ctx.fillStyle = s; hexPath(ctx, x + w / 2, y + h / 2 - 3, 2); ctx.fill();
+};
+D.neonLogo = (ctx, x, y, w, h, o) => {
+  const { p, s } = brandCols(o);
+  RR(ctx, '#121214', x + 1, y + 1, w - 2, h - 2, 4);
+  ctx.save();
+  ctx.shadowColor = p; ctx.shadowBlur = 8;
+  ctx.strokeStyle = p; ctx.lineWidth = 1.6;
+  hexPath(ctx, x + 11, y + h / 2, 6); ctx.stroke();
+  const name = BRAND.name.slice(0, 18);
+  let size = 13;
+  ctx.font = `${size}px "Archivo Black", "Arial Black", sans-serif`;
+  const room = w - 26;
+  const tw = ctx.measureText(name).width;
+  if (tw > room) { size = Math.max(6, Math.floor(size * room / tw)); ctx.font = `${size}px "Archivo Black", "Arial Black", sans-serif`; }
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+  ctx.fillText(name, x + 21, y + h / 2 + 1);
+  ctx.restore();
+  R(ctx, s, x + 21, y + h - 4, Math.min(room, ctx.measureText(name).width), 1);
+};
+D.floorLogo = (ctx, x, y, w, h, o) => {
+  const { p, s, d, l } = brandCols(o);
+  const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) / 2 - 3;
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = d; hexPath(ctx, cx, cy, r); ctx.fill();
+  ctx.strokeStyle = p; ctx.lineWidth = 3; hexPath(ctx, cx, cy, r - 2); ctx.stroke();
+  ctx.strokeStyle = s; ctx.lineWidth = 1.5; hexPath(ctx, cx, cy, r - 9); ctx.stroke();
+  // cubo isométrico
+  const c = r * 0.32;
+  ctx.fillStyle = l; ctx.beginPath(); ctx.moveTo(cx, cy - c); ctx.lineTo(cx + c, cy - c / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx - c, cy - c / 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = p; ctx.beginPath(); ctx.moveTo(cx - c, cy - c / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + c); ctx.lineTo(cx - c, cy + c / 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(p, -0.35); ctx.beginPath(); ctx.moveTo(cx + c, cy - c / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + c); ctx.lineTo(cx + c, cy + c / 2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+};
+D.poster = (ctx, x, y, w, h, o) => {
+  const { p, s, d, l } = brandCols(o);
+  R(ctx, 'rgba(0,0,0,.15)', x + 4, y + 3, w - 4, h - 3);
+  R(ctx, d, x + 2, y + 1, w - 4, h - 4);
+  const g = ctx.createLinearGradient(x, y, x, y + h);
+  g.addColorStop(0, p); g.addColorStop(1, s);
+  ctx.fillStyle = g; ctx.fillRect(x + 4, y + 3, w - 8, h - 14);
+  ctx.strokeStyle = l; ctx.lineWidth = 1.5; hexPath(ctx, x + w / 2, y + 3 + (h - 14) / 2, 6); ctx.stroke();
+  R(ctx, l, x + 6, y + h - 9, w - 12, 2); R(ctx, shade(l, -0.4), x + 6, y + h - 6, (w - 12) * 0.6, 1);
+};
+D.fairyLights = (ctx, x, y, w, h, o) => {
+  const { p, s, l } = brandCols(o);
+  ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y + 2);
+  for (let k = 1; k <= 4; k++) ctx.quadraticCurveTo(x + w * (k - 0.5) / 4, y + 10, x + w * k / 4, y + 2);
+  ctx.stroke();
+  const cols = [s, p, l, '#8ecae6'];
+  const n = Math.floor(w / 7);
+  ctx.save();
+  for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n;
+    const seg = (t * 4) % 1;
+    const yy = y + 2 + 8 * 4 * seg * (1 - seg) * 0.5;
+    ctx.shadowColor = cols[k % 4]; ctx.shadowBlur = 6;
+    circle(ctx, cols[k % 4], x + w * t, yy + 3, 2.2);
+  }
+  ctx.restore();
+};
+D.balloons = (ctx, x, y, w, h, o) => {
+  const { p, s, l } = brandCols(o);
+  ctx.strokeStyle = '#777'; ctx.lineWidth = 0.8;
+  for (const dx of [-5, 0, 5]) { ctx.beginPath(); ctx.moveTo(x + w / 2, y + h - 2); ctx.lineTo(x + w / 2 + dx * 1.4, y + 18); ctx.stroke(); }
+  R(ctx, '#555', x + w / 2 - 2, y + h - 3, 4, 3);
+  for (const [dx, dy, c] of [[-7, 10, p], [7, 11, s], [0, 4, l]]) {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(x + w / 2 + dx, y + dy + 4, 6, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+    circle(ctx, 'rgba(255,255,255,.55)', x + w / 2 + dx - 2, y + dy + 1, 1.6);
+  }
+};
+D.deskFlag = (ctx, x, y, w, h, o) => {
+  const { p, s } = brandCols(o);
+  R(ctx, '#444', x + 3, y + 2, 1, h - 4);
+  R(ctx, '#333', x + 1, y + h - 3, 6, 2);
+  ctx.fillStyle = p; ctx.beginPath(); ctx.moveTo(x + 4, y + 2); ctx.lineTo(x + w, y + 6); ctx.lineTo(x + 4, y + 10); ctx.closePath(); ctx.fill();
+  R(ctx, s, x + 4, y + 5, 6, 1.5);
+};
+D.flagPole = (ctx, x, y, w, h, o) => {
+  const { p, s, l } = brandCols(o);
+  circle(ctx, 'rgba(0,0,0,.18)', x + w / 2 + 2, y + h - 5, 7);
+  R(ctx, '#8a8f98', x + w / 2 - 6, y + h - 9, 12, 6);
+  R(ctx, '#c5cad1', x + w / 2 - 1.5, y - 46, 3, h + 38);
+  circle(ctx, '#FFCC00', x + w / 2, y - 47, 2.5);
+  ctx.fillStyle = p;
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2 + 1, y - 44);
+  ctx.quadraticCurveTo(x + w / 2 + 14, y - 49, x + w / 2 + 28, y - 43);
+  ctx.lineTo(x + w / 2 + 28, y - 27);
+  ctx.quadraticCurveTo(x + w / 2 + 14, y - 33, x + w / 2 + 1, y - 28);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = l; hexPath(ctx, x + w / 2 + 14, y - 36.5, 4.5); ctx.fill();
+  ctx.fillStyle = s; hexPath(ctx, x + w / 2 + 14, y - 36.5, 2); ctx.fill();
 };
 
 const fallback = (ctx, x, y, w, h) => RR(ctx, '#c9ced6', x + 2, y + 2, w - 4, h - 4, 4);

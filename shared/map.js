@@ -449,6 +449,22 @@ function templateHQ() {
   for (const x of [8, 20, 30, 38, 62, 72, 88]) b.o('plant', x, 21);
   for (const x of [10, 30, 62, 88]) b.o('tallPlant', x, 45);
 
+  // ===== Marca: banderines, estandartes, neón, logo y luces (toman los colores del tema) =====
+  for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 20.75);
+  for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 45.25);
+  b.o('neonLogo', 12.5, 9.15); b.o('wallBanner', 10.5, 10.1); b.o('wallBanner', 17.5, 10.1);
+  for (const x0 of [43, 57]) { b.o('wallBanner', x0 + 1.5, 10.1); b.o('poster', x0 + 9.5, 10.1); }
+  b.o('neonLogo', 75, 9.15); b.o('wallBanner', 88.5, 10.1);
+  b.o('fairyLights', 29.25, 10); b.o('fairyLights', 34.5, 10);
+  b.o('floorLogo', 41, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
+  b.o('flagPole', 39, 59); b.o('flagPole', 46, 59);
+  b.o('floorLogo', 73, 39);
+  for (const x0 of [5, 52]) b.o('poster', x0 + 8.6, 47);
+  b.o('poster', 19.5, 47); b.o('poster', 31.5, 47);
+  b.o('fairyLights', 68.5, 46.2); b.o('balloons', 76, 49);
+  b.o('neonLogo', 83.5, 47.1); b.o('wallBanner', 87.2, 47.1);
+  for (const [x, y] of [[6, 24], [22, 24], [6, 34], [27, 34], [59, 24]]) b.o('deskFlag', x + 0.2, y + 0.1);
+
   // ===== Exterior =====
   // Camino de entrada hasta una plaza redonda con fuente
   b.blob(42.5, 64, 5, 3.6, 'path');

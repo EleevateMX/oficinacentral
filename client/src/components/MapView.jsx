@@ -3,7 +3,8 @@ import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush
 import { office, useOffice } from '../lib/store.js';
 import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace } from '@shared/map.js';
 import { CATALOG, COLORS, objSize } from '@shared/catalog.js';
-import { drawFloorLayer, drawObject, sortObjects, drawAvatar } from '../lib/render.js';
+import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand } from '../lib/render.js';
+import { mapBrand } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
 import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
@@ -63,9 +64,12 @@ export default function MapView({ active }) {
   const stateRef = useRef({});
   stateRef.current = { floor, me, users, editMode, ed, active };
 
+  const config = useOffice((s) => s.config);
+
   // Capa estática (suelos, muros, objetos)
   useEffect(() => {
     if (!floor) return;
+    setRenderBrand(mapBrand(config));
     const c = document.createElement('canvas');
     c.width = floor.W * T;
     c.height = floor.H * T;
@@ -74,7 +78,7 @@ export default function MapView({ active }) {
     drawFloorLayer(ctx, floor);
     for (const o of sortObjects(floor.objects)) drawObject(ctx, o);
     staticRef.current = c;
-  }, [floor]);
+  }, [floor, config?.theme, config?.accent, config?.officeName]);
 
   // Tamaño del canvas
   useEffect(() => {
