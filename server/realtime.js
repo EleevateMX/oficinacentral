@@ -4,6 +4,7 @@ import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId, setAreaClosed, isAreaClosed, closedAreaIds, floorPayload, floorOfArea } from './world.js';
 import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../shared/map.js';
 import { initGames } from './games.js';
+import { EMOTES, PAIR_RANGE } from '../shared/emotes.js';
 import { initBoards } from './boards.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
@@ -188,6 +189,22 @@ export function initRealtime(httpServer) {
 
     // Pestaña oculta o visible: si todas están ocultas, los avisos llegan por push (server/push.js)
     socket.on('visibility', (v) => { socket.data.hidden = !!v?.hidden; });
+
+    // Acciones del personaje: se reenvían a todos para que vean la animación
+    let lastEmote = 0;
+    socket.on('emote', (m) => {
+      const t = Date.now();
+      const def = EMOTES[m?.kind];
+      if (!def || t - lastEmote < 700) return;
+      let target = null;
+      if (def.pair) {
+        target = Number(m.target);
+        const q = presence.get(target);
+        if (!q || target === userId || q.floorId !== p.floorId || Math.max(Math.abs(q.x - p.x), Math.abs(q.y - p.y)) > PAIR_RANGE) return;
+      }
+      lastEmote = t;
+      io.emit('emote', { id: userId, kind: m.kind, target });
+    });
 
     // Efecto de "regresar a mi escritorio": se reenvía a los demás para que lo vean
     let lastFx = 0;

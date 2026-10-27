@@ -234,6 +234,11 @@ pre code { background: none; padding: 0; }
 .emoji-pop { display: grid; grid-template-columns: repeat(5, 36px); gap: 2px; min-width: 0; left: 50%; transform: translateX(-50%); }
 .emoji-pop button { width: 36px; height: 36px; font-size: 20px; border-radius: 8px; }
 .emoji-pop button:hover { background: var(--hover); }
+.emoji-pop-label { grid-column: 1 / -1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .6; padding: 4px 4px 2px; }
+.emoji-pop .emote-btn { height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 18px; }
+.emoji-pop .emote-btn small { font-size: 9px; line-height: 1; opacity: .75; white-space: nowrap; max-width: 34px; overflow: hidden; text-overflow: ellipsis; }
+.pc-emotes { display: flex; gap: 6px; flex-wrap: wrap; }
+.pc-emotes .btn { flex: 1; justify-content: center; }
 
 /* ---------- Mapa ---------- */
 .map-wrap { position: absolute; inset: 0; background: var(--map-bg); overflow: hidden; }

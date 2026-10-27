@@ -8,6 +8,8 @@ import { openPip, pipSupported } from '../lib/pip.js';
 
 const QUICK_STATUS = ['🎧 Concentrado', '📞 En llamada', '🍔 Comiendo', '☕ En pausa', '🚗 En camino', '🏠 Desde casa', '🤒 Enfermo', '🎮 Jugando'];
 const setStatusText = (statusText) => api.patch('/me', { statusText }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+import { EMOTES, SOLO_EMOTES } from '@shared/emotes.js';
+
 const EMOJIS = ['👋', '👍', '❤️', '😂', '🎉', '🔥', '👏', '🤔', '☕', '✅'];
 
 function useClickOutside(ref, onOut) {
@@ -87,11 +89,18 @@ export default function ControlBar({ compact = false }) {
         <button className="cb-caret" onClick={() => office.set({ modal: { type: 'prefs', section: 'video' } })} title="Ajustes de video"><ChevronUp size={12} /></button>
       )}
       <div className="cb-group">
-        <button className="cb-btn" onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} title="Reaccionar (teclas 1–6)"><Smile size={18} /></button>
+        <button className="cb-btn" onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} title="Reacciones y acciones (bailar B, saludar H, guiño G…)"><Smile size={18} /></button>
         {menu === 'emoji' && (
           <div className="popover up emoji-pop">
+            <div className="emoji-pop-label">Reacciones</div>
             {EMOJIS.map((e) => (
               <button key={e} onClick={() => { office.react(e); setMenu(null); }}>{e}</button>
+            ))}
+            <div className="emoji-pop-label">Acciones</div>
+            {SOLO_EMOTES.map((k) => (
+              <button key={k} className="emote-btn" title={`${EMOTES[k].label} (${EMOTES[k].key})`} onClick={() => { office.emote(k); setMenu(null); }}>
+                <span>{EMOTES[k].emoji}</span><small>{EMOTES[k].label.replace('Dar una ', '')}</small>
+              </button>
             ))}
           </div>
         )}

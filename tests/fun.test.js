@@ -125,3 +125,42 @@ test('aviso diario de cumpleaños al webhook', async () => {
     hook.close();
   }
 });
+
+test('acciones del personaje: solo y entre dos (cerca)', async () => {
+  const admin = await adminClient(srv.url);
+  const dani = await createMember(srv.url, admin, 'Dani');
+  const a = await connect(admin), d = await connect(dani);
+  try {
+    a.emit('move', { floorId: 1, x: 42, y: 56, tp: true });
+    d.emit('move', { floorId: 1, x: 50, y: 56, tp: true });
+    await new Promise((r) => setTimeout(r, 150));
+    const got = once(d, 'emote', (m) => m.id === admin.user.id);
+    a.emit('emote', { kind: 'dance' });
+    assert.equal((await got).kind, 'dance');
+    // Lejos: no se puede abrazar
+    let far = false;
+    const onFar = (m) => { if (m.kind === 'hug') far = true; };
+    d.on('emote', onFar);
+    await new Promise((r) => setTimeout(r, 750));
+    a.emit('emote', { kind: 'hug', target: dani.user.id });
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(far, false);
+    d.off('emote', onFar);
+    // Cerca sí
+    d.emit('move', { floorId: 1, x: 43, y: 56, tp: true });
+    await new Promise((r) => setTimeout(r, 750));
+    const hug = once(d, 'emote', (m) => m.kind === 'hug');
+    a.emit('emote', { kind: 'hug', target: dani.user.id });
+    const h = await hug;
+    assert.equal(h.target, dani.user.id);
+    // Acción que no existe: se ignora
+    let bad = false;
+    d.on('emote', (m) => { if (m.kind === 'nope') bad = true; });
+    await new Promise((r) => setTimeout(r, 750));
+    a.emit('emote', { kind: 'nope' });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(bad, false);
+  } finally {
+    a.close(); d.close();
+  }
+});
