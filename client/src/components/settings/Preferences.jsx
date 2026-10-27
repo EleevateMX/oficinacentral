@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
+import DiscordButton from '../DiscordButton.jsx';
 import { listDevices } from '../../lib/media.js';
 import { aiNoiseSupported } from '../../lib/noise.js';
 import { recordingSupported, clipMime } from '../../lib/recorder.js';
@@ -442,7 +443,7 @@ function DiscordLink() {
         </Row>
       ) : (
         <Row title="Vincular tu cuenta de Discord" desc="Para entrar con un clic, sin escribir tu contraseña.">
-          <a className="btn discord-btn" href="/api/auth/discord?mode=link">Vincular Discord</a>
+          <DiscordButton mode="link" className="btn discord-btn">Vincular Discord</DiscordButton>
         </Row>
       )}
     </Section>
