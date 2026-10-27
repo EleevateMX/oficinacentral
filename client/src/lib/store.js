@@ -10,9 +10,9 @@ export const DEFAULT_PREFS = {
   colorMode: 'light',
   skipWelcome: true,
   calendar: { weekDays: 7, firstDay: 0 },
-  audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true, notifVolume: 0.6, muteOnHidden: false },
+  audio: { aiNoise: 'rnnoise', noiseSuppression: true, echoCancellation: true, autoGainControl: true, notifVolume: 0.6, muteOnHidden: false },
   video: { hd: false, hideSelf: false },
-  screen: { quality: 'balanced', audio: true, volume: 1, autoOpen: false },
+  screen: { quality: 'balanced', audio: true, volume: 1, autoOpen: false, clips: true, recordRoom: true },
   meetings: { maxTiles: 9 },
   notifications: { remind5: true, remindStart: true, remindSound: true, chat: 'dms', chatSound: 'dms', desktop: false },
   performance: { mode: 'balanced' },
@@ -60,6 +60,7 @@ class Office {
       watching: [], // pantallas que estoy viendo (máx. 4), como "Ver transmisión" en Discord
       stageOpen: false,
       stageLayout: 'focus', // 'focus' | 'grid'
+      recording: false, // estoy grabando alguna transmisión (lo ve toda la sala)
       talkingWith: [],
       space: null,
       modal: null, // { type: 'prefs', section } | { type: 'profile' } | { type: 'invite' } ...
@@ -165,8 +166,8 @@ class Office {
         });
         this.media.addEventListener('peers', (e) => this.set({ peers: e.detail }));
       } else {
-        // reconexión: volver a anunciar estado de medios
-        s.emit('state', this.media.state);
+        // reconexión: volver a anunciar estado de medios (y si estoy grabando)
+        s.emit('state', { ...this.media.state, recording: this.state.recording });
       }
       // Fusionar presencia con la lista de usuarios
       this.set((st) => {
@@ -217,6 +218,10 @@ class Office {
         if (this.state.floor?.id === payload.id) this.set({ floor: f });
       }
     });
+    s.on('clip', ({ from }) => {
+      const who = this.state.users[from]?.displayName || 'Alguien';
+      this.toast({ title: `🎬 ${who} guardó un clip de tu pantalla` });
+    });
     s.on('message', (m) => this.onMessage(m));
     s.on('channels', () => this.refreshChat());
     s.on('characters', () => this.loadCharacters());
@@ -246,7 +251,7 @@ class Office {
   applyMediaPrefs() {
     const { audio, video, devices, screen } = this.state.prefs;
     this.media?.updateSettings({
-      noiseSuppression: audio.noiseSuppression, echoCancellation: audio.echoCancellation, autoGainControl: audio.autoGainControl,
+      aiNoise: audio.aiNoise, noiseSuppression: audio.noiseSuppression, echoCancellation: audio.echoCancellation, autoGainControl: audio.autoGainControl,
       hd: video.hd, micId: devices.micId, camId: devices.camId, speakerId: devices.speakerId,
       screenQuality: screen.quality, screenAudio: screen.audio, screenVolume: screen.volume,
     });
@@ -357,6 +362,18 @@ class Office {
     const name = this.state.users[id]?.displayName || 'Alguien';
     if (this.state.prefs.screen.autoOpen && this.state.watching.length < 4) this.watch(id);
     else this.toast({ title: `🔴 ${name} está transmitiendo su pantalla`, action: { label: 'Ver', run: () => this.watch(id) } });
+  }
+
+  // Grabaciones: se anuncia a todos para que nadie grabe a escondidas
+  setRecording(on) {
+    if (this.state.recording === on) return;
+    this.set({ recording: on });
+    this.socket?.emit('state', { recording: on });
+  }
+
+  // Avisa a quien transmite que guardé un clip de su pantalla
+  notifyClip(sharer) {
+    if (sharer !== this.state.me?.id) this.socket?.emit('clip', { sharer });
   }
 
   // Mantiene la lista de pantallas que veo y avisa quién ve la mía
@@ -564,6 +581,8 @@ export function applyTheme(mode) {
 }
 
 export const office = new Office();
+// Acceso desde la consola y las pruebas en navegador (solo la sesión propia)
+if (typeof window !== 'undefined') window.__office = office;
 
 export function useOffice(selector) {
   const get = useCallback(() => selector(office.state), [selector]);

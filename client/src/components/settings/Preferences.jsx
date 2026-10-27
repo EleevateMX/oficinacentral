@@ -6,6 +6,8 @@ import {
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
 import { listDevices } from '../../lib/media.js';
+import { aiNoiseSupported } from '../../lib/noise.js';
+import { recordingSupported, clipMime } from '../../lib/recorder.js';
 import { playSound } from '../../lib/sounds.js';
 import { Toggle, Select, Row, Radio, Avatar, Empty, AvatarCanvas } from '../ui.jsx';
 import { fmtDate } from '../../lib/time.js';
@@ -163,8 +165,16 @@ function AudioPrefs() {
             <Select value={dev.speakerId} onChange={(v) => setDev('speakerId', v)} options={devOpts(devices.speakers, 'Predeterminado')} />
           </Row>
         )}
-        <Row title="Reducir ruido de fondo" desc="Suprime el ruido para que tu voz se escuche más clara">
-          <Toggle checked={a.noiseSuppression} onChange={after((v) => set('noiseSuppression', v))} />
+        <Row
+          title="Supresión de ruido con IA"
+          desc={aiNoiseSupported()
+            ? 'Quita teclado, ventilador y ruido de fondo con RNNoise antes de enviar tu voz. Usa un poco de CPU.'
+            : 'Tu navegador no lo permite; se usa el filtro normal.'}
+        >
+          <Toggle checked={a.aiNoise === 'rnnoise' && aiNoiseSupported()} disabled={!aiNoiseSupported()} onChange={after((v) => set('aiNoise', v ? 'rnnoise' : 'off'))} />
+        </Row>
+        <Row title="Reducir ruido de fondo (navegador)" desc={a.aiNoise === 'rnnoise' && aiNoiseSupported() ? 'No hace falta con la supresión con IA encendida' : 'Filtro básico del navegador para que tu voz se escuche más clara'}>
+          <Toggle checked={a.noiseSuppression} disabled={a.aiNoise === 'rnnoise' && aiNoiseSupported()} onChange={after((v) => set('noiseSuppression', v))} />
         </Row>
         <Row title="Ajustar volumen del micrófono automáticamente" desc="Mantiene tu voz a un volumen estable">
           <Toggle checked={a.autoGainControl} onChange={after((v) => set('autoGainControl', v))} />
@@ -221,6 +231,16 @@ function ScreenPrefs() {
       <Row title="Volumen de las pantallas de otros">
         <input type="range" min="0" max="1" step="0.05" value={sc.volume} onChange={(e) => set('volume', Number(e.target.value))} />
       </Row>
+      {recordingSupported() && (
+        <>
+          <Row title="Clips de 30 segundos" desc={clipMime() ? 'Guarda en memoria los últimos 30 s de las pantallas que ves para el botón Clip. Apágalo si tu equipo va lento.' : 'Tu navegador no permite clips; sí puedes grabar.'}>
+            <Toggle checked={sc.clips !== false && !!clipMime()} disabled={!clipMime()} onChange={(v) => set('clips', v)} />
+          </Row>
+          <Row title="Grabar junta: incluir las voces de la sala" desc="Al grabar una pantalla también se graban tu micrófono y las voces de quienes están contigo. Todos verán el aviso ● REC.">
+            <Toggle checked={sc.recordRoom !== false} onChange={(v) => set('recordRoom', v)} />
+          </Row>
+        </>
+      )}
       <div className="muted small">Los cambios de calidad se aplican la próxima vez que compartas.</div>
     </Section>
   );
