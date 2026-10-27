@@ -30,6 +30,8 @@ export const AREA_COLORS = [
   { id: 'slate', name: 'Pizarra' },
   { id: 'concrete', name: 'Cemento pulido' },
   { id: 'hex', name: 'Hexágonos (GTAHUB)' },
+  { id: 'redRug', name: 'Roja ornamental' },
+  { id: 'diamond', name: 'Rombos gris azulado' },
 ];
 
 // Forma de la alfombra de un área (para que el mapa no se vea tan cuadrado)
