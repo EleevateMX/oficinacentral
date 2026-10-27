@@ -1,6 +1,6 @@
 import Whiteboard from './Whiteboard.jsx';
 import Notices from './Notices.jsx';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
 import { Boot } from './brand.jsx';
@@ -23,6 +23,8 @@ export default function Shell({ session, onLogout }) {
   const profileCard = useOffice((s) => s.profileCard);
   const collapsed = useOffice((s) => s.sidebarCollapsed);
   const connected = useOffice((s) => s.connected);
+  const mobilePane = useOffice((s) => s.mobilePane);
+  const mobile = useIsMobile();
 
   useEffect(() => {
     office.start(session.user, session.prefs).catch((e) => console.error(e));
@@ -42,7 +44,7 @@ export default function Shell({ session, onLogout }) {
   const mainChat = view === 'chat' || view === 'activity';
 
   return (
-    <div className="shell">
+    <div className={`shell ${mobile ? `mobile pane-${view === 'calendar' ? 'main' : view === 'map' ? 'map' : mobilePane}` : ''}`}>
       <Rail />
       {!(collapsed && view === 'map') && (
         <aside className="sidebar">
@@ -66,4 +68,17 @@ export default function Shell({ session, onLogout }) {
       <Toasts />
     </div>
   );
+}
+
+// Pantalla de celular (≤ 680 px)
+export function useIsMobile() {
+  const q = '(max-width: 680px)';
+  const [m, setM] = useState(() => window.matchMedia(q).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(q);
+    const on = () => setM(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return m;
 }

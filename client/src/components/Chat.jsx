@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Hash, ChevronDown, SquarePen, Hand, Navigation, Send, Bold, Italic, Code, Link2, Smile, AtSign, Plus } from 'lucide-react';
+import { Hash, ChevronDown, SquarePen, Hand, Navigation, Send, Bold, Italic, Code, Link2, Smile, AtSign, Plus, ChevronLeft } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar, Empty } from './ui.jsx';
@@ -165,6 +165,7 @@ export function ChatView() {
   return (
     <div className="chat-view">
       <div className="chat-head">
+        <button className="icon-btn mobile-only" onClick={() => office.set({ mobilePane: 'list' })} aria-label="Volver a la lista"><ChevronLeft size={20} /></button>
         {isDM ? (
           <button className="chat-title" onClick={() => office.set({ profileCard: other.id })}>
             <Avatar user={other} size={28} /> <span>{other.displayName}</span>

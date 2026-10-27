@@ -9,6 +9,8 @@ Todo corre en un solo servidor:
 
 Tiempo estimado: 30–45 minutos la primera vez.
 
+> ¿Solo quieres una versión de pruebas (dev) rápida? Ve a **[Versión de pruebas en Railway](#versión-de-pruebas-en-railway)** al final.
+
 ---
 
 ## 1. Qué necesitas
@@ -172,3 +174,40 @@ docker compose start app
 - **El navegador dice que el sitio no es seguro / no carga**: revisa que el registro DNS apunte a la IP correcta y que los puertos 80 y 443 estén abiertos (también en el firewall del panel del proveedor). Mira `docker compose logs caddy`.
 - **No se escucha a alguien**: revisa que tenga permiso de micrófono en el navegador y que los puertos 3478 y 49160–49200/UDP estén abiertos. Mira `docker compose logs coturn`.
 - **Olvidé la contraseña del admin**: usa el comando de “Crear/recuperar un admin”.
+
+
+---
+
+## Versión de pruebas en Railway
+
+Sirve para que el equipo pruebe antes de producción. El repositorio ya trae `railway.json` (usa el `Dockerfile` y revisa `/api/health`).
+
+1. En Railway: **New Project → Deploy from GitHub repo** y elige este repositorio. En *Settings → Source* elige la rama que quieras probar.
+2. **Disco persistente** (si no, la base de datos se borra en cada actualización): *Add Volume* montado en **`/data`**.
+3. **Variables** (*Variables*):
+
+   | Variable | Valor |
+   |---|---|
+   | `OFFICE_NAME` | `GTAHUB` |
+   | `OFFICE_THEME` | `gtahub` |
+   | `ADMIN_USERNAME` | `admin` |
+   | `ADMIN_PASSWORD` | una contraseña larga (solo se usa la primera vez) |
+   | `TRUST_PROXY` | `1` (Railway pone un proxy delante) |
+   | `RAILWAY_RUN_UID` | `0` (para poder escribir en el volumen) |
+   | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | ver el paso 5 |
+
+4. *Settings → Networking → Generate Domain*. Railway da HTTPS, que es obligatorio para micrófono, cámara y compartir pantalla.
+5. **Audio, video y pantalla entre redes distintas.** Railway no deja pasar UDP, así que no puede correr `coturn`.
+   Sin TURN, la voz y la pantalla funcionan entre la mayoría de las casas, pero pueden fallar en redes de empresa, escuelas o datos móviles.
+   La opción recomendada es el TURN de **Cloudflare** (tiene capa gratis):
+   - En el panel de Cloudflare: *Realtime → TURN Server → Create*. Copia el **Turn Token ID** y el **API Token**.
+   - Ponlos en `CF_TURN_KEY_ID` y `CF_TURN_API_TOKEN`. La app pide credenciales temporales sola y las renueva.
+   - Alternativa: cualquier TURN con usuario fijo (p. ej. Metered) en `ICE_SERVERS` como JSON.
+6. Entra con `admin` y la contraseña del paso 3. Invita al equipo desde **Preferencias → Miembros → Invitar a varias personas a la vez**.
+
+**Límites a tener en cuenta en dev:** el audio, el video y las pantallas van directo entre personas (malla P2P).
+Quien comparte pantalla envía una copia a cada persona que la ve; la app reparte unos 14 Mbps de subida entre todos.
+Con más de ~6 personas viendo la misma pantalla conviene, en producción, agregar un servidor de medios (SFU) como LiveKit.
+
+**Respaldos:** el respaldo diario se guarda dentro del volumen (`/data/backups`). Para bajarlo, usa *Volume → Backups* de Railway
+o el comando `npm run backup` desde una consola del servicio.

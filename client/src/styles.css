@@ -751,3 +751,43 @@ input[type='color'] { width: 48px; height: 36px; padding: 2px; cursor: pointer; 
 /* Pista de objeto interactivo */
 .interact-hint { position: absolute; z-index: 15; transform: translate(-50%, -100%); background: rgba(16,16,16,.88); color: #fff; font-size: 12px; padding: 4px 10px; border-radius: 10px; pointer-events: none; white-space: nowrap; }
 .interact-hint kbd { background: #fff; color: #101010; border-radius: 4px; padding: 0 5px; margin-right: 4px; font: 700 11px var(--font-mono, monospace); }
+
+/* ---------- Celular ---------- */
+.mobile-only { display: none; }
+.shell.mobile { flex-direction: column-reverse; padding: 0; gap: 0; height: 100dvh; }
+.shell.mobile .mobile-only { display: inline-flex; }
+.shell.mobile .rail {
+  width: 100%; height: 58px; flex-direction: row; justify-content: space-around; padding: 0 6px env(safe-area-inset-bottom);
+  background: var(--panel); border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.shell.mobile .rail-logo, .shell.mobile .rail-kbd, .shell.mobile .rail-gap, .shell.mobile .rail-spacer, .shell.mobile .rail-by,
+.shell.mobile .rail > .rail-btn[aria-label="Buscar"] { display: none; }
+.shell.mobile .rail-btn { width: 48px; height: 44px; }
+.shell.mobile .main { flex: 1; border-radius: 0; min-height: 0; }
+.shell.mobile .sidebar { position: static; width: 100%; flex: 1; min-height: 0; border-radius: 0; }
+/* Qué se ve en cada pestaña */
+.shell.mobile.pane-list .main { display: none; }
+.shell.mobile.pane-main .sidebar { display: none; }
+.shell.mobile.pane-map .sidebar { position: absolute; inset: 0 0 58px; z-index: 40; }
+.shell.mobile .mini-widget { display: none; }
+/* Mapa */
+.shell.mobile .control-bar { bottom: 10px; padding: 4px 6px; gap: 2px; max-width: calc(100% - 16px); }
+.shell.mobile .cb-caret, .shell.mobile .control-bar .cb-btn[title="Levantar la mano"], .shell.mobile .control-bar .cb-btn[title="Preferencias"], .shell.mobile .cb-sep { display: none; }
+.shell.mobile .cb-btn { width: 38px; height: 38px; }
+.shell.mobile .map-tools { top: 10px; bottom: auto; right: 8px; }
+.shell.mobile .map-tools .icon-btn[title="Editar oficina"], .shell.mobile .map-tools .zoom-pct { display: none; }
+.shell.mobile .video-strip { top: 8px; max-width: calc(100% - 70px); gap: 6px; }
+.shell.mobile .tile { width: 108px; height: 72px; }
+.shell.mobile .tile.screen { width: 150px; height: 90px; }
+.shell.mobile .screen-stage { inset: 0; border-radius: 0; z-index: 45; }
+.shell.mobile .stage-vol input { width: 70px; }
+.shell.mobile .stage-switch { display: none; }
+.shell.mobile .decorator { left: 0; right: 0; width: auto; top: auto; bottom: 0; max-height: 60%; border-radius: 16px 16px 0 0; }
+.shell.mobile .mini-map, .shell.mobile .space-pill { display: none; }
+/* Modales a pantalla completa */
+@media (max-width: 680px) {
+  .modal { width: 100% !important; max-width: 100%; height: 100%; max-height: 100dvh; border-radius: 0; }
+  .modal-backdrop { padding: 0; }
+  .notice-grid { grid-template-columns: 1fr 1fr; }
+  .board-tools { gap: 6px; }
+}

@@ -121,6 +121,30 @@ api.get('/office/logo', (req, res) => {
 
 // Servidores ICE para WebRTC. Con TURN_SECRET se generan credenciales temporales
 // (formato "TURN REST API" que entiende coturn con use-auth-secret).
+// TURN de Cloudflare (para hostings sin UDP, como Railway): credenciales de corta vida
+let cfIce = { at: 0, servers: null };
+async function cloudflareIce() {
+  const id = process.env.CF_TURN_KEY_ID;
+  const token = process.env.CF_TURN_API_TOKEN;
+  if (!id || !token) return null;
+  if (cfIce.servers && Date.now() - cfIce.at < 6 * 3600e3) return cfIce.servers;
+  try {
+    const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${id}/credentials/generate-ice-servers`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl: 24 * 3600 }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const servers = Array.isArray(j.iceServers) ? j.iceServers : [j.iceServers];
+    cfIce = { at: Date.now(), servers };
+    return servers;
+  } catch (e) {
+    console.warn('No se pudieron pedir credenciales TURN a Cloudflare:', e.message);
+    return cfIce.servers;
+  }
+}
+
 function iceServersFor(userId) {
   if (process.env.ICE_SERVERS) return parseJSON(process.env.ICE_SERVERS, []);
   const servers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
@@ -197,10 +221,12 @@ api.post('/invites/:token/accept', wrap((req, res) => {
 // Todo lo de abajo requiere sesión
 api.use(requireAuth);
 
-api.get('/ice', (req, res) => {
+api.get('/ice', wrap(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ iceServers: iceServersFor(req.user.id) });
-});
+  const servers = iceServersFor(req.user.id);
+  const cf = await cloudflareIce();
+  res.json({ iceServers: cf ? [...servers, ...cf] : servers });
+}));
 
 // ---------- Usuarios y perfil ----------
 api.get('/users', (req, res) => {

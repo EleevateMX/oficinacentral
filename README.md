@@ -75,6 +75,8 @@ Variables de entorno:
 | `OFFICE_NAME`, `OFFICE_THEME` | Nombre y tema inicial de la oficina (`nuvora`, `gtahub` o `custom`). Después se cambian en Preferencias → Marca de la oficina |
 | `TURN_SECRET`, `TURN_URLS` | Servidor TURN propio (coturn) con credenciales temporales |
 | `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
+| `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
+| `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |
 | `INSECURE_COOKIES=1` | Solo para pruebas en producción sin HTTPS |
@@ -127,3 +129,24 @@ client/src/      interfaz (React + Vite)
 - **Marca en el salón**: banderines, estandartes, neón con el nombre de la oficina, logo en el piso, pósters, luces, globos,
   banderitas de escritorio y astas con bandera. Si no se les elige color toman los del tema (rosa, amarillo y negro en GTAHUB;
   verde y mandarina en Nuvora) y los muros llevan una franja del color de la marca.
+
+## Trabajo diario en la oficina
+
+- **Pantalla compartida** como uso principal: calidad *Texto nítido*, *Equilibrada* o *Juegos y video* (hasta 60 fps), audio de la PC,
+  ancho de banda repartido entre quienes ven, vista en grande con pantalla completa y ventana flotante, y proyección en vivo sobre la TV o
+  la pantalla gigante de la sala.
+- **En turno**: cada quien marca en qué turno o servidor está (los define el admin en Marca de la oficina → Turnos).
+- **Salas apartadas**: una reunión del calendario con sala muestra "Ocupada" o la próxima hora en el mapa.
+- **Pizarrón** compartido en vivo y **tablero de anuncios** (tecla **X** junto al objeto, o clic).
+- **Invitaciones en lote**: pega una lista o sube un CSV y descarga los enlaces.
+- **Ambiente**: luz según la hora, música suave en zonas de descanso y pasos (Preferencias → Ambiente).
+- **Celular**: barra de pestañas abajo, chat con lista y conversación, controles compactos y zoom con dos dedos.
+
+## Pruebas
+
+```bash
+npm test          # pruebas del servidor y de los mapas (node:test)
+npm run test:e2e  # prueba en navegador con Playwright
+```
+
+GitHub Actions corre ambas en cada push y pull request (`.github/workflows/ci.yml`).

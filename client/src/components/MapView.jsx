@@ -3,6 +3,7 @@ import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush
 import { office, useOffice } from '../lib/store.js';
 import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt } from '@shared/map.js';
 import { videoFor, activeScreens } from '../lib/screens.js';
+import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize } from '@shared/catalog.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand } from '../lib/render.js';
 import { mapBrand } from '../lib/themes.js';
@@ -93,6 +94,7 @@ export default function MapView({ active }) {
 
   const stateRef = useRef({});
   const projRef = useRef([]);
+  const ambRef = useRef({});
   stateRef.current = { floor, me, users, editMode, ed, active };
 
   const config = useOffice((s) => s.config);
@@ -258,6 +260,16 @@ export default function MapView({ active }) {
         }
         p.moving = dist > 0.02;
         if (p.moving) p.anim = (p.anim || 0) + dt;
+      }
+
+      // Ambiente: pasos propios y música en zonas de descanso
+      const amb = office.state.prefs.ambience;
+      if (amb.steps && mine.moving) footstep(office.state.prefs.audio.notifVolume);
+      if (t - (ambRef.current.check || 0) > 1000) {
+        ambRef.current.check = t;
+        const ar = areaAt(f, mine.x, mine.y);
+        setMusic(!!amb.music && !!ar && MUSIC_AREAS.test(ar.name), amb.musicVolume);
+        ambRef.current.light = amb.dayNight ? daylight() : null;
       }
 
       // Cámara
@@ -438,6 +450,30 @@ export default function MapView({ active }) {
         ctx.globalAlpha = 1;
       }
 
+      // Luz según la hora: tinte y brillos de lámparas, neón y pantallas
+      const light = ambRef.current.light;
+      if (light) {
+        ctx.fillStyle = light.color;
+        ctx.fillRect(0, 0, f.W * T, f.H * T);
+        if (light.night > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = light.night * 0.55;
+          for (const o of f.objects) {
+            if (!(o.type in GLOWS)) continue;
+            const { w: ow, h: oh } = objSize(o);
+            const cx = (o.x + ow / 2) * T, cy = (o.y + oh / 2) * T;
+            const col = GLOWS[o.type] || o.color || CATALOG[o.type].color || themeColors().accent;
+            const r = Math.max(ow, oh) * T * 1.1 + 18;
+            const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, r);
+            g.addColorStop(0, rgba(col, .55)); g.addColorStop(1, rgba(col, 0));
+            ctx.fillStyle = g;
+            ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+          }
+          ctx.restore();
+        }
+      }
+
       // Etiquetas (en coordenadas de pantalla para que el texto sea nítido)
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
       ctx.textBaseline = 'middle';
@@ -520,7 +556,7 @@ export default function MapView({ active }) {
     };
 
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); setMusic(false); };
   }, [perf, screenToWorld, worldToScreen]);
 
   // Barra flotante del objeto seleccionado
@@ -551,7 +587,37 @@ export default function MapView({ active }) {
     return !!role && (CATALOG[o.type]?.kind === 'decor' || CATALOG[o.type]?.rotatable);
   };
 
+  // Zoom con dos dedos (celular / tableta)
+  const touches = useRef(new Map());
+  const pinchStart = (e) => {
+    if (e.pointerType !== 'touch') return false;
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.current.size === 2) {
+      const [a, b] = [...touches.current.values()];
+      input.current.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: view.current.zoom };
+      office.pathTarget = null;
+      return true;
+    }
+    return false;
+  };
+  const pinchMove = (e) => {
+    if (!touches.current.has(e.pointerId)) return false;
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pz = input.current.pinch;
+    if (!pz || touches.current.size < 2) return false;
+    const [a, b] = [...touches.current.values()];
+    const z = Math.min(3, Math.max(0.25, pz.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pz.d)));
+    view.current.zoom = z;
+    setZoomPct(Math.round(z * 100));
+    return true;
+  };
+  const pinchEnd = (e) => {
+    touches.current.delete(e.pointerId);
+    if (touches.current.size < 2) input.current.pinch = null;
+  };
+
   const onPointerDown = (e) => {
+    if (pinchStart(e)) return;
     if (e.button !== 0 || !floor) return;
     const w = tileAt(e);
     const tx = Math.floor(w.x), ty = Math.floor(w.y);
@@ -604,6 +670,7 @@ export default function MapView({ active }) {
   };
 
   const onPointerMove = (e) => {
+    if (pinchMove(e)) return;
     if (!floor) return;
     const r = canvasRef.current.getBoundingClientRect();
     input.current.pointer = { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -635,7 +702,8 @@ export default function MapView({ active }) {
     canvasRef.current.style.cursor = 'pointer';
   };
 
-  const onPointerUp = async () => {
+  const onPointerUp = async (e) => {
+    if (e) pinchEnd(e);
     input.current.pan = null;
     const ad = input.current.areaDrag;
     if (ad) {
@@ -710,6 +778,7 @@ export default function MapView({ active }) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={pinchEnd}
         onPointerLeave={() => { input.current.pointer = null; setHoverDesk(null); }}
         onWheel={onWheel}
         onContextMenu={(e) => { e.preventDefault(); if (editMode) office.set((st) => ({ editor: { ...st.editor, placing: null, tool: 'select' } })); }}

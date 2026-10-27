@@ -1,7 +1,7 @@
 import { SCREEN_PRESETS } from '../../lib/media.js';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2,
+  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
@@ -21,6 +21,7 @@ const SECTIONS = [
   { id: 'meetings', label: 'Reuniones', icon: Users },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
   { id: 'privacy', label: 'Privacidad y actividad', icon: Shield },
+  { id: 'ambience', label: 'Ambiente', icon: Music },
   { id: 'performance', label: 'Rendimiento', icon: Zap },
   { id: 'account', label: 'Cuenta', icon: KeyRound },
   { group: 'Oficina' },
@@ -68,6 +69,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'notifications' && <Notifications />}
             {cur === 'privacy' && <Privacy />}
             {cur === 'performance' && <Performance />}
+            {cur === 'ambience' && <AmbiencePrefs />}
             {cur === 'account' && <Account />}
             {cur === 'members' && <Members initialTab={modal?.tab} />}
             {cur === 'office' && <OfficeAdmin />}
@@ -318,6 +320,28 @@ function Privacy() {
         Por privacidad, el navegador no permite saber qué aplicación tienes abierta, así que solo se comparte el estado que tú escribas.
         Tu ubicación en el mapa solo es visible para miembros de la oficina.
       </p>
+    </Section>
+  );
+}
+
+function AmbiencePrefs() {
+  const [a, set] = usePref('ambience');
+  return (
+    <Section title="Ambiente de la oficina">
+      <Row title="Luz según la hora" desc="Amanecer, atardecer y noche con lámparas encendidas, según tu hora local">
+        <Toggle checked={a.dayNight} onChange={(v) => set('dayNight', v)} />
+      </Row>
+      <Row title="Música suave" desc="Suena solo en el lounge, la cocina, la zona de descanso, la sala de juegos y el jardín">
+        <Toggle checked={a.music} onChange={(v) => set('music', v)} />
+      </Row>
+      {a.music && (
+        <Row title="Volumen de la música">
+          <input type="range" min="0.05" max="1" step="0.05" value={a.musicVolume} onChange={(e) => set('musicVolume', Number(e.target.value))} />
+        </Row>
+      )}
+      <Row title="Sonido de pasos" desc="Al caminar por la oficina">
+        <Toggle checked={a.steps} onChange={(v) => set('steps', v)} />
+      </Row>
     </Section>
   );
 }

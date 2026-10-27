@@ -16,6 +16,7 @@ export const DEFAULT_PREFS = {
   meetings: { maxTiles: 9 },
   notifications: { remind5: true, remindStart: true, remindSound: true, chat: 'dms', chatSound: 'dms', desktop: false },
   performance: { mode: 'balanced' },
+  ambience: { dayNight: true, music: false, musicVolume: 0.5, steps: false },
   devices: { micId: '', camId: '', speakerId: '' },
 };
 
@@ -64,7 +65,8 @@ class Office {
       editMode: null, // null | 'decor' | 'build'
       editor: { tool: 'select', placing: null, selected: null, history: { undo: 0, redo: 0 }, areaTarget: null },
       connected: false,
-      sidebarCollapsed: false,
+      sidebarCollapsed: typeof window !== 'undefined' && window.matchMedia?.('(max-width: 680px)').matches,
+      mobilePane: 'list', // en celular: lista o conversación abierta
     };
   }
 
@@ -399,6 +401,7 @@ class Office {
     this.set((st) => ({
       view: 'chat',
       conv,
+      mobilePane: 'main',
       chat: {
         channels: st.chat.channels.map((c) => (c.conv === conv ? { ...c, unread: 0 } : c)),
         dms: st.chat.dms.some((d) => d.conv === conv)
