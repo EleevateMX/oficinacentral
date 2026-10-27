@@ -324,7 +324,9 @@ api.post('/client-errors', (req, res) => {
   const stack = String(req.body?.stack || '').slice(0, 1500);
   const where = String(req.body?.url || '').slice(0, 200);
   const ua = String(req.headers['user-agent'] || '').slice(0, 160);
-  if (msg) alert(`Error en el navegador: ${msg}`, `${req.user.display_name} · ${where}\n${ua}\n${stack}`, { level: 'warn', key: `client:${msg}` });
+  const mode = req.body?.mode === 'app' ? 'app instalada' : 'navegador';
+  // El mensaje va también en el detalle: al copiar el aviso no se pierde
+  if (msg) alert(`Error en el navegador: ${msg}`, `Error: ${msg}\n${req.user.display_name} · ${where} · ${mode}\n${ua}${stack ? `\n${stack}` : ''}`, { level: 'warn', key: `client:${msg}` });
   res.json({ ok: true });
 });
 
