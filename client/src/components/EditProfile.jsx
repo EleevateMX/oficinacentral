@@ -6,7 +6,7 @@ import { Modal, AvatarCanvas, initials, Select } from './ui.jsx';
 import { SPRITE_OPTIONS, STYLE_NAMES, PARTS, PACKS, PRESETS, normalizeSpec, randomSpec } from '@shared/sprite.js';
 import { Shuffle, Plus } from 'lucide-react';
 import { timezones, tzOffsetLabel } from '../lib/time.js';
-import { PETS, PET_COLORS } from '@shared/pets.js';
+import { PETS, PET_COLORS, petDef } from '@shared/pets.js';
 import { drawPet } from '../lib/pets.js';
 
 // Reduce la imagen a 256×256 (recorte cuadrado centrado)
@@ -245,21 +245,7 @@ export function AvatarEditor({ avatar, onChange: rawChange }) {
             </>
           )}
           {tab === 'pet' && (
-            <>
-              <div className="ae-label">Te acompaña por la oficina</div>
-              <div className="chip-row">
-                {PETS.map((p) => (
-                  <button type="button" key={p.id} className={`chip-btn ${(avatar.pet || 'none') === p.id ? 'on' : ''}`} onClick={() => rawChange({ ...avatar, pet: p.id, petColor: undefined })}>{p.name}</button>
-                ))}
-              </div>
-              {avatar.pet && avatar.pet !== 'none' && (
-                <>
-                  <div className="ae-label">Color</div>
-                  <Swatches label="Color de la mascota" options={PET_COLORS} value={avatar.petColor || PETS.find((p) => p.id === avatar.pet)?.color} onChange={(c) => rawChange({ ...avatar, petColor: c })} />
-                  <PetPreview kind={avatar.pet} color={avatar.petColor} />
-                </>
-              )}
-            </>
+            <PetTab avatar={avatar} onChange={rawChange} />
           )}
           {tab === 'acc' && (
             <>
@@ -295,4 +281,81 @@ function PetPreview({ kind, color }) {
     return () => cancelAnimationFrame(raf);
   }, [kind, color]);
   return <canvas ref={ref} width={160} height={110} className="pet-preview" />;
+}
+
+// Mascota: especie/raza, nombre, color y foto de tu mascota real
+function PetTab({ avatar, onChange }) {
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  const [q, setQ] = useState('');
+  const fileRef = useRef(null);
+  const cur = petDef(avatar.pet || 'none');
+  const groups = ['Perros', 'Gatos', 'Otros'];
+  const match = (p) => !q || p.name.toLowerCase().includes(q.toLowerCase());
+  const upload = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      await api.put('/me/pet-photo', { dataUrl: await resizeImage(f) });
+      office.toast({ title: 'Foto de tu mascota guardada 🐾' });
+    } catch (err) {
+      office.toast({ title: err.message || 'No se pudo subir la foto', kind: 'error' });
+    }
+  };
+  return (
+    <>
+      <div className="pet-head">
+        {cur && cur.id !== 'none' ? <PetPreview kind={cur.id} color={avatar.petColor} /> : <div className="pet-preview empty">Sin mascota</div>}
+        <div className="pet-fields">
+          <label className="ae-label">Nombre de tu mascota</label>
+          <input placeholder="Firulais, Michi, Toby…" value={avatar.petName || ''} maxLength={20} onChange={(e) => onChange({ ...avatar, petName: e.target.value })} disabled={!cur || cur.id === 'none'} />
+          <label className="ae-label">Foto de tu mascota real (opcional)</label>
+          <div className="row gap8">
+            {me.petPhotoUrl && <img className="pet-photo" src={me.petPhotoUrl} alt="Tu mascota" />}
+            <button type="button" className="btn tiny" onClick={() => fileRef.current.click()}>{me.petPhotoUrl ? 'Cambiar foto' : 'Subir foto'}</button>
+            {me.petPhotoUrl && <button type="button" className="btn tiny" onClick={() => api.del('/me/pet-photo').catch(() => {})}>Quitar</button>}
+          </div>
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={upload} />
+        </div>
+      </div>
+      {cur && cur.id !== 'none' && (
+        <>
+          <div className="ae-label">Color</div>
+          <Swatches label="Color de la mascota" options={PET_COLORS} value={avatar.petColor || cur.color} onChange={(c) => onChange({ ...avatar, petColor: c })} />
+        </>
+      )}
+      <input className="pet-search" placeholder="Buscar raza o animal…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <button type="button" className={`chip-btn ${!cur || cur.id === 'none' ? 'on' : ''}`} onClick={() => onChange({ ...avatar, pet: 'none', petColor: undefined })}>Sin mascota</button>
+      {groups.map((g) => {
+        const list = PETS.filter((p) => p.group === g && match(p));
+        if (!list.length) return null;
+        return (
+          <React.Fragment key={g}>
+            <div className="ae-label">{g}</div>
+            <div className="pet-grid">
+              {list.map((p) => (
+                <button type="button" key={p.id} className={`pet-card ${cur?.id === p.id ? 'on' : ''}`} onClick={() => onChange({ ...avatar, pet: p.id, petColor: undefined })}>
+                  <PetThumb kind={p.id} />
+                  <span>{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+function PetThumb({ kind }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    drawPet(ctx, kind, null, 16, 21, 1, 0, false);
+  }, [kind]);
+  return <canvas ref={ref} width={64} height={48} />;
 }

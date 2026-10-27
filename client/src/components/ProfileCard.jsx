@@ -1,3 +1,4 @@
+import { petDef } from '@shared/pets.js';
 import { since } from '../lib/time.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase, MonitorUp } from 'lucide-react';
@@ -43,6 +44,19 @@ export default function ProfileCard({ userId }) {
       </div>
       {u.statusText && <div className="pc-status">{u.statusText}</div>}
       {u.online && u.shift && <div className="pc-status">🖥️ En turno {u.shift} · {since(u.shiftAt)}</div>}
+      {(() => {
+        const pd = u.avatar?.pet && u.avatar.pet !== 'none' ? petDef(u.avatar.pet) : null;
+        if (!pd && !u.petPhotoUrl) return null;
+        return (
+          <div className="pc-pet">
+            {u.petPhotoUrl && <img src={u.petPhotoUrl} alt="Mascota" />}
+            <div>
+              <b>🐾 {u.avatar?.petName || 'Su mascota'}</b>
+              {pd && <span>{pd.name}</span>}
+            </div>
+          </div>
+        );
+      })()}
       <div className="pc-actions">
         {isMe ? (
           <button className="btn primary flex1" onClick={() => office.set({ modal: { type: 'profile' }, profileCard: null })}><User size={15} /> Editar perfil</button>

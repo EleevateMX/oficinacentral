@@ -920,13 +920,16 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 @keyframes rec-blink { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .rec-badge, .rec-dot { animation: none; } }
 
-/* Ausente: el mapa se ve opaco hasta que vuelvas */
-.map-wrap.is-away canvas { filter: grayscale(.7) brightness(.55); transition: filter .4s; }
-.away-veil { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(10,12,20,.25); pointer-events: none; }
-.away-card { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
-  background: var(--panel); color: var(--text); padding: 18px 22px; border-radius: 16px; box-shadow: var(--shadow); max-width: 320px; }
-.away-card b { font-size: 16px; }
-.away-card span { font-size: 13px; color: var(--muted, #888); margin-bottom: 6px; }
+/* Ausente (como Gather): el mapa opaco y abajo una barra para volver */
+.map-wrap.is-away canvas { filter: saturate(.55) brightness(.5); transition: filter .35s; }
+.map-wrap canvas { transition: filter .35s; }
+.away-veil { position: absolute; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14px; pointer-events: none; }
+.away-bar { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 10px; border-radius: 18px;
+  background: var(--ink, #1d1d22); color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.35); animation: deskTipIn .2s ease-out; }
+.away-who { display: flex; flex-direction: column; line-height: 1.2; min-width: 90px; }
+.away-who b { font-size: 14px; }
+.away-who span { font-size: 12px; color: #b9bcc4; }
+.away-bar .btn { border-radius: 12px; padding: 10px 18px; }
 
 .status-input { width: calc(100% - 16px); margin: 6px 8px 4px; font-size: 13px; padding: 7px 10px; }
 .pet-preview { display: block; margin-top: 10px; border-radius: 12px; background: var(--bg-soft, rgba(127,127,127,.1)); image-rendering: pixelated; }
@@ -934,3 +937,18 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 .discord-wait { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; text-align: center;
   background: color-mix(in srgb, #5865F2 14%, transparent); color: var(--text); }
 .discord-wait b { letter-spacing: 3px; font-size: 15px; }
+
+.pet-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 8px; }
+.pet-head .pet-preview { margin-top: 0; flex: none; }
+.pet-preview.empty { width: 160px; height: 110px; display: grid; place-items: center; color: var(--muted, #888); font-size: 13px; }
+.pet-fields { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.pet-photo { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; }
+.pet-search { width: 100%; margin: 10px 0 8px; }
+.pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.pet-card { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 10px; border: 1px solid var(--line, rgba(127,127,127,.2)); background: transparent; color: var(--text); font-size: 11px; cursor: pointer; text-align: center; }
+.pet-card canvas { image-rendering: pixelated; }
+.pet-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.pc-pet { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; padding: 8px; border-radius: 12px; background: var(--bg-soft, rgba(127,127,127,.1)); }
+.pc-pet img { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; }
+.pc-pet div { display: flex; flex-direction: column; font-size: 13px; }
+.pc-pet span { font-size: 12px; color: var(--muted, #888); }

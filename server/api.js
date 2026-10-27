@@ -15,7 +15,7 @@ import { registerDiscordRoutes, discordEnabled } from './discord.js';
 import { openShift, shiftReport } from './shifts.js';
 import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
-import { PET_IDS } from '../shared/pets.js';
+import { PET_IDS, cleanPetName } from '../shared/pets.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
 export const api = express.Router();
@@ -46,6 +46,7 @@ export function publicUser(u) {
     role: u.role,
     avatar: parseJSON(u.avatar, {}),
     photoUrl: u.photo ? `/api/users/${u.id}/photo?v=${u.photo_v}` : null,
+    petPhotoUrl: u.pet_photo ? `/api/users/${u.id}/pet-photo?v=${u.pet_photo_v}` : null,
     timezone: u.timezone,
     statusText: u.status_text || '',
     shift: u.shift || null,
@@ -338,6 +339,19 @@ api.get('/users', (req, res) => {
   res.json({ users: rows.map(publicUser) });
 });
 
+function sendDataUrl(res, dataUrl) {
+  const m = dataUrl?.match(/^data:(image\/(png|jpeg|webp|gif));base64,(.+)$/);
+  if (!m) return res.status(404).end();
+  res.setHeader('Content-Type', m[1]);
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.send(Buffer.from(m[3], 'base64'));
+}
+// Foto de la mascota real
+api.get('/users/:id/pet-photo', (req, res) => {
+  const u = db.prepare('SELECT pet_photo FROM users WHERE id = ?').get(Number(req.params.id));
+  sendDataUrl(res, u?.pet_photo);
+});
+
 api.get('/users/:id/photo', (req, res) => {
   const u = db.prepare('SELECT photo FROM users WHERE id = ?').get(Number(req.params.id));
   const m = u?.photo?.match(/^data:(image\/(png|jpeg|webp|gif));base64,(.+)$/);
@@ -347,7 +361,7 @@ api.get('/users/:id/photo', (req, res) => {
   res.send(Buffer.from(m[3], 'base64'));
 });
 
-const AVATAR_KEYS = [...SPEC_KEYS, 'pet', 'petColor'];
+const AVATAR_KEYS = [...SPEC_KEYS, 'pet', 'petColor', 'petName'];
 
 api.patch('/me', wrap((req, res) => {
   const b = req.body || {};
@@ -365,6 +379,7 @@ api.patch('/me', wrap((req, res) => {
     avatar = {};
     for (const k of AVATAR_KEYS) if (typeof b.avatar[k] === 'string') avatar[k] = b.avatar[k].slice(0, 40);
     if (avatar.pet && !PET_IDS.includes(avatar.pet)) delete avatar.pet;
+    if (avatar.petName !== undefined) avatar.petName = cleanPetName(avatar.petName) || undefined;
     if (avatar.petColor && !/^#[0-9a-fA-F]{6}$/.test(avatar.petColor)) delete avatar.petColor;
     if (avatar.sprite && !db.prepare('SELECT 1 FROM characters WHERE id = ?').get(avatar.sprite)) return fail(res, 400, 'Ese personaje ya no existe');
   }
@@ -394,6 +409,21 @@ api.put('/me/photo', wrap((req, res) => {
   broadcastUser(req.user.id);
   res.json({ user: publicUser(getUser(req.user.id)) });
 }));
+
+api.put('/me/pet-photo', wrap((req, res) => {
+  const dataUrl = String(req.body?.dataUrl || '');
+  if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(dataUrl)) return fail(res, 400, 'Imagen inválida');
+  if (dataUrl.length > 700_000) return fail(res, 413, 'La imagen es muy grande');
+  db.prepare('UPDATE users SET pet_photo = ?, pet_photo_v = pet_photo_v + 1 WHERE id = ?').run(dataUrl, req.user.id);
+  broadcastUser(req.user.id);
+  res.json({ user: publicUser(getUser(req.user.id)) });
+}));
+
+api.delete('/me/pet-photo', (req, res) => {
+  db.prepare('UPDATE users SET pet_photo = NULL, pet_photo_v = pet_photo_v + 1 WHERE id = ?').run(req.user.id);
+  broadcastUser(req.user.id);
+  res.json({ user: publicUser(getUser(req.user.id)) });
+});
 
 api.delete('/me/photo', (req, res) => {
   db.prepare('UPDATE users SET photo = NULL, photo_v = photo_v + 1 WHERE id = ?').run(req.user.id);

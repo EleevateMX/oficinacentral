@@ -680,6 +680,18 @@ export default function MapView({ active }) {
           });
           ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         }
+        // Nombre de la mascota, chiquito debajo de ella
+        const petName = u.avatar?.petName;
+        if (petName && u.avatar?.pet && u.avatar.pet !== 'none' && p.petX != null && v.zoom >= 0.9) {
+          ctx.font = '600 10px "Public Sans", system-ui, sans-serif';
+          const pp = worldToScreen(p.petX + 0.5, p.petY + 1.05);
+          const pw = ctx.measureText(petName).width + 10;
+          ctx.fillStyle = 'rgba(16,16,16,.6)';
+          ctx.beginPath(); ctx.roundRect(pp.x - pw / 2, pp.y - 7, pw, 14, 7); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText(petName, pp.x - pw / 2 + 5, pp.y + 0.5);
+          ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        }
         // Estado personalizado (🍔 Comiendo, 🎧 Concentrado…) arriba del nombre
         if (u.statusText && v.zoom >= 0.55 && !(office.bubbles[id]?.until > now)) {
           ctx.font = '500 11px "Public Sans", system-ui, sans-serif';
@@ -960,10 +972,13 @@ export default function MapView({ active }) {
     <div className={`map-wrap ${myAway ? 'is-away' : ''}`} ref={wrapRef} style={{ display: active ? 'block' : 'none' }}>
       {myAway && (
         <div className="away-veil">
-          <div className="away-card">
-            <b>Estás ausente</b>
-            <span>Los demás te ven en gris. Vuelve cuando quieras.</span>
-            <button className="btn primary" onClick={() => office.setStatus('active')}>Volver a estar en línea</button>
+          <div className="away-bar">
+            <Avatar user={{ ...users[me.id], online: true }} size={38} />
+            <div className="away-who">
+              <b>{users[me.id]?.displayName}</b>
+              <span>Ausente</span>
+            </div>
+            <button className="btn primary" onClick={() => office.setStatus('active')}>Volver a la oficina</button>
           </div>
         </div>
       )}
@@ -1050,7 +1065,7 @@ export default function MapView({ active }) {
         <button className="icon-btn" title="Ver todo el mapa" onClick={fitMap}><MapIcon size={18} /></button>
       </div>
 
-      <ControlBar />
+      {!myAway && <ControlBar />}
     </div>
   );
 }

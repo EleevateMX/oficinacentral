@@ -164,6 +164,8 @@ function addColumn(table, col, def) {
 }
 addColumn('areas', 'shape', "TEXT NOT NULL DEFAULT 'soft'");
 addColumn('users', 'shift', 'TEXT');
+addColumn('users', 'pet_photo', 'TEXT');
+addColumn('users', 'pet_photo_v', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('messages', 'attachments', 'TEXT');
 addColumn('users', 'discord_id', 'TEXT');
 addColumn('users', 'discord_name', 'TEXT');
