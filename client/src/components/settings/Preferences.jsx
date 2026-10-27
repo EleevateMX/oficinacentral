@@ -358,7 +358,7 @@ function AmbiencePrefs() {
   const [a, set] = usePref('ambience');
   return (
     <Section title="Ambiente de la oficina">
-      <Row title="Luz según la hora" desc="Amanecer, atardecer y noche con lámparas encendidas, según tu hora local">
+      <Row title="Luz según la hora" desc="Amanecer, atardecer y noche con lámparas encendidas, según tu hora local. Apagada, el mapa siempre se ve claro.">
         <Toggle checked={a.dayNight} onChange={(v) => set('dayNight', v)} />
       </Row>
       <Row title="Música suave" desc="Suena solo en el lounge, la cocina, la zona de descanso, la sala de juegos y el jardín">
@@ -372,6 +372,11 @@ function AmbiencePrefs() {
       <Row title="Sonido de pasos" desc="Al caminar por la oficina">
         <Toggle checked={a.steps} onChange={(v) => set('steps', v)} />
       </Row>
+      {a.steps && (
+        <Row title="Volumen de los pasos">
+          <input type="range" min="0.05" max="1" step="0.05" value={a.stepsVolume ?? 0.5} onChange={(e) => set('stepsVolume', Number(e.target.value))} />
+        </Row>
+      )}
     </Section>
   );
 }

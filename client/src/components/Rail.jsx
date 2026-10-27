@@ -27,8 +27,10 @@ export default function Rail() {
 
   useEffect(() => {
     const total = unreadChat + unreadNotif;
-    document.title = total ? `(${total}) Nuvora` : 'Nuvora';
-  }, [unreadChat, unreadNotif]);
+    const name = config.theme === 'nuvora' && !config.logoUrl ? 'Nuvora' : config.officeName || 'Nuvora';
+    const title = name === 'Nuvora' ? 'Nuvora — Oficina virtual' : `${name} — Oficina virtual by Nuvora`;
+    document.title = total ? `(${total}) ${title}` : title;
+  }, [unreadChat, unreadNotif, config.officeName, config.theme, config.logoUrl]);
 
   const item = (id, Icon, label, badge) => (
     <button className={`rail-btn ${view === id ? 'on' : ''}`} onClick={() => office.set((st) => ({ view: id, sidebarCollapsed: id === 'map' && st.view === 'map' ? !st.sidebarCollapsed : st.sidebarCollapsed }))} title={label} aria-label={label}>
@@ -51,7 +53,7 @@ export default function Rail() {
       {item('activity', Bell, 'Actividad', unreadNotif)}
       <div className="rail-spacer" />
       {(config.logoUrl || config.theme === 'gtahub') && (
-        <a className="rail-btn rail-by" href="https://nuvora.mx" target="_blank" rel="noreferrer noopener" title="Hecho con Nuvora" aria-label="Hecho con Nuvora">
+        <a className="rail-btn rail-by" href="https://nuvora.mx" target="_blank" rel="noreferrer noopener" title="Estamos construyendo cosas increíbles" aria-label="Nuvora: estamos construyendo cosas increíbles">
           <Simbolo size={20} variante={dark ? 'negativo' : 'positivo'} />
         </a>
       )}

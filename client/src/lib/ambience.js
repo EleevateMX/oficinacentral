@@ -92,24 +92,40 @@ export function setMusic(on, volume = 0.25) {
 
 // ---------- Pasos ----------
 let lastStep = 0;
-export function footstep(volume = 0.3) {
+let stepSide = 0;
+// Pasito suave: golpe grave + roce corto, alternando pie izquierdo y derecho
+export function footstep(volume = 0.5) {
   const now = performance.now();
-  if (now - lastStep < 200 || !volume) return;
+  if (now - lastStep < 270 || !volume) return;
   lastStep = now;
+  stepSide ^= 1;
   try {
     const ac = audio();
     const t = ac.currentTime;
-    const buf = ac.createBuffer(1, ac.sampleRate * 0.05, ac.sampleRate);
+    const thump = ac.createOscillator();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(stepSide ? 150 : 132, t);
+    thump.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+    const tg = ac.createGain();
+    tg.gain.setValueAtTime(0.0001, t);
+    tg.gain.exponentialRampToValueAtTime(0.22 * volume, t + 0.006);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.04), ac.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 3;
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 4;
     const src = ac.createBufferSource();
     src.buffer = buf;
     const f = ac.createBiquadFilter();
-    f.type = 'bandpass';
-    f.frequency.value = 500 + Math.random() * 300;
-    const g = ac.createGain();
-    g.gain.value = 0.25 * volume;
-    src.connect(f).connect(g).connect(ac.destination);
+    f.type = 'lowpass';
+    f.frequency.value = 1400 + Math.random() * 400;
+    const ng = ac.createGain();
+    ng.gain.value = 0.07 * volume;
+    const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+    const out = pan || ac.destination;
+    if (pan) { pan.pan.value = stepSide ? 0.15 : -0.15; pan.connect(ac.destination); }
+    thump.connect(tg).connect(out);
+    src.connect(f).connect(ng).connect(out);
+    thump.start(t); thump.stop(t + 0.12);
     src.start(t);
   } catch { /* sin audio */ }
 }

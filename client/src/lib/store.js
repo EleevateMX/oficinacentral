@@ -7,6 +7,7 @@ import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
 
 export const DEFAULT_PREFS = {
+  v: 2,
   colorMode: 'light',
   skipWelcome: true,
   calendar: { weekDays: 7, firstDay: 0 },
@@ -16,7 +17,7 @@ export const DEFAULT_PREFS = {
   meetings: { maxTiles: 9 },
   notifications: { remind5: true, remindStart: true, remindSound: true, chat: 'dms', chatSound: 'dms', desktop: false },
   performance: { mode: 'balanced' },
-  ambience: { dayNight: true, music: false, musicVolume: 0.5, steps: false },
+  ambience: { dayNight: false, music: false, musicVolume: 0.5, steps: true, stepsVolume: 0.5 },
   devices: { micId: '', camId: '', speakerId: '' },
 };
 
@@ -25,6 +26,8 @@ function mergePrefs(p = {}) {
   for (const k of Object.keys(DEFAULT_PREFS)) {
     if (typeof DEFAULT_PREFS[k] === 'object') out[k] = { ...DEFAULT_PREFS[k], ...(p[k] || {}) };
   }
+  // v2: el mapa se ve claro (sin tinte de noche) y suenan los pasos
+  if ((p.v || 0) < 2) { out.ambience = { ...out.ambience, dayNight: false, steps: true }; out.v = 2; }
   return out;
 }
 

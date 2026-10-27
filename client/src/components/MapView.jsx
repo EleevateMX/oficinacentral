@@ -274,7 +274,7 @@ export default function MapView({ active }) {
 
       // Ambiente: pasos propios y música en zonas de descanso
       const amb = office.state.prefs.ambience;
-      if (amb.steps && mine.moving) footstep(office.state.prefs.audio.notifVolume);
+      if (amb.steps && mine.moving) footstep(amb.stepsVolume ?? 0.5);
       if (t - (ambRef.current.check || 0) > 1000) {
         ambRef.current.check = t;
         const ar = areaAt(f, mine.x, mine.y);
@@ -833,11 +833,21 @@ export default function MapView({ active }) {
     }
   };
 
+  const myAway = users[me.id]?.status === 'away';
   const hoverOwner = hoverDesk && users[floor?.claims[hoverDesk.desk.id]];
   const isMyDesk = hoverDesk && floor?.claims[hoverDesk.desk.id] === me.id;
 
   return (
-    <div className="map-wrap" ref={wrapRef} style={{ display: active ? 'block' : 'none' }}>
+    <div className={`map-wrap ${myAway ? 'is-away' : ''}`} ref={wrapRef} style={{ display: active ? 'block' : 'none' }}>
+      {myAway && (
+        <div className="away-veil">
+          <div className="away-card">
+            <b>Estás ausente</b>
+            <span>Los demás te ven en gris. Vuelve cuando quieras.</span>
+            <button className="btn primary" onClick={() => office.setStatus('active')}>Volver a estar en línea</button>
+          </div>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         onPointerDown={onPointerDown}

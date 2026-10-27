@@ -104,7 +104,7 @@ api.get('/health', (req, res) => {
 // Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
 const THEMES = ['nuvora', 'gtahub', 'custom'];
 
-function officeConfig() {
+export function officeConfig() {
   const logoV = getSetting('logo_v');
   return {
     officeName: getSetting('office_name') || process.env.OFFICE_NAME || 'Mi oficina',
