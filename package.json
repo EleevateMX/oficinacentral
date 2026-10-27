@@ -11,7 +11,9 @@
     "build": "vite build",
     "start": "NODE_ENV=production node server/index.js",
     "create-admin": "node server/cli/create-admin.js",
-    "backup": "node server/cli/backup.js"
+    "backup": "node server/cli/backup.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "test:e2e": "npm run build && node --test --test-concurrency=1 \"tests/e2e/*.test.js\""
   },
   "engines": {
     "node": ">=22.5"
