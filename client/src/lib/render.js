@@ -81,6 +81,34 @@ const FLOORS = {
     if (hash(i, j) > 0.5) R(ctx, '#8fd0ea', x + 6 + hash(i, j, 5) * 14, y + 10 + hash(i, j, 6) * 12, 8, 2);
     if (hash(i, j, 9) > 0.85) { circle(ctx, '#f28c38', x + 16, y + 16, 3); R(ctx, '#f28c38', x + 10, y + 15, 4, 2); }
   },
+  blue(ctx, x, y, i, j) {
+    R(ctx, '#8c9fd6', x, y, T, T);
+    if ((i + j) % 2 === 0) R(ctx, '#879ad1', x, y, T, T);
+    R(ctx, '#97a9dc', x + 3 + hash(i, j) * 20, y + 4 + hash(i, j, 1) * 20, 2, 2);
+  },
+  green(ctx, x, y, i, j) { pattern(ctx, x, y, i, j, '#9fcf95', '#abd8a1'); },
+  terra(ctx, x, y, i, j) { pattern(ctx, x, y, i, j, '#e3a27f', '#eab08f'); },
+  slate(ctx, x, y, i, j) {
+    R(ctx, '#4b5160', x, y, T, T);
+    if ((i + j) % 2 === 0) R(ctx, '#474d5b', x, y, T, T);
+    R(ctx, '#545b6b', x, y, T, 1);
+  },
+  concrete(ctx, x, y, i, j) {
+    R(ctx, '#cfd2d4', x, y, T, T);
+    if (hash(i, j) > 0.5) R(ctx, '#c7cacc', x + hash(i, j, 2) * 20, y + hash(i, j, 3) * 20, 10, 6);
+    if (i % 4 === 0) R(ctx, '#bfc2c5', x, y, 1, T);
+    if (j % 4 === 0) R(ctx, '#bfc2c5', x, y, T, 1);
+  },
+  hex(ctx, x, y, i, j) {
+    R(ctx, '#181818', x, y, T, T);
+    ctx.strokeStyle = (i * 7 + j * 3) % 11 === 0 ? 'rgba(254,51,119,.55)' : '#262626';
+    ctx.lineWidth = 1.5;
+    const cx = x + 16 + (j % 2 ? 8 : -8), cy = y + 16;
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) { const a = Math.PI / 3 * k; ctx[k ? 'lineTo' : 'moveTo'](cx + 9 * Math.cos(a), cy + 9 * Math.sin(a)); }
+    ctx.closePath();
+    ctx.stroke();
+  },
   path(ctx, x, y, i, j) {
     R(ctx, '#ddd2bf', x, y, T, T);
     RR(ctx, '#cfc2ab', x + 3 + hash(i, j) * 6, y + 4, 12, 9, 3);
@@ -118,6 +146,118 @@ function drawWall(ctx, f, i, j) {
   }
 }
 
+// Borde de cada alfombra de área
+const RUG_EDGE = {
+  carpet: '#79818a', purple: '#6668b3', lilac: '#b07fc0', rose: '#d9867c', rug: '#78b8d6', mint: '#7cc4a8',
+  sand: '#e2c49f', lavender: '#d8c0a6', tile: '#d3d2ca', wood2: '#a8805a', blue: '#7487c4', green: '#86bd7b',
+  terra: '#cf8c69', slate: '#3a3f4b', concrete: '#b5b8bb', hex: '#FE3377', kitchen: '#cfcfcf', pattern: '#9db6e0',
+};
+
+function areaPath(ctx, a) {
+  const pad = 0.12 * T;
+  const x = a.x * T + pad, y = a.y * T + pad, w = a.w * T - pad * 2, h = a.h * T - pad * 2;
+  ctx.beginPath();
+  if (a.shape === 'round') ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else if (a.shape === 'square') ctx.rect(x, y, w, h);
+  else ctx.roundRect(x, y, w, h, Math.min(T * 1.4, w / 3, h / 3));
+}
+
+function drawAreaRug(ctx, f, a) {
+  const paint = FLOORS[a.color];
+  if (!paint) return;
+  ctx.save();
+  areaPath(ctx, a);
+  ctx.clip();
+  for (let j = a.y; j < a.y + a.h; j++) for (let i = a.x; i < a.x + a.w; i++) {
+    if (j >= 0 && i >= 0 && j < f.H && i < f.W && f.walls[j][i] !== true) paint(ctx, i * T, j * T, i, j);
+  }
+  ctx.restore();
+  ctx.save();
+  areaPath(ctx, a);
+  ctx.strokeStyle = RUG_EDGE[a.color] || 'rgba(0,0,0,.18)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Formas curvas (estanques, caminos, jardines) dibujadas sobre las casillas
+const DECAL_EDGE = { water: '#3f97bd', path: '#c9bba3', grass2: '#97c98a' };
+function drawDecal(ctx, f, d) {
+  const paint = FLOORS[d.t];
+  if (!paint) return;
+  if (d.rect) {
+    const [x, y, w, h] = d.rect;
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(x * T, y * T, w * T, h * T, T * 0.4); ctx.clip();
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) paint(ctx, i * T, j * T, i, j);
+    ctx.restore();
+    return;
+  }
+  // Las casillas marcadas que quedan fuera de la curva se repintan con el suelo de alrededor
+  const under = FLOORS[d.under];
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(d.cx * T, d.cy * T, d.rx * T + T * 1.5, d.ry * T + T * 1.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(d.cx * T, d.cy * T, d.rx * T, d.ry * T, 0, 0, Math.PI * 2);
+  ctx.clip('evenodd');
+  if (under) for (const [i, j] of d.cells || []) under(ctx, i * T, j * T, i, j);
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(d.cx * T, d.cy * T, d.rx * T, d.ry * T, 0, 0, Math.PI * 2);
+  ctx.clip();
+  for (let j = Math.floor(d.cy - d.ry); j <= Math.ceil(d.cy + d.ry); j++) for (let i = Math.floor(d.cx - d.rx); i <= Math.ceil(d.cx + d.rx); i++) {
+    if (j >= 0 && i >= 0 && j < f.H && i < f.W) paint(ctx, i * T, j * T, i, j);
+  }
+  ctx.restore();
+  ctx.beginPath();
+  ctx.ellipse(d.cx * T, d.cy * T, d.rx * T, d.ry * T, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = DECAL_EDGE[d.t] || 'rgba(0,0,0,.15)';
+  ctx.lineWidth = d.t === 'water' ? 4 : 2;
+  ctx.stroke();
+}
+
+// Sombra suave que dejan los muros sobre el suelo
+function drawWallShadows(ctx, f) {
+  for (let j = 1; j < f.H; j++) for (let i = 0; i < f.W; i++) {
+    if (f.walls[j][i]) continue;
+    const x = i * T, y = j * T;
+    if (f.walls[j - 1][i] === true) {
+      const g = ctx.createLinearGradient(0, y, 0, y + 10);
+      g.addColorStop(0, 'rgba(20,24,30,.28)'); g.addColorStop(1, 'rgba(20,24,30,0)');
+      ctx.fillStyle = g; ctx.fillRect(x, y, T, 10);
+    }
+    if (i > 0 && f.walls[j][i - 1] === true) {
+      const g = ctx.createLinearGradient(x, 0, x + 6, 0);
+      g.addColorStop(0, 'rgba(20,24,30,.18)'); g.addColorStop(1, 'rgba(20,24,30,0)');
+      ctx.fillStyle = g; ctx.fillRect(x, y, 6, T);
+    }
+  }
+}
+
+// Mampara de cristal
+function drawGlass(ctx, f, i, j) {
+  const x = i * T, y = j * T;
+  const isW = (a, b) => !!f.walls[b]?.[a] && f.walls[b][a] !== 'water';
+  const horizontal = isW(i - 1, j) || isW(i + 1, j) || !(isW(i, j - 1) || isW(i, j + 1));
+  if (horizontal) {
+    R(ctx, 'rgba(20,24,30,.12)', x, y + 22, T, 5);
+    R(ctx, 'rgba(178,222,245,.55)', x, y + 8, T, 14);
+    R(ctx, 'rgba(255,255,255,.75)', x + 4, y + 10, 10, 2);
+    R(ctx, '#5f6f7d', x, y + 6, T, 3);
+    R(ctx, '#4d5b67', x, y + 21, T, 2);
+    if (!isW(i - 1, j)) R(ctx, '#4d5b67', x, y + 6, 3, 17);
+    if (!isW(i + 1, j)) R(ctx, '#4d5b67', x + T - 3, y + 6, 3, 17);
+  } else {
+    R(ctx, 'rgba(20,24,30,.10)', x + 20, y, 4, T);
+    R(ctx, 'rgba(178,222,245,.55)', x + 11, y, 9, T);
+    R(ctx, 'rgba(255,255,255,.7)', x + 13, y + 4, 2, 10);
+    R(ctx, '#5f6f7d', x + 10, y, 2, T);
+    R(ctx, '#4d5b67', x + 19, y, 2, T);
+    if (!isW(i, j + 1)) R(ctx, '#4d5b67', x + 10, y + T - 3, 11, 3);
+  }
+}
+
 export function drawFloorLayer(ctx, f) {
   for (let j = 0; j < f.H; j++) {
     for (let i = 0; i < f.W; i++) {
@@ -127,7 +267,13 @@ export function drawFloorLayer(ctx, f) {
       (FLOORS[t] || FLOORS.wood)(ctx, i * T, j * T, i, j);
     }
   }
-  for (let j = 0; j < f.H; j++) for (let i = 0; i < f.W; i++) if (f.walls[j][i] === true) drawWall(ctx, f, i, j);
+  for (const d of f.decals || []) drawDecal(ctx, f, d);
+  for (const a of f.areas || []) if (a.color && a.color !== 'none') drawAreaRug(ctx, f, a);
+  drawWallShadows(ctx, f);
+  for (let j = 0; j < f.H; j++) for (let i = 0; i < f.W; i++) {
+    if (f.walls[j][i] === true) drawWall(ctx, f, i, j);
+    else if (f.walls[j][i] === 'glass') drawGlass(ctx, f, i, j);
+  }
 }
 
 // ---------------- Objetos ----------------
@@ -638,6 +784,68 @@ D.roundRug = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; ctx.fi
 D.petBed = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; ctx.fillStyle = shade(col, -0.2); ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2 + 1, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(col, 0.3); ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2 + 1, w / 2 - 4, h / 2 - 3, 0, 0, Math.PI * 2); ctx.fill(); };
 D.trashCan = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; R(ctx, col, x + 3, y + 3, w - 6, h - 3); R(ctx, shade(col, 0.2), x + 2, y + 2, w - 4, 2); R(ctx, shade(col, -0.2), x + 6, y + 6, 1, h - 8); R(ctx, shade(col, -0.2), x + 10, y + 6, 1, h - 8); };
 D.tallSpeaker = (ctx, x, y, w, h, o, c) => { R(ctx, o.color || c.color, x + 1, y, w - 2, h); circle(ctx, '#555', x + w / 2, y + 8, 4); circle(ctx, '#333', x + w / 2, y + 8, 2); circle(ctx, '#555', x + w / 2, y + 21, 5); circle(ctx, '#333', x + w / 2, y + 21, 2.5); };
+
+// ----- Salas y juegos -----
+D.poolTable = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.15)', x + 3, y + h - 2, w - 4, 5);
+  RR(ctx, '#6b3f22', x, y, w, h, 6);
+  RR(ctx, col, x + 6, y + 6, w - 12, h - 12, 3);
+  for (const [px, py] of [[7, 7], [w / 2, 5], [w - 7, 7], [7, h - 7], [w / 2, h - 5], [w - 7, h - 7]]) circle(ctx, '#111', x + px, y + py, 3);
+  circle(ctx, '#fff', x + w * 0.3, y + h / 2, 2.5);
+  for (const [k, cc] of [[0, '#ffd23f'], [1, '#e63946'], [2, '#3a86ff'], [3, '#111']]) circle(ctx, cc, x + w * 0.62 + (k % 2) * 6, y + h / 2 - 4 + Math.floor(k / 2) * 7, 2.5);
+};
+D.pingPong = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.15)', x + 3, y + h - 2, w - 4, 5);
+  RR(ctx, shade(col, -0.2), x + 2, y + 4, w - 4, h - 4, 2);
+  RR(ctx, col, x + 2, y + 2, w - 4, h - 8, 2);
+  R(ctx, '#fff', x + 4, y + 4, w - 8, 1); R(ctx, '#fff', x + 4, y + h - 8, w - 8, 1); R(ctx, '#fff', x + 2, y + (h - 6) / 2, w - 4, 1);
+  R(ctx, '#ddd', x + w / 2 - 1, y, 2, h - 6);
+  circle(ctx, '#e63946', x + 10, y + h / 2, 3); circle(ctx, '#111', x + w - 10, y + h / 2 + 2, 3);
+};
+D.reception = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.18)', x + 2, y + h - 1, w - 2, 5);
+  RR(ctx, col, x, y - 4, w, h + 4, 4);
+  R(ctx, shade(col, 0.2), x + 2, y - 2, w - 4, 3);
+  R(ctx, '#FE3377', x + 4, y + h - 6, w - 8, 2);
+};
+D.vending = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.15)', x + 2, y + h - 2, w - 2, 4);
+  RR(ctx, col, x + 2, y - 12, w - 4, h + 12, 3);
+  R(ctx, '#cfe8f5', x + 5, y - 9, 15, 26);
+  for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) R(ctx, ['#e63946', '#ffd23f', '#06d6a0', '#3a86ff'][(r + k) % 4], x + 6 + k * 5, y - 7 + r * 6, 3, 4);
+  R(ctx, '#222', x + 22, y - 6, 4, 8);
+};
+D.planter = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.12)', x + 2, y + h - 2, w - 4, 4);
+  RR(ctx, col, x + 1, y + 12, w - 2, h - 12, 3);
+  R(ctx, shade(col, 0.15), x + 1, y + 12, w - 2, 2);
+  for (let k = 0; k < Math.round(w / 6); k++) circle(ctx, k % 2 ? '#2e8540' : '#3a9d4a', x + 5 + k * 6 + hash(k, 2) * 2, y + 9 + hash(k, 7) * 4, 6);
+};
+D.armchair = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const r = o.rot || 0;
+  RR(ctx, 'rgba(0,0,0,.12)', x + 4, y + 24, 24, 6, 3);
+  RR(ctx, shade(col, -0.15), x + 3, y + 5, 26, 23, 6);
+  RR(ctx, col, x + 7, y + 9, 18, 15, 4);
+  if (r === 0) RR(ctx, shade(col, -0.25), x + 3, y + 20, 26, 8, 4);
+  if (r === 2) RR(ctx, shade(col, -0.25), x + 3, y + 3, 26, 8, 4);
+  if (r === 1) RR(ctx, shade(col, -0.25), x + 2, y + 5, 8, 23, 4);
+  if (r === 3) RR(ctx, shade(col, -0.25), x + 22, y + 5, 8, 23, 4);
+};
+D.bigScreen = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.15)', x + 4, y + h - 2, w - 8, 4);
+  RR(ctx, col, x + 2, y - 6, w - 4, h + 2, 3);
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, '#2a3a8c'); g.addColorStop(0.5, '#FE3377'); g.addColorStop(1, '#FFCC00');
+  ctx.fillStyle = g; ctx.fillRect(x + 5, y - 3, w - 10, h - 6);
+  R(ctx, 'rgba(255,255,255,.25)', x + 8, y - 1, w / 3, 2);
+};
 
 const fallback = (ctx, x, y, w, h) => RR(ctx, '#c9ced6', x + 2, y + 2, w - 4, h - 4, 4);
 

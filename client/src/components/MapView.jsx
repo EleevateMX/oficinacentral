@@ -229,8 +229,13 @@ export default function MapView({ active }) {
         if (ct.zoom) { v.zoom = ct.zoom; setZoomPct(Math.round(ct.zoom * 100)); }
         centered = true;
       }
-      const tx = (mine.rx + 0.5) * T;
-      const ty = (mine.ry + 0.5) * T;
+      let tx = (mine.rx + 0.5) * T;
+      let ty = (mine.ry + 0.5) * T;
+      // Vista general: centrada en el mapa hasta que te muevas
+      if (v.overview) {
+        if (v.overview.x === mine.x && v.overview.y === mine.y) { tx = (f.W * T) / 2; ty = (f.H * T) / 2; }
+        else v.overview = null;
+      }
       if (!em || !centered) {
         const k = centered ? Math.min(1, dt * 8) : 1;
         v.camX += (tx - v.camX) * k;
@@ -277,6 +282,15 @@ export default function MapView({ active }) {
           ctx.lineWidth = sel ? 3 : 1.5;
           ctx.setLineDash(sel ? [] : [6, 4]);
           ctx.strokeRect(a.x * T + 1, a.y * T + 1, a.w * T - 2, a.h * T - 2);
+          ctx.setLineDash([]);
+        }
+      }
+      if (em === 'decor') {
+        for (const a of editor.decorAreas(f, meU)) {
+          ctx.strokeStyle = rgba(themeColors().accent, .8);
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([8, 5]);
+          ctx.strokeRect(a.x * T + 2, a.y * T + 2, a.w * T - 4, a.h * T - 4);
           ctx.setLineDash([]);
         }
       }
@@ -355,7 +369,7 @@ export default function MapView({ active }) {
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
       ctx.textBaseline = 'middle';
       // Nombres de áreas
-      if (v.zoom >= 0.6) {
+      if (v.zoom >= 0.3) {
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         for (const a of f.areas) {
           const p = worldToScreen(a.x + 0.3, a.y + 0.45);
@@ -426,7 +440,9 @@ export default function MapView({ active }) {
 
   const editableFilter = (o) => {
     if (stateRef.current.editMode === 'build') return true;
-    return editor.canEditObject(floor, o, me) && (CATALOG[o.type]?.kind === 'decor' || CATALOG[o.type]?.rotatable);
+    const role = editor.editRole(floor, o, me);
+    if (role === 'leader') return true;
+    return !!role && (CATALOG[o.type]?.kind === 'decor' || CATALOG[o.type]?.rotatable);
   };
 
   const onPointerDown = (e) => {
@@ -516,7 +532,7 @@ export default function MapView({ active }) {
       const o = drag.obj;
       if (stateRef.current.editMode === 'decor') {
         const d = editor.myDesk(floor, me.id);
-        if (d && !editor.insideZone({ ...o, x: drag.x, y: drag.y }, d.zone)) {
+        if (d && o.deskId === d.id && !editor.insideZone({ ...o, x: drag.x, y: drag.y }, d.zone)) {
           office.toast({ title: 'Solo puedes decorar dentro de tu escritorio', kind: 'error' });
           return;
         }
@@ -540,16 +556,19 @@ export default function MapView({ active }) {
   };
 
   const zoomBy = (k) => {
-    const z = Math.min(3, Math.max(0.4, view.current.zoom * k));
+    const z = Math.min(3, Math.max(0.25, view.current.zoom * k));
     view.current.zoom = z;
+    if (k > 1) view.current.overview = null;
     setZoomPct(Math.round(z * 100));
   };
 
   const fitMap = () => {
     if (!floor) return;
     const v = view.current;
-    const z = Math.max(0.4, Math.min(v.w / (floor.W * T), v.h / (floor.H * T)));
+    const z = Math.max(0.25, Math.min(v.w / (floor.W * T), v.h / (floor.H * T)) * 0.98);
     v.zoom = z;
+    const mine = office.players[me.id];
+    if (mine) v.overview = { x: mine.x, y: mine.y };
     setZoomPct(Math.round(z * 100));
   };
 
@@ -634,7 +653,7 @@ export default function MapView({ active }) {
             <Armchair size={18} />
           </button>
         )}
-        <button className={`icon-btn ${editMode === 'decor' ? 'active' : ''}`} title="Decorar mi escritorio" onClick={() => office.set({ editMode: editMode === 'decor' ? null : 'decor' })}>
+        <button className={`icon-btn ${editMode === 'decor' ? 'active' : ''}`} title="Decorar mi lugar o mi departamento" onClick={() => office.set({ editMode: editMode === 'decor' ? null : 'decor' })}>
           <Palette size={18} />
         </button>
         <div className="sep" />

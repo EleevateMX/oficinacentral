@@ -1,7 +1,8 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx } from './db.js';
 import { composeFloor, getTemplate, TEMPLATES, inRect } from '../shared/map.js';
-import { CATALOG, objSize, DESK_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
+import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
+import { AREA_SHAPES } from '../shared/map.js';
 
 const floors = new Map(); // id -> { id, name, template, sort, state, claims: Map(deskId -> userId) }
 
@@ -15,14 +16,22 @@ export class WorldError extends Error {
 const rowToObject = (r) => ({
   id: r.id, type: r.type, x: r.x, y: r.y,
   ...(r.w != null ? { w: r.w } : {}), ...(r.h != null ? { h: r.h } : {}),
-  rot: r.rot, color: r.color, deskId: r.desk_id,
+  rot: r.rot, color: r.color, deskId: r.desk_id, by: r.created_by ?? null,
 });
-const rowToArea = (r) => ({ id: r.id, name: r.name, x: r.x, y: r.y, w: r.w, h: r.h, color: r.color, private: !!r.private });
+const rowToArea = (r, leaders = []) => ({
+  id: r.id, name: r.name, x: r.x, y: r.y, w: r.w, h: r.h, color: r.color, private: !!r.private,
+  shape: r.shape || 'soft', openDecor: !!r.open_decor, leaders,
+});
 
 function rebuild(id) {
   const row = db.prepare('SELECT * FROM floors WHERE id = ?').get(id);
   if (!row) { floors.delete(id); return null; }
-  const areas = db.prepare('SELECT * FROM areas WHERE floor_id = ? ORDER BY id').all(id).map(rowToArea);
+  const leaders = new Map();
+  for (const l of db.prepare('SELECT l.area_id, l.user_id FROM area_leaders l JOIN areas a ON a.id = l.area_id WHERE a.floor_id = ?').all(id)) {
+    if (!leaders.has(l.area_id)) leaders.set(l.area_id, []);
+    leaders.get(l.area_id).push(l.user_id);
+  }
+  const areas = db.prepare('SELECT * FROM areas WHERE floor_id = ? ORDER BY id').all(id).map((r) => rowToArea(r, leaders.get(r.id) || []));
   const objects = db.prepare('SELECT * FROM objects WHERE floor_id = ? ORDER BY id').all(id).map(rowToObject);
   const claims = new Map(
     db.prepare('SELECT c.desk_id, c.owner_id FROM desk_claims c JOIN objects o ON o.id = c.desk_id WHERE o.floor_id = ?')
@@ -40,8 +49,8 @@ export function createFloor(name, template = 'open') {
     const sort = db.prepare('SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM floors').get().s;
     const fid = Number(db.prepare('INSERT INTO floors (name, template, sort, created_at) VALUES (?, ?, ?, ?)').run(name, template, sort, now()).lastInsertRowid);
     const t = getTemplate(template);
-    const insA = db.prepare('INSERT INTO areas (floor_id, name, x, y, w, h, color, private) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    for (const a of t.areas) insA.run(fid, a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0);
+    const insA = db.prepare('INSERT INTO areas (floor_id, name, x, y, w, h, color, private, shape) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const a of t.areas) insA.run(fid, a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, a.shape || 'soft');
     const insO = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     for (const o of t.objects) insO.run(fid, o.type, o.x, o.y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, now());
     return fid;
@@ -51,7 +60,7 @@ export function createFloor(name, template = 'open') {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) createFloor('Piso 1', 'main');
+  if (!rows.length) createFloor('Piso 1', 'hq');
   else for (const r of rows) rebuild(r.id);
 }
 
@@ -197,6 +206,37 @@ function myDeskZone(user, f) {
   return d ? { desk: d, zone: d.zone } : null;
 }
 
+// ---------- Departamentos: líderes y decoración abierta ----------
+const isLeader = (user, a) => a.leaders.includes(user.id);
+
+// ¿Su escritorio está dentro del área? (miembro del departamento)
+function isMember(user, f, a) {
+  const mine = myDeskZone(user, f);
+  return !!mine && rectInside(bbox(mine.desk.object), a);
+}
+
+// Áreas donde esta persona puede decorar: las que lidera y,
+// si el líder lo activó, las de su propio departamento.
+export function decorAreas(user, f) {
+  return f.state.areas.filter((a) => isLeader(user, a) || (a.openDecor && isMember(user, f, a)));
+}
+
+function areaFor(user, f, box, { leaderOnly = false } = {}) {
+  return f.state.areas.find((a) => rectInside(box, a) && (isLeader(user, a) || (!leaderOnly && a.openDecor && isMember(user, f, a)))) || null;
+}
+
+// Zona de un escritorio que tiene dueño distinto a esta persona
+function othersDeskZone(user, f, box) {
+  return f.state.desks.find((d) => {
+    const owner = f.claims.get(d.id);
+    return owner && owner !== user.id && rectInside(box, d.zone);
+  }) || null;
+}
+
+function countAreaObjects(f, a) {
+  return f.state.objects.filter((x) => x.deskId == null && !CATALOG[x.type]?.claimable && rectInside(bbox(x), a)).length;
+}
+
 export function addObject(user, floorId, input) {
   const f = getFloor(floorId);
   if (!f) throw new WorldError('Piso no encontrado', 404);
@@ -204,11 +244,21 @@ export function addObject(user, floorId, input) {
   const c = CATALOG[o.type];
   let deskId = null;
   if (user.role !== 'admin') {
-    if (c.kind !== 'decor') throw new WorldError('Solo los administradores pueden colocar muebles', 403);
+    const box = bbox(o);
     const mine = myDeskZone(user, f);
-    if (!mine) throw new WorldError('Primero reclama un escritorio en este piso', 403);
-    if (!rectInside(bbox(o), mine.zone)) throw new WorldError('Solo puedes decorar dentro de tu escritorio', 403);
-    deskId = mine.desk.id;
+    if (c.kind === 'decor' && mine && rectInside(box, mine.zone)) {
+      deskId = mine.desk.id;
+    } else {
+      const area = areaFor(user, f, box);
+      if (!area) {
+        throw new WorldError(mine || decorAreas(user, f).length
+          ? 'Solo puedes decorar dentro de tu escritorio o de tu departamento'
+          : 'Primero reclama un escritorio en este piso', 403);
+      }
+      if (!isLeader(user, area) && c.kind !== 'decor') throw new WorldError('Los muebles solo los coloca el líder del departamento', 403);
+      if (othersDeskZone(user, f, box)) throw new WorldError('Ese lugar es el escritorio de otra persona', 403);
+      if (countAreaObjects(f, area) >= AREA_DECOR_LIMIT) throw new WorldError('El departamento llegó a su límite de objetos');
+    }
   } else if (c.kind === 'decor') {
     const d = f.state.desks.find((x) => rectInside(bbox(o), x.zone));
     deskId = d?.id ?? null;
@@ -231,20 +281,28 @@ function getObjectRow(id) {
 }
 
 // Qué puede tocar alguien que no es admin: la decoración de su escritorio,
-// su propio escritorio (modelo y color) y la silla de su lugar.
+// su propio escritorio (modelo y color), la silla de su lugar y, en su
+// departamento, lo que permita su papel (líder: todo menos los lugares de
+// otros; miembro con decoración abierta: lo que colocó él mismo).
 function editRole(user, f, row) {
   if (user.role === 'admin') return 'admin';
   const mine = myDeskZone(user, f);
-  if (!mine) return null;
-  if (row.desk_id === mine.desk.id) return 'decor';
-  if (row.id === mine.desk.id) return 'desk';
-  if (CHAIR_TYPES.includes(row.type) && rectInside(bbox(rowToObject(row)), mine.zone)) return 'chair';
+  const box = bbox(rowToObject(row));
+  if (mine) {
+    if (row.desk_id === mine.desk.id) return 'decor';
+    if (row.id === mine.desk.id) return 'desk';
+    if (CHAIR_TYPES.includes(row.type) && rectInside(box, mine.zone)) return 'chair';
+  }
+  if (row.desk_id != null || f.claims.get(row.id)) return null;
+  if (CHAIR_TYPES.includes(row.type) && othersDeskZone(user, f, box)) return null;
+  if (areaFor(user, f, box, { leaderOnly: true })) return 'leader';
+  if (row.created_by === user.id && CATALOG[row.type]?.kind === 'decor' && areaFor(user, f, box)) return 'member';
   return null;
 }
 
 function assertCanEdit(user, f, row) {
   const role = editRole(user, f, row);
-  if (!role) throw new WorldError('Solo puedes editar tu escritorio y su decoración', 403);
+  if (!role) throw new WorldError('Solo puedes editar tu escritorio, su decoración y lo que te toca de tu departamento', 403);
   return role;
 }
 
@@ -260,6 +318,10 @@ export function updateObject(user, id, patch) {
   let deskId = row.desk_id;
   if (role === 'decor' || role === 'chair') {
     if (!rectInside(bbox(o), myDeskZone(user, f).zone)) throw new WorldError('Solo puedes decorar dentro de tu escritorio', 403);
+  } else if (role === 'leader' || role === 'member') {
+    const box = bbox(o);
+    if (!areaFor(user, f, box, { leaderOnly: role === 'leader' })) throw new WorldError('Solo puedes mover cosas dentro de tu departamento', 403);
+    if (othersDeskZone(user, f, box)) throw new WorldError('Ese lugar es el escritorio de otra persona', 403);
   } else if (role === 'admin' && c.kind === 'decor') {
     deskId = f.state.desks.find((x) => rectInside(bbox(o), x.zone))?.id ?? null;
   }
@@ -294,7 +356,10 @@ function normalizeArea(f, input, existing = {}) {
     w: Math.round(input.w ?? existing.w), h: Math.round(input.h ?? existing.h),
     color: input.color ?? existing.color ?? 'none',
     private: input.private ?? existing.private ?? false,
+    shape: input.shape ?? existing.shape ?? 'soft',
+    openDecor: input.openDecor ?? existing.openDecor ?? false,
   };
+  if (!AREA_SHAPES.some((s) => s.id === a.shape)) throw new WorldError('Forma inválida');
   if (!a.name) throw new WorldError('El área necesita un nombre');
   if (![a.x, a.y, a.w, a.h].every(Number.isFinite) || a.w < 2 || a.h < 2) throw new WorldError('El área debe medir al menos 2×2');
   if (a.x < 0 || a.y < 0 || a.x + a.w > f.state.W || a.y + a.h > f.state.H) throw new WorldError('Fuera del mapa');
@@ -306,8 +371,8 @@ export function addArea(floorId, input) {
   const f = getFloor(floorId);
   if (!f) throw new WorldError('Piso no encontrado', 404);
   const a = normalizeArea(f, input);
-  db.prepare('INSERT INTO areas (floor_id, name, x, y, w, h, color, private) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(f.id, a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0);
+  db.prepare('INSERT INTO areas (floor_id, name, x, y, w, h, color, private, shape, open_decor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(f.id, a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, a.shape, a.openDecor ? 1 : 0);
   rebuild(f.id);
   return f.id;
 }
@@ -317,10 +382,37 @@ export function updateArea(id, patch) {
   if (!row) throw new WorldError('Área no encontrada', 404);
   const f = getFloor(row.floor_id);
   const a = normalizeArea(f, patch, rowToArea(row));
-  db.prepare('UPDATE areas SET name = ?, x = ?, y = ?, w = ?, h = ?, color = ?, private = ? WHERE id = ?')
-    .run(a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, row.id);
+  db.prepare('UPDATE areas SET name = ?, x = ?, y = ?, w = ?, h = ?, color = ?, private = ?, shape = ?, open_decor = ? WHERE id = ?')
+    .run(a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, a.shape, a.openDecor ? 1 : 0, row.id);
   rebuild(f.id);
   return f.id;
+}
+
+// El líder de un departamento cambia su alfombra, su forma y si su equipo puede decorar
+export function styleArea(user, id, patch) {
+  const row = db.prepare('SELECT * FROM areas WHERE id = ?').get(id);
+  if (!row) throw new WorldError('Área no encontrada', 404);
+  const f = getFloor(row.floor_id);
+  const area = f.state.areas.find((a) => a.id === row.id);
+  if (user.role !== 'admin' && !isLeader(user, area)) throw new WorldError('Solo el líder del departamento puede cambiar esto', 403);
+  const allowed = {};
+  for (const k of ['color', 'shape', 'openDecor']) if (patch[k] !== undefined) allowed[k] = patch[k];
+  if (allowed.openDecor !== undefined) allowed.openDecor = !!allowed.openDecor;
+  return updateArea(id, allowed);
+}
+
+export function setAreaLeaders(id, userIds) {
+  const row = db.prepare('SELECT * FROM areas WHERE id = ?').get(id);
+  if (!row) throw new WorldError('Área no encontrada', 404);
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map(Number).filter(Number.isInteger))].slice(0, 10);
+  const valid = ids.length ? db.prepare(`SELECT id FROM users WHERE id IN (${ids.map(() => '?').join(',')}) AND disabled = 0`).all(...ids).map((r) => r.id) : [];
+  tx(() => {
+    db.prepare('DELETE FROM area_leaders WHERE area_id = ?').run(row.id);
+    const ins = db.prepare('INSERT INTO area_leaders (area_id, user_id) VALUES (?, ?)');
+    for (const uid of valid) ins.run(row.id, uid);
+  });
+  rebuild(row.floor_id);
+  return row.floor_id;
 }
 
 export function deleteArea(id) {

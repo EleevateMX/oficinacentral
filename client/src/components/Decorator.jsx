@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Undo2, Redo2, Search, Plus, Trash2, Lock, Square, Pencil, MousePointer2 } from 'lucide-react';
+import { X, Undo2, Redo2, Search, Plus, Trash2, Lock, Square, Pencil, MousePointer2, Crown, Eye } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
-import { CATALOG, CATEGORIES, DESK_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES, COLORS } from '@shared/catalog.js';
-import { AREA_COLORS, TEMPLATES } from '@shared/map.js';
+import { CATALOG, CATEGORIES, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES, COLORS } from '@shared/catalog.js';
+import { AREA_COLORS, AREA_SHAPES, TEMPLATES } from '@shared/map.js';
 import { drawObjectPreview } from '../lib/render.js';
 import * as editor from '../lib/editor.js';
 import { api } from '../lib/api.js';
@@ -28,11 +28,20 @@ export default function Decorator() {
   }, [mode]);
 
   const desk = floor && editor.myDesk(floor, me.id);
+  const depts = floor ? editor.decorAreas(floor, me) : [];
+  const leads = depts.some((a) => editor.isLeaderOf(a, me));
+
+  useEffect(() => {
+    if (mode === 'decor' && !desk && depts.length) setTab('dept');
+  }, [mode, !!desk, depts.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (mode === 'decor' && desk) {
       const z = desk.zone;
       office.cameraTarget = { x: z.x + z.w / 2, y: z.y + z.h / 2, zoom: 2.4 };
+    } else if (mode === 'decor' && depts[0]) {
+      const a = depts[0];
+      office.cameraTarget = { x: a.x + a.w / 2, y: a.y + a.h / 2, zoom: 1.6 };
     }
   }, [mode, desk?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -43,9 +52,9 @@ export default function Decorator() {
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={18} /></button>
       </div>
 
-      {mode === 'decor' && desk && (
+      {mode === 'decor' && (desk || depts.length > 0) && (
         <div className="seg small">
-          {[['objects', 'Objetos'], ['place', 'Mi lugar']].map(([k, l]) => (
+          {[['objects', 'Objetos'], desk && ['place', 'Mi lugar'], depts.length > 0 && ['dept', 'Departamento']].filter(Boolean).map(([k, l]) => (
             <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
@@ -58,8 +67,10 @@ export default function Decorator() {
         </div>
       )}
 
-      {mode === 'decor' && !desk ? (
+      {mode === 'decor' && !desk && !depts.length ? (
         <NoDesk floor={floor} />
+      ) : mode === 'decor' && tab === 'dept' ? (
+        <DeptTab floor={floor} me={me} depts={depts} />
       ) : mode === 'build' && tab === 'areas' ? (
         <AreasTab floor={floor} ed={ed} />
       ) : mode === 'build' && tab === 'floors' ? (
@@ -67,7 +78,7 @@ export default function Decorator() {
       ) : mode === 'decor' && tab === 'place' ? (
         <MyPlace floor={floor} desk={desk} />
       ) : (
-        <ObjectsTab mode={mode} ed={ed} floor={floor} desk={desk} />
+        <ObjectsTab mode={mode} ed={ed} floor={floor} desk={desk} leads={leads} />
       )}
     </div>
   );
@@ -85,20 +96,21 @@ function NoDesk({ floor }) {
   );
 }
 
-function ObjectsTab({ mode, ed, floor, desk }) {
+function ObjectsTab({ mode, ed, floor, desk, leads }) {
+  const full = mode === 'build' || leads;
   const [q, setQ] = useState('');
   const [cat, setCat] = useState(mode === 'decor' ? 'tech' : 'muebles');
 
   const items = useMemo(() => {
     const s = q.trim().toLowerCase();
     return Object.entries(CATALOG).filter(([, c]) => {
-      if (mode === 'decor' && c.kind !== 'decor') return false;
+      if (!full && c.kind !== 'decor') return false;
       if (s) return c.name.toLowerCase().includes(s);
       return c.cat === cat;
     });
-  }, [q, cat, mode]);
+  }, [q, cat, full]);
 
-  const cats = CATEGORIES.filter((c) => Object.values(CATALOG).some((x) => x.cat === c.id && (mode === 'build' || x.kind === 'decor')));
+  const cats = CATEGORIES.filter((c) => Object.values(CATALOG).some((x) => x.cat === c.id && (full || x.kind === 'decor')));
   const used = desk ? floor.objects.filter((o) => o.deskId === desk.id).length : 0;
   const pick = (type) => office.set((st) => ({ editor: { ...st.editor, placing: st.editor.placing?.type === type ? null : { type, rot: 0, color: null }, selected: null, tool: 'select' } }));
 
@@ -136,7 +148,7 @@ function ObjectsTab({ mode, ed, floor, desk }) {
           <button className="icon-btn" disabled={!ed.history.undo} onClick={editor.undo} title="Deshacer (Ctrl+Z)"><Undo2 size={16} /></button>
           <button className="icon-btn" disabled={!ed.history.redo} onClick={editor.redo} title="Rehacer (Ctrl+Shift+Z)"><Redo2 size={16} /></button>
         </div>
-        {mode === 'decor' && <span className="muted">Objetos usados: {Math.round((used / DESK_DECOR_LIMIT) * 100)}%</span>}
+        {mode === 'decor' && desk && <span className="muted">Tu escritorio: {Math.round((used / DESK_DECOR_LIMIT) * 100)}%</span>}
       </div>
     </>
   );
@@ -221,8 +233,87 @@ function AreasTab({ floor, ed }) {
                 <Toggle checked={a.private} onChange={(v) => patch(a, { private: v })} />
               </label>
             </div>
+            <Select value={a.shape || 'soft'} onChange={(v) => patch(a, { shape: v })} options={AREA_SHAPES.map((x) => ({ value: x.id, label: x.name }))} className="small" />
+            <Leaders area={a} />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Líderes de un departamento (solo admin)
+function Leaders({ area }) {
+  const users = useOffice((s) => s.users);
+  const leaders = area.leaders || [];
+  const set = (ids) => api.put(`/areas/${area.id}/leaders`, { userIds: ids }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  const options = Object.values(users)
+    .filter((u) => !u.disabled && !leaders.includes(u.id))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .map((u) => ({ value: String(u.id), label: u.displayName }));
+  return (
+    <div className="leaders">
+      <span className="small muted row gap4"><Crown size={12} /> Líderes</span>
+      <div className="leader-chips">
+        {leaders.map((id) => (
+          <span key={id} className="chip">
+            {users[id]?.displayName || 'Alguien'}
+            <button type="button" aria-label="Quitar líder" onClick={() => set(leaders.filter((x) => x !== id))}><X size={11} /></button>
+          </span>
+        ))}
+        {options.length > 0 && leaders.length < 10 && (
+          <Select value="" onChange={(v) => v && set([...leaders, Number(v)])} options={[{ value: '', label: '+ Añadir líder' }, ...options]} className="small" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Departamentos que esta persona lidera o puede decorar
+function DeptTab({ floor, me, depts }) {
+  const colorOpts = AREA_COLORS.map((c) => ({ value: c.id, label: c.name }));
+  const style = (a, p) => api.patch(`/areas/${a.id}/style`, p).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  const look = (a) => { office.cameraTarget = { x: a.x + a.w / 2, y: a.y + a.h / 2, zoom: 1.6 }; };
+  const members = (a) => floor.desks.filter((d) => floor.claims[d.id] && editor.insideZone(d.object, a)).length;
+  const objects = (a) => floor.objects.filter((o) => o.deskId == null && !CATALOG[o.type]?.claimable && editor.insideZone(o, a)).length;
+
+  return (
+    <div className="dec-scroll">
+      <p className="muted small">
+        Lo que pongas dentro del departamento (marcado con línea punteada) lo ve todo el equipo. Los escritorios de cada persona siguen siendo suyos.
+      </p>
+      <div className="area-list">
+        {depts.map((a) => {
+          const lead = editor.isLeaderOf(a, me);
+          return (
+            <div key={a.id} className="area-item">
+              <div className="row between">
+                <b className="row gap4">{lead && <Crown size={14} />} {a.name}</b>
+                <button className="btn tiny" onClick={() => look(a)}><Eye size={13} /> Ver</button>
+              </div>
+              <div className="small muted">{members(a)} con escritorio · objetos {Math.round((objects(a) / AREA_DECOR_LIMIT) * 100)}%</div>
+              {lead ? (
+                <>
+                  <div className="row between gap8">
+                    <Select value={a.color} onChange={(v) => style(a, { color: v })} options={colorOpts} className="small" />
+                    <Select value={a.shape || 'soft'} onChange={(v) => style(a, { shape: v })} options={AREA_SHAPES.map((x) => ({ value: x.id, label: x.name }))} className="small" />
+                  </div>
+                  <label className="row between">
+                    <span>Que mi equipo también decore</span>
+                    <Toggle checked={a.openDecor} onChange={(v) => style(a, { openDecor: v })} />
+                  </label>
+                  <div className="small muted">
+                    Como líder puedes colocar muebles y decoración, moverlos y quitarlos. {a.openDecor
+                      ? 'Tu equipo puede añadir decoración y mover la que puso cada quien.'
+                      : 'Actívalo para que tu equipo pueda añadir decoración.'}
+                  </div>
+                </>
+              ) : (
+                <div className="small muted">Tu líder abrió la decoración: puedes añadir objetos dentro del departamento y mover los tuyos.</div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -231,7 +322,7 @@ function AreasTab({ floor, ed }) {
 function FloorsTab({ floor }) {
   const floors = useOffice((s) => s.floors);
   const [name, setName] = useState('');
-  const [template, setTemplate] = useState('open');
+  const [template, setTemplate] = useState('hq');
 
   const add = async (e) => {
     e.preventDefault();

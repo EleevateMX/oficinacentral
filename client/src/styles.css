@@ -704,3 +704,12 @@ input[type='color'] { width: 48px; height: 36px; padding: 2px; cursor: pointer; 
 
 [data-brand='gtahub'] .send-btn:disabled { background: rgba(254, 51, 119, .35); }
 :root[data-theme='dark'] .send-btn:disabled { opacity: .6; }
+
+/* Líderes de departamento */
+.leaders { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.leader-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.leader-chips .chip { padding: 3px 6px 3px 10px; font-size: 12.5px; }
+.leader-chips .select { min-width: 140px; }
+.area-item .select { position: relative; flex: 1; min-width: 0; }
+.area-item .select select { width: 100%; }
+.area-item > .select { width: 100%; }

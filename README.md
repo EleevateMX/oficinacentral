@@ -112,3 +112,15 @@ client/src/      interfaz (React + Vite)
   Para agregar un prediseñado, añade su ficha a `PRESETS` en `shared/sprite.js`.
 - **Decorador**: más de 70 objetos de escritorio y de piso (tecnología, gamer y stream, mascotas, comida, plantas, GTAHUB…).
   En **Mi lugar** cada quien elige el modelo y color de su escritorio y su silla. Límite de 30 objetos por escritorio.
+
+## Mapa y departamentos
+
+- Plantilla **Oficina HQ** (predeterminada en instalaciones nuevas, y disponible al crear un piso): sala de reuniones, jardín con
+  estanque, salas de staff, cocina, Dirección, Mapping / Design, Engineering, Marketing, tres salas chicas de cristal,
+  Staff / Orgs, lounge, Dev Oeste/Este, sala de reuniones sur, recepción con entrada, zona de descanso y sala de juegos (65 escritorios).
+- Esquinas recortadas, paredes de cristal, sombras de muros y formas curvas (estanques, plazas y jardines) para que no se vea cuadrado.
+  Las alfombras de cada área pueden ser **redondeadas, ovaladas o rectas**.
+- **Líderes de departamento**: el admin los asigna en Editar oficina → Áreas. El líder, desde el Decorador → Departamento,
+  coloca muebles y decoración dentro de su área, cambia su alfombra y su forma, y puede activar **"Que mi equipo también decore"**
+  para que quienes tienen escritorio ahí añadan decoración (cada quien mueve solo lo suyo). Nadie toca el escritorio de otra persona.
+  Límite de 150 objetos por departamento.

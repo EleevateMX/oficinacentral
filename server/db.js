@@ -157,6 +157,21 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT OR IGNORE INTO channels (name) VALUES ('general'), ('social');
 `);
 
+// Columnas nuevas en bases de datos ya existentes
+function addColumn(table, col, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+addColumn('areas', 'shape', "TEXT NOT NULL DEFAULT 'soft'");
+addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
+db.exec(`
+CREATE TABLE IF NOT EXISTS area_leaders (
+  area_id INTEGER NOT NULL REFERENCES areas(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (area_id, user_id)
+);
+`);
+
 export const now = () => Date.now();
 
 export function getSetting(key, fallback = null) {

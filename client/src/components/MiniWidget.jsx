@@ -32,6 +32,7 @@ export default function MiniWidget() {
       for (let j = Math.max(0, Math.floor(-oy / s)); j < Math.min(floor.H, (H - oy) / s); j++) {
         for (let i = Math.max(0, Math.floor(-ox / s)); i < Math.min(floor.W, (W - ox) / s); i++) {
           if (floor.walls[j][i] === true) { ctx.fillStyle = '#4a4f5a'; ctx.fillRect(ox + i * s, oy + j * s, s, s); }
+          else if (floor.walls[j][i] === 'glass') { ctx.fillStyle = '#6f8ea3'; ctx.fillRect(ox + i * s, oy + j * s, s, s); }
           else if (floor.solid[j][i]) { ctx.fillStyle = '#353a44'; ctx.fillRect(ox + i * s, oy + j * s, s, s); }
         }
       }

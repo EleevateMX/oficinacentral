@@ -97,10 +97,34 @@ export function myDesk(floor, meId) {
   return deskId ? floor.desks.find((d) => d.id === Number(deskId)) : null;
 }
 
-export function canEditObject(floor, o, me) {
-  if (me.role === 'admin') return true;
+// Igual que en el servidor (server/world.js → editRole)
+export function editRole(floor, o, me) {
+  if (me.role === 'admin') return 'admin';
   const d = myDesk(floor, me.id);
-  return !!d && (o.deskId === d.id || (CHAIR_TYPES.includes(o.type) && insideZone(o, d.zone)));
+  if (d) {
+    if (o.deskId === d.id) return 'decor';
+    if (o.id === d.id) return 'desk';
+    if (CHAIR_TYPES.includes(o.type) && insideZone(o, d.zone)) return 'chair';
+  }
+  if (o.deskId != null || floor.claims[o.id]) return null;
+  const othersZone = floor.desks.some((x) => floor.claims[x.id] && floor.claims[x.id] !== me.id && insideZone(o, x.zone));
+  if (CHAIR_TYPES.includes(o.type) && othersZone) return null;
+  if (floor.areas.some((a) => a.leaders?.includes(me.id) && insideZone(o, a))) return 'leader';
+  if (o.by === me.id && CATALOG[o.type]?.kind === 'decor' && decorAreas(floor, me).some((a) => insideZone(o, a))) return 'member';
+  return null;
+}
+
+export function canEditObject(floor, o, me) {
+  return !!editRole(floor, o, me);
+}
+
+export const isLeaderOf = (a, me) => !!a.leaders?.includes(me.id);
+
+// Departamentos donde esta persona puede decorar: los que lidera y, si el
+// líder lo activó, el suyo (donde está su escritorio).
+export function decorAreas(floor, me) {
+  const d = myDesk(floor, me.id);
+  return floor.areas.filter((a) => isLeaderOf(a, me) || (a.openDecor && d && insideZone(d.object, a)));
 }
 
 // La silla que corresponde a un escritorio (la primera dentro de su zona)

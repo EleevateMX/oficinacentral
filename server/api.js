@@ -686,6 +686,19 @@ api.patch('/areas/:id', requireAdmin, wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// Líder del departamento (o admin): alfombra, forma y decoración abierta para el equipo
+api.patch('/areas/:id/style', wrap((req, res) => {
+  const floorId = world.styleArea(req.user, Number(req.params.id), req.body || {});
+  broadcastFloor(floorId);
+  res.json({ ok: true });
+}));
+
+api.put('/areas/:id/leaders', requireAdmin, wrap((req, res) => {
+  const floorId = world.setAreaLeaders(Number(req.params.id), req.body?.userIds);
+  broadcastFloor(floorId);
+  res.json({ ok: true });
+}));
+
 api.delete('/areas/:id', requireAdmin, wrap((req, res) => {
   const floorId = world.deleteArea(Number(req.params.id));
   broadcastFloor(floorId);

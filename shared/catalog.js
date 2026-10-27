@@ -69,6 +69,13 @@ export const CATALOG = {
   clock: f('Reloj', 'deco', 1, 1, { solid: false }),
   window: f('Ventana', 'deco', 4, 1, { solid: false }),
   rug: f('Tapete', 'deco', 3, 2, { solid: false, colorable: true, color: '#8ecae6', under: true }),
+  poolTable: f('Mesa de billar', 'deco', 4, 2, { colorable: true, color: '#1f8a5b' }),
+  pingPong: f('Ping pong', 'deco', 4, 2, { colorable: true, color: '#2f6fd6' }),
+  reception: f('Recepción', 'muebles', 5, 1, { colorable: true, color: '#101010' }),
+  vending: f('Máquina de snacks', 'comida', 1, 1, { colorable: true, color: '#FE3377' }),
+  planter: f('Jardinera', 'plantas', 3, 1, { colorable: true, color: '#c99c72' }),
+  armchair: f('Sillón', 'muebles', 1, 1, { colorable: true, color: '#FFCC00', rotatable: true }),
+  bigScreen: f('Pantalla gigante', 'salas', 5, 1, { colorable: true, color: '#101010' }),
 
   // Decoraciones de escritorio (no bloquean, posición libre)
   monitor: d('Monitor', 'tech', 0.75, 0.75, { colorable: true, color: '#2b2f3a' }),
@@ -151,6 +158,8 @@ export const DESK_TYPES = ['desk', 'standingDesk', 'gamingDesk', 'woodDesk', 'gl
 export const CHAIR_TYPES = ['chair', 'gamingChair', 'officeChair', 'beanBag', 'stool'];
 
 export const DESK_DECOR_LIMIT = 30;
+// Objetos que pueden colocar los líderes y su equipo en un departamento
+export const AREA_DECOR_LIMIT = 150;
 
 export function objSize(o) {
   const c = CATALOG[o.type];

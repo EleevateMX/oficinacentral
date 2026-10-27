@@ -24,6 +24,19 @@ export const AREA_COLORS = [
   { id: 'lavender', name: 'Lavanda' },
   { id: 'tile', name: 'Mosaico' },
   { id: 'wood2', name: 'Madera oscura' },
+  { id: 'blue', name: 'Alfombra azul' },
+  { id: 'green', name: 'Verde' },
+  { id: 'terra', name: 'Terracota' },
+  { id: 'slate', name: 'Pizarra' },
+  { id: 'concrete', name: 'Cemento pulido' },
+  { id: 'hex', name: 'Hexágonos (GTAHUB)' },
+];
+
+// Forma de la alfombra de un área (para que el mapa no se vea tan cuadrado)
+export const AREA_SHAPES = [
+  { id: 'soft', name: 'Esquinas redondeadas' },
+  { id: 'round', name: 'Ovalada' },
+  { id: 'square', name: 'Recta' },
 ];
 
 function grid(w, h, v) {
@@ -35,15 +48,38 @@ function makeBuilder(W, H) {
   const walls = grid(W, H, false);
   const objects = [];
   const areas = [];
+  const decals = []; // formas suaves que el cliente dibuja encima del suelo
   const inB = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
   const b = {
-    floor, walls, objects, areas,
+    floor, walls, objects, areas, decals,
     fill(x, y, w, h, t) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (inB(i, j)) floor[j][i] = t; },
     wall(x, y) { if (inB(x, y)) walls[y][x] = true; },
     hWall(x, y, w) { for (let i = x; i < x + w; i++) b.wall(i, y); },
     vWall(x, y, h) { for (let j = y; j < y + h; j++) b.wall(x, j); },
     thick(x, y, w) { b.hWall(x, y, w); b.hWall(x, y + 1, w); },
     door(x, y, t) { if (!inB(x, y)) return; walls[y][x] = false; if (t) floor[y][x] = t; },
+    glass(x, y, w = 1, h = 1) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (inB(i, j)) walls[j][i] = 'glass'; },
+    // Elipse de suelo (estanques, plazas, caminos curvos)
+    // Elipse suave: marca el suelo por casillas y además guarda la curva para dibujarla
+    blob(cx, cy, rx, ry, t, opts = {}) {
+      const cells = [];
+      b.ellipse(cx, cy, rx, ry, (i, j) => {
+        if (t === 'water') { b.walls[j][i] = 'water'; cells.push([i, j]); }
+        else if (!opts.only || opts.only.includes(b.floor[j][i])) { b.floor[j][i] = t; cells.push([i, j]); }
+      });
+      decals.push({ cx, cy, rx, ry, t, under: opts.under || 'grass', cells });
+    },
+    // Camino recto con puntas redondeadas
+    lane(x, y, w, h, t) {
+      b.fill(x, y, w, h, t);
+      decals.push({ rect: [x, y, w, h], t });
+    },
+    ellipse(cx, cy, rx, ry, fn) {
+      for (let j = Math.floor(cy - ry); j <= Math.ceil(cy + ry); j++) for (let i = Math.floor(cx - rx); i <= Math.ceil(cx + rx); i++) {
+        const dx = (i + 0.5 - cx) / rx, dy = (j + 0.5 - cy) / ry;
+        if (dx * dx + dy * dy <= 1 && inB(i, j)) fn(i, j);
+      }
+    },
     o(type, x, y, opts = {}) { objects.push({ type, x, y, rot: 0, color: null, ...opts }); },
     chair(x, y, rot = 0, color = null) { objects.push({ type: 'chair', x, y, rot, color }); },
     area(key, name, x, y, w, h, opts = {}) { areas.push({ key, name, x, y, w, h, color: 'none', private: false, ...opts }); },
@@ -53,6 +89,15 @@ function makeBuilder(W, H) {
         b.o(opts.type || 'desk', x + k * 3, y, { color: opts.color || null });
         b.o(opts.chairType || 'chair', x + k * 3 + 1, y + 1, { color: opts.chairColor || null });
       }
+    },
+    // Escritorios en posiciones libres: xs = lista de x
+    deskRow(xs, y, opts = {}) {
+      xs.forEach((x, k) => {
+        const col = Array.isArray(opts.color) ? opts.color[k % opts.color.length] : opts.color;
+        const cc = Array.isArray(opts.chairColor) ? opts.chairColor[k % opts.chairColor.length] : opts.chairColor;
+        b.o(opts.type || 'desk', x, y, { color: col || null });
+        b.o(opts.chairType || 'chair', x + 1, y + 1, { color: cc || null });
+      });
     },
   };
   return b;
@@ -195,6 +240,247 @@ function templateMain() {
   return { W, H, spawn: { x: 30, y: 33 }, floor: b.floor, walls: b.walls, objects: b.objects, areas: b.areas };
 }
 
+
+// ---------------- Plantilla HQ (todas las salas, formas más orgánicas) ----------------
+// Pseudoaleatorio fijo para que el mapa salga igual siempre
+function seeded(n) {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
+function templateHQ() {
+  const W = 100, H = 68;
+  const b = makeBuilder(W, H);
+  const X0 = 5, X1 = 94, Y0 = 10, Y1 = 57, C = 3;
+
+  // Edificio con esquinas recortadas
+  const inside = (x, y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1 &&
+    (x - X0) + (y - Y0) >= C && (X1 - x) + (y - Y0) >= C && (x - X0) + (Y1 - y) >= C && (X1 - x) + (Y1 - y) >= C;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (inside(x, y)) b.floor[y][x] = 'wood';
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (inside(x, y)) continue;
+    let near = false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inside(x + dx, y + dy)) near = true;
+    if (near) { b.wall(x, y); if (inside(x, y + 1) && !inside(x, y - 1)) b.wall(x, y - 1); }
+  }
+  // Acera alrededor
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (b.walls[y][x] || inside(x, y)) continue;
+    let d = 9;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (b.walls[y + dy]?.[x + dx] === true) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
+    if (d <= 1) b.floor[y][x] = 'path';
+  }
+
+  const room = (x, y, w, h, t) => b.fill(x, y, w, h, t);
+
+  // ===== Fila superior (y 10..19), frente de cristal en y 20 =====
+  for (const x of [25, 42, 56, 70]) b.vWall(x, Y0, 11);
+  b.glass(X0, 20, X1 - X0 + 1, 1);
+
+  // Sala de reuniones
+  room(X0, Y0, 20, 10, 'blue');
+  for (const x of [14, 15]) b.door(x, 20, 'wood');
+  b.o('bigScreen', 12, 10);
+  b.o('confTable', 8, 14, { w: 12 });
+  for (let i = 8; i < 20; i += 2) { b.chair(i, 13, 2, '#101010'); b.chair(i, 16, 0, '#101010'); }
+  b.chair(7, 14, 1, '#101010'); b.chair(20, 14, 3, '#101010');
+  b.o('plant', 23, 10); b.o('plant', 23, 18); b.o('tallPlant', 6, 18); b.o('cabinet', 20, 10);
+  b.o('window', 7, 9); b.o('window', 17, 9);
+  b.area('reuniones', 'Sala de reuniones', X0, Y0, 20, 10, { private: true });
+
+  // Jardín interior con estanque ovalado y camino curvo
+  room(26, Y0, 16, 10, 'grass2');
+  for (let x = 26; x <= 41; x++) b.door(x, 20, 'grass2');
+  for (let x = 26; x <= 41; x++) if (x < 32 || x > 35) b.o('hedge', x, 20 - 1 + 0);
+  b.blob(33.5, 13.6, 5.4, 4.3, 'path', { only: ['grass2'], under: 'grass2' });
+  b.blob(33.5, 13.4, 3.4, 2.2, 'water', { under: 'path' });
+  b.lane(33, 17, 2, 3, 'path');
+  b.o('bench', 27, 13, { rot: 1 }); b.o('bench', 40, 13, { rot: 1 });
+  b.o('tree2', 27, 10); b.o('tree2', 39, 10); b.o('flowers', 30, 11); b.o('flowers', 37, 11);
+  b.o('flowers', 29, 16); b.o('flowers', 38, 16); b.o('bush', 28, 17); b.o('bush', 39, 17);
+  b.area('jardin', 'Jardín', 26, Y0, 16, 10, { shape: 'round' });
+
+  // Salas de staff
+  for (const [x0, key, name, col] of [[43, 'staffO', 'Sala Staff Oeste', '#FE3377'], [57, 'staffE', 'Sala Staff Este', '#3a86ff']]) {
+    room(x0, Y0, 13, 10, 'blue');
+    b.door(x0 + 6, 20, 'wood');
+    b.o('tv', x0 + 5, Y0);
+    b.o('meetingTable', x0 + 3, 13, { w: 7 });
+    for (let i = x0 + 3; i < x0 + 10; i += 2) { b.chair(i, 12, 2, col); b.chair(i, 16, 0, col); }
+    b.chair(x0 + 2, 14, 1, col); b.chair(x0 + 10, 14, 3, col);
+    b.o('plant', x0, Y0); b.o('plant', x0 + 12, 18); b.o('window', x0 + 8, 9);
+    b.area(key, name, x0, Y0, 13, 10, { private: true });
+  }
+
+  // Cocina
+  room(71, Y0, 24, 10, 'kitchen');
+  for (let x = 76; x <= 81; x++) b.door(x, 20, 'kitchen');
+  b.o('fridge', 72, Y0); b.o('counter', 73, Y0, { w: 7 }); b.o('coffee', 80, Y0);
+  b.o('vending', 83, Y0); b.o('vending', 84, Y0, { color: '#FFCC00' }); b.o('watercooler', 86, Y0);
+  b.o('counter', 74, 14, { w: 5 });
+  for (let i = 74; i < 79; i++) b.o('stool', i, 15, { color: '#FE3377' });
+  for (const [tx, ty] of [[84, 13], [84, 17]]) {
+    b.o('roundTable', tx, ty, { w: 3, color: '#ffffff' });
+    b.chair(tx - 1, ty, 1, '#c99c72'); b.chair(tx + 3, ty, 3, '#c99c72');
+  }
+  b.o('tallPlant', 72, 18); b.o('plant', 92, 18); b.o('window', 88, 9);
+  b.area('cocina', 'Cocina', 71, Y0, 24, 10);
+
+  // ===== Centro izquierdo: departamentos en planta abierta =====
+  b.area('direccion', 'Dirección', 6, 24, 14, 8, { color: 'terra' });
+  b.deskRow([7, 11, 15], 26, { type: 'woodDesk', chairType: 'officeChair' });
+  b.o('sofaSmall', 7, 30, { color: '#101010' }); b.o('armchair', 11, 30, { rot: 3 });
+  b.o('bookshelf', 15, 30); b.o('tallPlant', 19, 24); b.o('plant', 6, 24);
+
+  b.area('design', 'Mapping / Design', 22, 24, 24, 8, { color: 'purple' });
+  b.deskRow([23, 26, 29, 35, 38, 41], 26, { type: 'glassDesk', chairColor: ['#8B7BFF', '#FE3377'] });
+  b.deskRow([23, 26, 29, 35, 38, 41], 29, { type: 'glassDesk', chairColor: ['#FE3377', '#8B7BFF'] });
+  b.o('tallPlant', 33, 25); b.o('easel', 33, 28); b.o('tallPlant', 33, 30);
+
+  b.area('engineering', 'Engineering', 6, 34, 18, 9, { color: 'mint' });
+  b.deskRow([7, 10, 13, 16, 19], 36, { type: 'gamingDesk', chairType: 'gamingChair', chairColor: ['#157A6E', '#d9454f'] });
+  b.deskRow([7, 10, 13, 16, 19], 40, { type: 'gamingDesk', chairType: 'gamingChair', chairColor: ['#d9454f', '#157A6E'] });
+  b.o('serverRack', 22, 34); b.o('robotArm', 22, 38);
+
+  b.area('marketing', 'Marketing', 27, 34, 19, 9, { color: 'rose' });
+  b.deskRow([28, 31, 34, 37, 40], 36, { type: 'standingDesk', chairColor: '#FE3377' });
+  b.deskRow([28, 31, 34, 37, 40], 40, { type: 'standingDesk', chairColor: '#FFCC00' });
+  b.o('tallPlant', 44, 36); b.o('whiteboard', 43, 34 + 0);
+
+  for (const y of [34, 37, 40]) b.o('tallPlant', 25, y);
+
+  // ===== Columna central: salas chicas de cristal =====
+  b.glass(48, 23, 1, 20); b.glass(57, 23, 1, 20);
+  for (const y of [23, 29, 35, 42]) b.glass(49, y, 8, 1);
+  const pods = [
+    ['rosa', 'Sala 1:1 Rosa', 24, 5, 'rose', '#FE3377'],
+    ['pequena', 'Sala pequeña', 30, 5, 'blue', '#3f4652'],
+    ['azul', 'Sala 1:1 Azul', 36, 6, 'blue', '#3a86ff'],
+  ];
+  for (const [key, name, y0, h, t, col] of pods) {
+    room(49, y0, 8, h, t);
+    const my = y0 + Math.floor(h / 2);
+    b.door(48, my, t); b.door(57, my, t);
+    if (key === 'pequena') {
+      b.o('tv', 51, y0);
+      b.o('roundTable', 51, my, { w: 3, color: '#ffffff' });
+      b.chair(51, my - 1, 2, col); b.chair(53, my - 1, 2, col); b.chair(51, my + 1, 0, col); b.chair(53, my + 1, 0, col);
+    } else {
+      b.o('roundTable', 52, my, { color: '#ffffff' });
+      b.o('armchair', 51, my, { rot: 1, color: col }); b.o('armchair', 54, my, { rot: 3, color: col });
+      b.o('plant', 55, y0); b.o('lamp', 49.5, y0 + 0.25);
+    }
+    b.area(key, name, 49, y0, 8, h, { private: true });
+  }
+
+  // ===== Centro derecho: Staff / Orgs y lounge =====
+  b.area('staff', 'Staff / Orgs', 59, 24, 36, 13, { color: 'lilac' });
+  const left = [60, 63, 66, 69, 72], right = [78, 81, 84, 87, 90];
+  for (const y of [26, 30, 34]) {
+    b.deskRow(left, y, { type: 'desk', color: '#e8e8ee', chairColor: ['#101010', '#FE3377'] });
+    b.deskRow(right, y, { type: 'desk', color: '#e8e8ee', chairColor: ['#FE3377', '#101010'] });
+    b.o('planter', 75, y, { color: '#101010' });
+  }
+  b.area('lounge', 'Lounge', 60, 38, 34, 6, { color: 'rug', shape: 'round' });
+  for (const lx of [64, 82]) {
+    b.o('sofa', lx, 38, { color: '#101010' });
+    b.o('roundTable', lx + 1, 40, { w: 3 });
+    b.o('sofa', lx, 42, { rot: 2, color: '#FE3377' });
+  }
+  b.o('coffee', 74, 38); b.o('tallPlant', 77, 38); b.o('tallPlant', 72, 42); b.o('tallPlant', 92, 42);
+
+  // ===== Fila inferior (y 47..57), frente de cristal en y 46 =====
+  b.glass(X0, 46, X1 - X0 + 1, 1);
+  for (const x of [17, 34, 51, 64, 78]) b.vWall(x, 46, 12);
+
+  for (const [x0, key, name] of [[5, 'devO', 'Dev Oeste'], [52, 'devE', 'Dev Este']]) {
+    room(x0, 47, 12, 11, 'blue');
+    b.door(x0 + 6, 46, 'wood'); b.door(x0 + 7, 46, 'wood');
+    b.o('whiteboard', x0 + 1, 47); b.o('plant', x0 + 10, 47);
+    b.o('table', x0 + 4, 50, { w: 4, color: '#e8e8ee' });
+    for (let i = x0 + 4; i < x0 + 8; i += 2) { b.chair(i, 49, 2); b.chair(i + 1, 52, 0); }
+    b.o('tallPlant', x0 + 10, 55);
+    b.area(key, name, x0, 47, 12, 11, { private: true });
+  }
+
+  room(18, 47, 16, 11, 'blue');
+  for (const x of [20, 21]) b.door(x, 46, 'wood');
+  b.o('bigScreen', 23, 47);
+  b.o('meetingTable', 22, 50, { w: 8 });
+  for (let i = 22; i < 30; i += 2) { b.chair(i, 49, 2, '#101010'); b.chair(i + 1, 53, 0, '#101010'); }
+  b.chair(21, 51, 1, '#101010'); b.chair(30, 51, 3, '#101010');
+  b.o('plant', 18, 47); b.o('plant', 33, 47); b.o('tallPlant', 18, 56); b.o('tallPlant', 33, 56);
+  b.area('reunionesSur', 'Sala de reuniones Sur', 18, 47, 16, 11, { private: true });
+
+  // Recepción y entrada
+  room(35, 46, 16, 12, 'hex');
+  for (let x = 35; x <= 50; x++) b.door(x, 46, 'hex');
+  for (const x of [41, 42, 43, 44]) b.door(x, 58, 'path');
+  b.o('reception', 40, 49);
+  b.o('officeChair', 42, 48, { rot: 2 });
+  b.o('cubeLogo', 42.25, 49.1); b.o('hexLamp', 40.2, 48.9); b.o('monitor', 43.5, 48.9);
+  b.o('sofaSmall', 36, 51, { rot: 1, color: '#FE3377' }); b.o('sofaSmall', 49, 51, { rot: 3, color: '#FE3377' });
+  b.o('tallPlant', 35, 47); b.o('tallPlant', 50, 47); b.o('plant', 36, 56); b.o('plant', 49, 56);
+  b.area('recepcion', 'Recepción', 35, 47, 16, 11, { color: 'none' });
+
+  // Zona de descanso
+  room(65, 47, 13, 11, 'wood2');
+  for (let x = 68; x <= 74; x++) b.door(x, 46, 'wood2');
+  b.o('tv', 69, 47); b.o('bookshelf', 74, 47); b.o('plant', 65, 47);
+  b.o('sofa', 67, 50, { color: '#3a86ff' });
+  b.o('roundTable', 68, 52, { w: 3 });
+  for (const [x, y, c] of [[66, 55, '#FE3377'], [68, 56, '#FFCC00'], [71, 55, '#9b5de5'], [74, 54, '#06d6a0']]) b.o('beanBag', x, y, { color: c });
+  b.o('tallPlant', 76, 56);
+  b.area('descanso', 'Zona de descanso', 65, 47, 13, 11, { color: 'green', shape: 'round' });
+
+  // Sala de juegos
+  room(79, 47, 16, 11, 'slate');
+  for (let x = 84; x <= 88; x++) b.door(x, 46, 'slate');
+  b.o('arcade', 79, 47, { color: '#FE3377' }); b.o('arcade', 80, 47, { color: '#FFCC00' }); b.o('arcade', 81, 47, { color: '#3a86ff' });
+  b.o('bigScreen', 89, 47);
+  b.o('poolTable', 81, 50); b.o('pingPong', 88, 50);
+  b.o('foosball', 81, 54);
+  for (const [x, y, c] of [[87, 54, '#FE3377'], [89, 55, '#3a86ff'], [91, 54, '#FFCC00']]) b.o('beanBag', x, y, { color: c });
+  b.o('drum', 93, 50);
+  b.area('juegos', 'Sala de juegos', 79, 47, 16, 11, { color: 'purple', shape: 'soft' });
+
+  // Pasillos con plantas
+  for (const x of [8, 20, 30, 38, 62, 72, 88]) b.o('plant', x, 21);
+  for (const x of [10, 30, 62, 88]) b.o('tallPlant', x, 45);
+
+  // ===== Exterior =====
+  // Camino de entrada hasta una plaza redonda con fuente
+  b.blob(42.5, 64, 5, 3.6, 'path');
+  b.lane(41, 59, 4, 3, 'path');
+  b.o('fountain', 42, 63);
+  b.o('bench', 36, 63, { rot: 1 }); b.o('bench', 48, 63, { rot: 1 });
+  for (const [x, y] of [[38, 61], [47, 61], [38, 66], [47, 66]]) b.o('flowers', x, y);
+  // Jardines laterales
+  b.blob(16, 63.5, 9, 3.2, 'grass2', { only: ['grass'] });
+  b.blob(72, 63.5, 12, 3.2, 'grass2', { only: ['grass'] });
+  b.blob(50, 3.6, 22, 2.8, 'grass2', { only: ['grass'] });
+  for (const x of [10, 16, 22, 62, 68, 74, 80]) b.o('flowers', x, 63);
+  // Árboles alrededor, sin cuadrícula
+  const free = (x, y) => b.floor[y]?.[x] && !b.walls[y][x] && (b.floor[y][x] === 'grass' || b.floor[y][x] === 'grass2');
+  const used = new Set();
+  let n = 0;
+  for (let k = 0; k < 400 && n < 70; k++) {
+    const x = 1 + Math.floor(seeded(k * 2 + 1) * (W - 2));
+    const y = 1 + Math.floor(seeded(k * 2 + 2) * (H - 2));
+    const edge = x < X0 - 1 || x > X1 + 1 || y < Y0 - 3 || y > Y1 + 1;
+    if (!edge || !free(x, y) || (y > 58 && x > 33 && x < 52)) continue;
+    let ok = true;
+    for (const u of used) { const [ux, uy] = u.split(',').map(Number); if (Math.abs(ux - x) < 3 && Math.abs(uy - y) < 3) ok = false; }
+    if (!ok) continue;
+    used.add(`${x},${y}`);
+    b.o(seeded(k + 999) > 0.35 ? 'tree' : 'bush', x, y);
+    n++;
+  }
+
+  return { W, H, spawn: { x: 42, y: 53 }, floor: b.floor, walls: b.walls, objects: b.objects, areas: b.areas, decals: b.decals };
+}
+
 // ---------------- Plantilla de piso nuevo (planta abierta) ----------------
 function templateOpen() {
   const W = 64, H = 44;
@@ -228,7 +514,8 @@ function templateOpen() {
 }
 
 export const TEMPLATES = {
-  main: { name: 'Oficina principal', build: templateMain },
+  hq: { name: 'Oficina HQ (todas las salas)', build: templateHQ },
+  main: { name: 'Oficina clásica', build: templateMain },
   open: { name: 'Planta abierta', build: templateOpen },
 };
 
@@ -252,12 +539,7 @@ export function composeFloor({ template, areas = [], objects = [] }) {
   const walls = t.walls;
   const solid = walls.map((r) => r.map(Boolean));
 
-  for (const a of areas) {
-    if (!a.color || a.color === 'none') continue;
-    for (let j = a.y; j < a.y + a.h; j++) for (let i = a.x; i < a.x + a.w; i++) {
-      if (j >= 0 && i >= 0 && j < H && i < W && !walls[j][i]) floor[j][i] = a.color;
-    }
-  }
+  // Las alfombras de las áreas las dibuja el cliente con su forma (ver render.js)
 
   const desks = [];
   for (const o of objects) {
@@ -272,7 +554,7 @@ export function composeFloor({ template, areas = [], objects = [] }) {
     if (c.claimable) desks.push({ id: o.id, object: o, zone: deskZone(o) });
   }
 
-  return { template, W, H, spawn: t.spawn, floor, walls, solid, areas, objects, desks };
+  return { template, W, H, spawn: t.spawn, floor, walls, solid, areas, objects, desks, decals: t.decals || [] };
 }
 
 export const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
