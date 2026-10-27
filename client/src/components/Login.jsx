@@ -20,19 +20,51 @@ export default function Login({ config, onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ticket, setTicket] = useState(null);
+  const [code, setCode] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
-      await api.post('/auth/login', { username, password });
+      const r = await api.post('/auth/login', { username, password });
+      if (r.needs2fa) { setTicket(r.ticket); setBusy(false); return; }
       await onLogin();
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   };
+
+  const submitCode = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/auth/2fa', { ticket, code });
+      await onLogin();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+      if (/expiró/.test(err.message)) { setTicket(null); setCode(''); }
+    }
+  };
+
+  if (ticket) {
+    return (
+      <AuthLayout config={config} title="Verificación en dos pasos" subtitle="Escribe el código de 6 dígitos de tu app de autenticación">
+        <form onSubmit={submitCode} className="auth-form">
+          <label htmlFor="c">Código</label>
+          <input id="c" className="code-input" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={11} autoFocus required />
+          {error && <div className="auth-error">{error}</div>}
+          <button className="btn primary block" disabled={busy}>{busy ? 'Verificando…' : 'Verificar'}</button>
+          <p className="auth-foot">¿Perdiste tu teléfono? Usa uno de tus códigos de respaldo, o pide a un administrador que quite la verificación.</p>
+          <button type="button" className="link-btn" onClick={() => { setTicket(null); setCode(''); setError(''); }}>Volver</button>
+        </form>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout config={config} title={config.officeName} subtitle="Oficina virtual privada del equipo">

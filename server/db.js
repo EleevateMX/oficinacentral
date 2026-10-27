@@ -164,10 +164,24 @@ function addColumn(table, col, def) {
 }
 addColumn('areas', 'shape', "TEXT NOT NULL DEFAULT 'soft'");
 addColumn('users', 'shift', 'TEXT');
+addColumn('users', 'totp_secret', 'TEXT');
+addColumn('users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('users', 'totp_last', 'INTEGER NOT NULL DEFAULT -1');
+addColumn('users', 'totp_recovery', 'TEXT');
 addColumn('users', 'shift_at', 'INTEGER');
 addColumn('events', 'area_id', 'INTEGER');
 addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(`
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  data TEXT,
+  ip TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE TABLE IF NOT EXISTS boards (
   object_id INTEGER PRIMARY KEY REFERENCES objects(id) ON DELETE CASCADE,
   strokes TEXT NOT NULL DEFAULT '[]',

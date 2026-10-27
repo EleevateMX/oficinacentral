@@ -155,3 +155,10 @@ npm run test:e2e  # prueba en navegador con Playwright
 ```
 
 GitHub Actions corre ambas en cada push y pull request (`.github/workflows/ci.yml`).
+
+## Seguridad
+
+- **Verificación en dos pasos** (app de autenticación) con 10 códigos de respaldo. En *Seguridad* un admin puede exigirla a todos los administradores.
+  Si alguien pierde su teléfono, otro admin la quita desde *Miembros*, o en el servidor: `npm run reset-2fa -- <usuario>`.
+- **Registro de actividad** (Preferencias → Seguridad): invitaciones, cambios de rol, cuentas desactivadas, contraseñas restablecidas,
+  pisos, áreas, líderes, logos, objetos borrados por admins, inicios de sesión de admins y los fallidos. Exportable a CSV.

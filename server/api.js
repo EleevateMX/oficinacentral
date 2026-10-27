@@ -9,6 +9,7 @@ import {
 import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
 import * as world from './world.js';
 import { alert } from './alerts.js';
+import * as sec from './security.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 
 export const api = express.Router();
@@ -42,6 +43,7 @@ export function publicUser(u) {
     timezone: u.timezone,
     statusText: u.status_text || '',
     shift: u.shift || null,
+    twoFactor: !!u.totp_enabled,
     shiftAt: u.shift_at || null,
     disabled: !!u.disabled,
     lastActive: u.last_active,
@@ -73,6 +75,8 @@ function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') return fail(res, 403, 'Solo para administradores');
+  // Si la oficina lo exige, un admin sin verificación en dos pasos no puede administrar
+  if (sec.requireAdmin2fa() && !req.user.totp_enabled) return res.status(403).json({ error: 'Activa la verificación en dos pasos (Preferencias → Cuenta) para usar las funciones de administrador.', code: 'need2fa' });
   next();
 }
 
@@ -103,6 +107,7 @@ function officeConfig() {
     shifts: parseJSON(getSetting('shifts') || 'null', null) || DEFAULT_SHIFTS,
     // Servidor de medios: LiveKit si está configurado; si no, conexión directa (P2P)
     livekitUrl: livekitEnabled() ? process.env.LIVEKIT_URL : null,
+    requireAdmin2fa: sec.requireAdmin2fa(),
   };
 }
 
@@ -167,12 +172,45 @@ api.post('/auth/login', wrap((req, res) => {
   if (loginRateLimited(ip)) return fail(res, 429, 'Demasiados intentos. Espera unos minutos.');
   const { username, password } = req.body || {};
   const u = db.prepare('SELECT * FROM users WHERE username = ? OR (email != \'\' AND email = ?)').get(String(username || '').trim(), String(username || '').trim().toLowerCase());
-  if (!u || !verifyPassword(String(password || ''), u.password_hash)) return fail(res, 401, 'Usuario o contraseña incorrectos');
+  if (!u || !verifyPassword(String(password || ''), u.password_hash)) {
+    sec.audit({ actor: u?.id ?? null, action: `Inicio de sesión fallido (${String(username || '').slice(0, 40)})`, ip });
+    return fail(res, 401, 'Usuario o contraseña incorrectos');
+  }
   if (u.disabled) return fail(res, 403, 'Tu cuenta está desactivada. Habla con un administrador.');
   clearLoginAttempts(ip);
+  // Segundo paso: código de la app de autenticación
+  if (u.totp_enabled) return res.json({ needs2fa: true, ticket: sec.newLoginTicket(u.id) });
+  finishLogin(req, res, u);
+}));
+
+function finishLogin(req, res, u) {
+  if (u.role === 'admin') sec.audit({ actor: u.id, action: 'Inició sesión (admin)', ip: req.ip });
   const token = createSession(u.id);
   res.setHeader('Set-Cookie', sessionCookie(token));
   res.json({ user: publicUser(u) });
+}
+
+api.post('/auth/2fa', wrap((req, res) => {
+  if (loginRateLimited(req.ip)) return fail(res, 429, 'Demasiados intentos. Espera unos minutos.');
+  const t = sec.readLoginTicket(req.body?.ticket);
+  if (!t) return fail(res, 401, 'El inicio de sesión expiró. Vuelve a escribir tu contraseña.');
+  const u = getUser(t.userId);
+  if (!u || u.disabled || !u.totp_enabled) return fail(res, 401, 'No se pudo verificar');
+  const code = String(req.body?.code || '').trim();
+  const step = sec.checkTotp(u.totp_secret, code, u.totp_last);
+  if (step != null) {
+    db.prepare('UPDATE users SET totp_last = ? WHERE id = ?').run(step, u.id);
+  } else {
+    const rest = sec.useRecoveryCode(u.totp_recovery, code);
+    if (!rest) {
+      sec.audit({ actor: u.id, action: 'Código de verificación incorrecto', ip: req.ip });
+      return fail(res, 401, 'Código incorrecto');
+    }
+    db.prepare('UPDATE users SET totp_recovery = ? WHERE id = ?').run(JSON.stringify(rest), u.id);
+    sec.audit({ actor: u.id, action: `Entró con un código de respaldo (quedan ${rest.length})`, ip: req.ip });
+  }
+  sec.dropLoginTicket(req.body?.ticket);
+  finishLogin(req, res, getUser(u.id));
 }));
 
 api.post('/auth/logout', (req, res) => {
@@ -223,6 +261,7 @@ api.post('/invites/:token/accept', wrap((req, res) => {
 
 // Todo lo de abajo requiere sesión
 api.use(requireAuth);
+api.use(sec.auditMiddleware);
 
 // ---------- LiveKit (servidor de medios / SFU) ----------
 function livekitEnabled() {
@@ -360,6 +399,46 @@ api.post('/me/password', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// ---------- Verificación en dos pasos ----------
+api.post('/me/2fa/setup', wrap((req, res) => {
+  if (req.user.totp_enabled) return fail(res, 400, 'Ya tienes activada la verificación en dos pasos');
+  const secret = sec.newTotpSecret();
+  db.prepare('UPDATE users SET totp_secret = ?, totp_last = -1 WHERE id = ?').run(secret, req.user.id);
+  res.json({ secret, otpauth: sec.otpauthUrl(secret, req.user.username, officeConfig().officeName) });
+}));
+
+api.post('/me/2fa/enable', wrap((req, res) => {
+  const u = getUser(req.user.id);
+  if (u.totp_enabled) return fail(res, 400, 'Ya está activada');
+  if (!u.totp_secret) return fail(res, 400, 'Primero genera el código QR');
+  const step = sec.checkTotp(u.totp_secret, req.body?.code, u.totp_last);
+  if (step == null) return fail(res, 400, 'El código no coincide. Revisa la hora de tu teléfono e inténtalo de nuevo.');
+  const { codes, hashes } = sec.newRecoveryCodes();
+  db.prepare('UPDATE users SET totp_enabled = 1, totp_last = ?, totp_recovery = ? WHERE id = ?').run(step, JSON.stringify(hashes), u.id);
+  broadcastUser(u.id);
+  res.json({ recoveryCodes: codes });
+}));
+
+api.post('/me/2fa/disable', wrap((req, res) => {
+  const u = getUser(req.user.id);
+  if (!u.totp_enabled) return fail(res, 400, 'No está activada');
+  if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) return fail(res, 400, 'La contraseña no es correcta');
+  if (u.role === 'admin' && sec.requireAdmin2fa()) return fail(res, 400, 'La oficina exige la verificación en dos pasos a los administradores');
+  db.prepare('UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_recovery = NULL, totp_last = -1 WHERE id = ?').run(u.id);
+  broadcastUser(u.id);
+  res.json({ ok: true });
+}));
+
+api.post('/me/2fa/recovery', wrap((req, res) => {
+  const u = getUser(req.user.id);
+  if (!u.totp_enabled) return fail(res, 400, 'No está activada');
+  if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) return fail(res, 400, 'La contraseña no es correcta');
+  const { codes, hashes } = sec.newRecoveryCodes();
+  db.prepare('UPDATE users SET totp_recovery = ? WHERE id = ?').run(JSON.stringify(hashes), u.id);
+  sec.audit({ actor: u.id, action: 'Generó códigos de respaldo nuevos', ip: req.ip });
+  res.json({ recoveryCodes: codes });
+}));
+
 // ---------- Personajes subidos (hojas de sprites PNG 96×192) ----------
 const SHEET_W = 96;
 const SHEET_H = 192;
@@ -444,6 +523,10 @@ admin.patch('/office', (req, res) => {
     if (b.accent !== null && !/^#[0-9a-fA-F]{6}$/.test(b.accent)) return fail(res, 400, 'Color inválido');
     setSetting('accent', b.accent);
   }
+  if (b.requireAdmin2fa !== undefined) {
+    if (b.requireAdmin2fa && !req.user.totp_enabled) return fail(res, 400, 'Activa primero tu propia verificación en dos pasos');
+    setSetting('require_admin_2fa', b.requireAdmin2fa ? '1' : '0');
+  }
   if (b.shifts !== undefined) {
     if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');
     const list = [...new Set(b.shifts.map((x) => String(x).trim().slice(0, 30)).filter(Boolean))].slice(0, 30);
@@ -522,6 +605,18 @@ admin.patch('/users/:id', wrap((req, res) => {
   broadcastUser(id);
   res.json({ user: publicUser(getUser(id)) });
 }));
+
+admin.post('/users/:id/reset-2fa', wrap((req, res) => {
+  const id = Number(req.params.id);
+  if (!getUser(id)) return fail(res, 404, 'Usuario no encontrado');
+  db.prepare('UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_recovery = NULL, totp_last = -1 WHERE id = ?').run(id);
+  broadcastUser(id);
+  res.json({ ok: true });
+}));
+
+admin.get('/audit', (req, res) => {
+  res.json({ entries: sec.auditList({ limit: req.query.limit, before: req.query.before ? Number(req.query.before) : null, q: String(req.query.q || '').slice(0, 60) }) });
+});
 
 admin.post('/users/:id/reset-password', wrap((req, res) => {
   const id = Number(req.params.id);

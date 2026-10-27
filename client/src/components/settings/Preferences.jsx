@@ -29,6 +29,7 @@ const SECTIONS = [
   { id: 'members', label: 'Miembros', icon: UserCog },
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
+  { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -75,6 +76,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'office' && <OfficeAdmin />}
             {cur === 'characters' && <CharactersAdmin />}
             {cur === 'brand' && <BrandAdmin />}
+            {cur === 'security' && <SecurityAdmin />}
           </div>
         </section>
       </div>
@@ -385,8 +387,156 @@ function Account() {
           <button className="btn primary">Actualizar contraseña</button>
         </form>
       </Section>
+      <TwoFactor />
       <Section title="Sesión">
         <button className="btn danger-text" onClick={() => window.dispatchEvent(new Event('office:logout'))}>Cerrar sesión</button>
+      </Section>
+    </>
+  );
+}
+
+// Verificación en dos pasos con una app (Google Authenticator, Authy, 1Password…)
+function TwoFactor() {
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  const config = useOffice((s) => s.config);
+  const [setup, setSetup] = useState(null); // { secret, qr }
+  const [code, setCode] = useState('');
+  const [codes, setCodes] = useState(null);
+  const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState(null);
+  const on = me.twoFactor;
+
+  const start = async () => {
+    setMsg(null);
+    try {
+      const r = await api.post('/me/2fa/setup');
+      const QR = (await import('qrcode')).default;
+      setSetup({ secret: r.secret, qr: await QR.toDataURL(r.otpauth, { margin: 1, width: 220 }) });
+    } catch (e) { setMsg({ error: e.message }); }
+  };
+  const enable = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api.post('/me/2fa/enable', { code });
+      setCodes(r.recoveryCodes); setSetup(null); setCode(''); setMsg(null);
+    } catch (err) { setMsg({ error: err.message }); }
+  };
+  const disable = async (e) => {
+    e.preventDefault();
+    try { await api.post('/me/2fa/disable', { password: pw }); setPw(''); setMsg({ ok: 'Verificación en dos pasos desactivada' }); } catch (err) { setMsg({ error: err.message }); }
+  };
+  const regen = async () => {
+    const password = prompt('Escribe tu contraseña para generar códigos nuevos (los anteriores dejarán de servir):');
+    if (!password) return;
+    try { setCodes((await api.post('/me/2fa/recovery', { password })).recoveryCodes); } catch (err) { setMsg({ error: err.message }); }
+  };
+  const download = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([`Códigos de respaldo de ${config.officeName} (${me.username})\nCada código sirve una sola vez.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+    a.download = 'codigos-de-respaldo.txt';
+    a.click();
+  };
+
+  return (
+    <Section title="Verificación en dos pasos">
+      <p className="muted small">
+        Además de tu contraseña, al entrar se pide un código de 6 dígitos de una app en tu teléfono
+        (Google Authenticator, Microsoft Authenticator, Authy o 1Password).
+        {config.requireAdmin2fa && me.role === 'admin' && <b> Esta oficina la exige a los administradores.</b>}
+      </p>
+      {codes ? (
+        <div className="recovery">
+          <b>Guarda estos códigos de respaldo.</b> Sirven para entrar si pierdes tu teléfono; cada uno se usa una vez y no se volverán a mostrar.
+          <div className="recovery-grid">{codes.map((c) => <code key={c}>{c}</code>)}</div>
+          <div className="row gap8">
+            <button className="btn" onClick={download}><Download size={15} /> Descargar</button>
+            <CopyBtn text={codes.join('\n')} label="Copiar" />
+            <button className="btn primary" onClick={() => setCodes(null)}>Ya los guardé</button>
+          </div>
+        </div>
+      ) : on ? (
+        <>
+          <div className="form-ok">✓ Activada</div>
+          <div className="row gap8 wrap">
+            <button className="btn" onClick={regen}>Generar códigos de respaldo nuevos</button>
+          </div>
+          <form className="row gap8 wrap" onSubmit={disable}>
+            <input type="password" placeholder="Tu contraseña" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required />
+            <button className="btn danger-text">Desactivar</button>
+          </form>
+        </>
+      ) : setup ? (
+        <form className="twofa-setup" onSubmit={enable}>
+          <img src={setup.qr} alt="Código QR para tu app de autenticación" width={180} height={180} />
+          <div className="form">
+            <div className="small">1. Abre tu app de autenticación y escanea el código.</div>
+            <div className="small muted">¿No puedes escanear? Escribe esta clave: <code className="secret">{setup.secret.match(/.{1,4}/g).join(' ')}</code></div>
+            <div className="small">2. Escribe el código de 6 dígitos que aparece:</div>
+            <input className="code-input" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" autoFocus required />
+            <div className="row gap8">
+              <button className="btn primary">Activar</button>
+              <button className="btn" type="button" onClick={() => setSetup(null)}>Cancelar</button>
+            </div>
+          </div>
+        </form>
+      ) : (
+        <button className="btn primary" onClick={start}><Shield size={15} /> Activar verificación en dos pasos</button>
+      )}
+      {msg?.error && <div className="form-error">{msg.error}</div>}
+      {msg?.ok && <div className="form-ok">{msg.ok}</div>}
+    </Section>
+  );
+}
+
+// ---------- Seguridad (admin): exigir 2FA y registro de actividad ----------
+function SecurityAdmin() {
+  const config = useOffice((s) => s.config);
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  const [entries, setEntries] = useState([]);
+  const [q, setQ] = useState('');
+  const [more, setMore] = useState(true);
+  const load = async (before = null, reset = false) => {
+    try {
+      const { entries: list } = await api.get(`/admin/audit?limit=100&q=${encodeURIComponent(q)}${before ? `&before=${before}` : ''}`);
+      setEntries((prev) => (reset ? list : [...prev, ...list]));
+      setMore(list.length === 100);
+    } catch (e) { office.toast({ title: e.message, kind: 'error' }); }
+  };
+  useEffect(() => { const t = setTimeout(() => load(null, true), 250); return () => clearTimeout(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const csv = () => {
+    const rows = [['fecha', 'quien', 'accion', 'ruta', 'ip'], ...entries.map((e) => [new Date(e.createdAt).toISOString(), e.actorName || '', e.action, e.target || '', e.ip || ''])];
+    const body = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + body], { type: 'text/csv' }));
+    a.download = 'registro-de-actividad.csv';
+    a.click();
+  };
+  const toggle = (v) => api.patch('/admin/office', { requireAdmin2fa: v }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  return (
+    <>
+      <Section title="Verificación en dos pasos">
+        <Row title="Exigirla a los administradores" desc={me.twoFactor ? 'Un admin sin ella no podrá usar las funciones de administración hasta activarla.' : 'Primero actívala para ti en Cuenta.'}>
+          <Toggle checked={!!config.requireAdmin2fa} disabled={!me.twoFactor} onChange={toggle} />
+        </Row>
+      </Section>
+      <Section title="Registro de actividad">
+        <p className="muted small">Quién invitó, cambió permisos, borró o configuró algo, y los inicios de sesión de admins y los fallidos.</p>
+        <div className="row gap8">
+          <input className="search-input flex1" placeholder="Buscar por persona o acción" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn" onClick={csv} disabled={!entries.length}><Download size={15} /> CSV</button>
+        </div>
+        <div className="audit-list">
+          {entries.map((e) => (
+            <div key={e.id} className="audit-row">
+              <span className="audit-when">{new Date(e.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              <span className="audit-who">{e.actorName || 'Alguien'}</span>
+              <span className="audit-what">{e.action}</span>
+              {e.ip && <span className="audit-ip muted">{e.ip}</span>}
+            </div>
+          ))}
+          {!entries.length && <div className="muted pad">Sin actividad registrada.</div>}
+          {more && entries.length > 0 && <button className="btn block" onClick={() => load(entries[entries.length - 1].id)}>Ver más</button>}
+        </div>
       </Section>
     </>
   );
@@ -463,7 +613,7 @@ function Members({ initialTab }) {
                 <div className="row gap8 ellipsis">
                   <Avatar user={u} size={34} />
                   <div className="ellipsis">
-                    <div>{u.displayName}{u.id === me.id && ' (tú)'}</div>
+                    <div>{u.displayName}{u.id === me.id && ' (tú)'}{u.twoFactor && <span className="tag-2fa" title="Verificación en dos pasos activada">2FA</span>}</div>
                     <div className="muted small ellipsis">{u.email || `@${u.username}`}</div>
                   </div>
                 </div>
@@ -478,6 +628,7 @@ function Members({ initialTab }) {
                     {u.id !== me.id && (
                       <>
                         <button className="icon-btn" title="Restablecer contraseña" onClick={() => resetPw(u)}><RotateCcw size={14} /></button>
+                        {u.twoFactor && <button className="icon-btn" title="Quitar verificación en dos pasos (si perdió su teléfono)" onClick={() => confirm(`¿Quitar la verificación en dos pasos de ${u.displayName}?`) && api.post(`/admin/users/${u.id}/reset-2fa`).catch((e) => office.toast({ title: e.message, kind: 'error' }))}><Shield size={14} /></button>}
                         <button className="icon-btn danger" title={u.disabled ? 'Reactivar' : 'Desactivar acceso'} onClick={() => (u.disabled || confirm(`¿Quitar el acceso a ${u.displayName}?`)) && patchUser(u, { disabled: !u.disabled })}>
                           {u.disabled ? <Check size={14} /> : <Ban size={14} />}
                         </button>
