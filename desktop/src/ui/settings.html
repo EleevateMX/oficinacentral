@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'">
+  <title>Nuvora — Configuración</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Configuración</h1>
+    <p class="muted">Estos atajos funcionan aunque estés en un juego. <span id="version"></span></p>
+
+    <h2>Silenciar / activar micrófono</h2>
+    <div class="card">
+      <div class="row">
+        <input id="shortcut" class="kbd" type="text" readonly aria-label="Atajo para silenciar">
+        <button id="shortcutReset" type="button">Restablecer</button>
+        <button id="shortcutClear" type="button">Quitar</button>
+      </div>
+      <div class="note">Haz clic en el cuadro y presiona la combinación (por ejemplo Ctrl+Shift+M).</div>
+      <div id="shortcutWarn" class="warn" hidden>Otra app ya usa ese atajo. Elige otro.</div>
+    </div>
+
+    <h2>Mantener para hablar</h2>
+    <div class="card">
+      <label class="check"><input id="pttEnabled" type="checkbox"> <span>Activar: el micrófono solo se abre mientras mantienes la tecla</span></label>
+      <div class="row">
+        <span id="pttKey" class="kbd"></span>
+        <button id="pttCapture" type="button">Cambiar tecla…</button>
+      </div>
+      <div id="pttNote" class="note">Puede ser una tecla o un botón lateral del ratón (botón 4 o 5).</div>
+      <div id="pttWarn" class="warn" hidden></div>
+    </div>
+
+    <h2>Pantalla compartida</h2>
+    <div class="card">
+      <label class="check"><input id="excludeOwnAudio" type="checkbox"> <span>No incluir las voces de la oficina en el audio que compartes (evita eco)</span></label>
+      <div id="audioNote" class="note"></div>
+    </div>
+
+    <h2>General</h2>
+    <div class="card">
+      <label class="check" id="loginRow"><input id="loginItem" type="checkbox"> <span>Iniciar con el sistema (minimizada en la bandeja)</span></label>
+      <div class="row">
+        <span class="muted">Oficina: <b id="office"></b></span>
+        <button id="changeOffice" type="button">Cambiar oficina…</button>
+      </div>
+    </div>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

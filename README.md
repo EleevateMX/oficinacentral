@@ -154,3 +154,47 @@ npm run test:e2e  # prueba en navegador con Playwright
 ```
 
 GitHub Actions corre ambas en cada push y pull request (`.github/workflows/ci.yml`).
+
+## App de escritorio
+
+En `desktop/` está la app para Windows y macOS (Electron). Abre la oficina en su propia ventana y añade lo que el navegador
+no puede hacer mientras juegas:
+
+- **Elegir oficina** la primera vez (p. ej. `oficina.gtahub.gg`); se cambia en la bandeja → *Cambiar oficina…*.
+  Solo navega dentro de esa dirección; los demás enlaces se abren en el navegador.
+- **Atajos globales** (funcionan con el juego en primer plano): silenciar/activar con **Ctrl+Shift+M** y
+  **mantener para hablar** con la tecla <kbd>`</kbd> (debajo de Esc) o un botón lateral del ratón. Se configuran en
+  la bandeja → *Configuración…*. Si el gancho de teclado no carga, queda solo el modo de alternar.
+- **Compartir pantalla con audio de la PC**: selector propio de pantallas y ventanas. En Windows 11 y macOS 14.2+
+  se excluyen las voces de la oficina del audio compartido (evita eco).
+- **Bandeja del sistema**: abrir, silenciar, cambiar oficina, iniciar con el sistema y salir. Cerrar la ventana la deja en la bandeja.
+
+```bash
+cd desktop
+npm install
+npm start            # abre la app en modo desarrollo
+npm run dist:win     # instalador NSIS en desktop/dist (desde Windows)
+npm run dist:mac     # .dmg arm64 y x64 en desktop/dist (desde macOS)
+npm run icons        # regenera los íconos desde el logo
+```
+
+GitHub Actions (`.github/workflows/desktop.yml`) genera el instalador de Windows y los `.dmg` de macOS cuando cambia
+`desktop/` (o a mano con *Run workflow*) y los deja como artefactos; no publica releases.
+
+Notas:
+
+- **Firma de código**: los instaladores salen **sin firmar** (Windows) y con **firma ad-hoc** (macOS). Windows mostrará
+  SmartScreen y macOS pedirá *clic derecho → Abrir* (o `xattr -dr com.apple.quarantine /Applications/Nuvora.app`).
+  Para producción: en Windows un certificado de firma de código (OV/EV o Azure Trusted Signing) con `CSC_LINK` y
+  `CSC_KEY_PASSWORD`; en macOS un certificado *Developer ID Application* (`CSC_LINK`/`CSC_KEY_PASSWORD`), quitar
+  `"identity": "-"`, activar `hardenedRuntime` con entitlements de micrófono/cámara y notarizar con `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD` y `APPLE_TEAM_ID`. Todos van como *secrets* del workflow.
+- **Audio del sistema en macOS**: requiere macOS 13 o superior. En 14.2+ Chromium usa CoreAudio Tap y macOS pide el permiso
+  *Grabación de audio del sistema* (la app ya declara `NSAudioCaptureUsageDescription`); en 13–14.1 usa ScreenCaptureKit.
+  En macOS 12 o anterior no hay audio del sistema (alternativa: un dispositivo virtual como BlackHole).
+  Sin firma de Developer ID, macOS puede volver a pedir los permisos tras cada actualización.
+- **Mantener para hablar en macOS** necesita el permiso de *Accesibilidad* (Ajustes del Sistema → Privacidad y seguridad).
+  En Windows, si el juego corre como administrador, la app también debe abrirse como administrador para escuchar las teclas.
+- El micrófono se abre y cierra en cada pulsación (igual que el botón de la barra), así que puede haber una pequeña
+  demora al empezar a hablar.
+- Las notificaciones de Windows funcionan con la app instalada (el instalador registra el AppUserModelID `mx.nuvora.desktop`).

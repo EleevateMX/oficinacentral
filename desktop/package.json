@@ -1,0 +1,91 @@
+{
+  "name": "nuvora-desktop",
+  "productName": "Nuvora",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App de escritorio de Nuvora: oficina virtual con atajos globales y pantalla con audio del sistema.",
+  "author": "Nuvora",
+  "license": "UNLICENSED",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "icons": "node scripts/icons.js",
+    "check": "node scripts/check.js",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
+  },
+  "dependencies": {
+    "uiohook-napi": "1.5.5"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "mx.nuvora.desktop",
+    "productName": "Nuvora",
+    "copyright": "Nuvora",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "npmRebuild": false,
+    "asarUnpack": [
+      "node_modules/uiohook-napi/prebuilds/**"
+    ],
+    "artifactName": "Nuvora-${version}-${os}-${arch}.${ext}",
+    "publish": null,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nuvora"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Nuvora usa el micrófono para hablar con tu equipo en la oficina.",
+        "NSCameraUsageDescription": "Nuvora usa la cámara para que tu equipo te vea en la oficina.",
+        "NSAudioCaptureUsageDescription": "Nuvora captura el audio del sistema cuando compartes tu pantalla con audio."
+      }
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Office"
+    }
+  }
+}

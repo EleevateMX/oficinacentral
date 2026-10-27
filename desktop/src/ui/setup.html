@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'">
+  <title>Nuvora — Elegir oficina</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <img class="logo" src="../../assets/icon.png" alt="">
+    <h1>¿A qué oficina entras?</h1>
+    <p class="muted">Escribe la dirección que te compartió tu equipo. Se guarda en esta computadora y puedes cambiarla después desde la bandeja del sistema → <b>Cambiar oficina…</b></p>
+    <form id="form">
+      <label for="url">Dirección de la oficina</label>
+      <input id="url" type="text" placeholder="oficina.gtahub.gg" autocomplete="url" spellcheck="false" required autofocus>
+      <div id="msg" class="error" role="status"></div>
+      <div class="actions">
+        <button id="save" class="primary" type="submit">Entrar</button>
+      </div>
+    </form>
+  </main>
+  <script src="setup.js"></script>
+</body>
+</html>
