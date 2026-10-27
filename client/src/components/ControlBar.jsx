@@ -1,0 +1,81 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand } from 'lucide-react';
+import { office, useOffice } from '../lib/store.js';
+import { Avatar, STATUS } from './ui.jsx';
+
+const EMOJIS = ['👋', '👍', '❤️', '😂', '🎉', '🔥', '👏', '🤔', '☕', '✅'];
+
+function useClickOutside(ref, onOut) {
+  useEffect(() => {
+    const h = (e) => ref.current && !ref.current.contains(e.target) && onOut();
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [ref, onOut]);
+}
+
+export default function ControlBar({ compact = false }) {
+  const me = useOffice((s) => s.me);
+  const users = useOffice((s) => s.users);
+  const media = useOffice((s) => s.media);
+  const [menu, setMenu] = useState(null);
+  const ref = useRef(null);
+  useClickOutside(ref, () => setMenu(null));
+  const meU = users[me.id] || me;
+
+  return (
+    <div className={`control-bar ${compact ? 'compact' : ''}`} ref={ref}>
+      <div className="cb-group">
+        <button className="cb-avatar" onClick={() => setMenu(menu === 'me' ? null : 'me')} title="Tu estado">
+          <Avatar user={{ ...meU, online: true }} size={compact ? 30 : 34} />
+        </button>
+        {menu === 'me' && (
+          <div className="popover up left">
+            <div className="pop-title">{meU.displayName}</div>
+            {Object.entries(STATUS).map(([k, s]) => (
+              <button key={k} className={`pop-item ${meU.status === k ? 'on' : ''}`} onClick={() => { office.setStatus(k); setMenu(null); }}>
+                <span className="dot" style={{ background: s.color }} /> {s.label}
+              </button>
+            ))}
+            <div className="pop-sep" />
+            <button className="pop-item" onClick={() => { office.set({ profileCard: me.id }); setMenu(null); }}>Ver mi perfil</button>
+            <button className="pop-item" onClick={() => { office.set({ modal: { type: 'profile' } }); setMenu(null); }}>Editar perfil</button>
+          </div>
+        )}
+      </div>
+      <div className="cb-sep" />
+      <button className={`cb-btn ${media.mic ? 'on' : 'off'}`} onClick={() => office.toggleMic()} title={media.mic ? 'Silenciar micrófono' : 'Activar micrófono'}>
+        {media.mic ? <Mic size={18} /> : <MicOff size={18} />}
+      </button>
+      {!compact && (
+        <button className="cb-caret" onClick={() => office.set({ modal: { type: 'prefs', section: 'audio' } })} title="Ajustes de audio"><ChevronUp size={12} /></button>
+      )}
+      <button className={`cb-btn ${media.cam ? 'on' : 'off'}`} onClick={() => office.toggleCam()} title={media.cam ? 'Apagar cámara' : 'Encender cámara'}>
+        {media.cam ? <Video size={18} /> : <VideoOff size={18} />}
+      </button>
+      {!compact && (
+        <button className="cb-caret" onClick={() => office.set({ modal: { type: 'prefs', section: 'video' } })} title="Ajustes de video"><ChevronUp size={12} /></button>
+      )}
+      <div className="cb-group">
+        <button className="cb-btn" onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} title="Reaccionar (teclas 1–6)"><Smile size={18} /></button>
+        {menu === 'emoji' && (
+          <div className="popover up emoji-pop">
+            {EMOJIS.map((e) => (
+              <button key={e} onClick={() => { office.react(e); setMenu(null); }}>{e}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      {!compact && (
+        <button className="cb-btn" onClick={() => office.react('✋')} title="Levantar la mano"><Hand size={18} /></button>
+      )}
+      <button className={`cb-btn ${media.screen ? 'on sharing' : ''}`} onClick={() => office.toggleScreen()} title={media.screen ? 'Dejar de compartir' : 'Compartir pantalla'}>
+        <MonitorUp size={18} />
+      </button>
+      <div className="cb-sep" />
+      {!compact && (
+        <button className="cb-btn" onClick={() => office.set({ modal: { type: 'prefs', section: 'general' } })} title="Preferencias"><Settings size={18} /></button>
+      )}
+      <button className="cb-btn" onClick={() => window.dispatchEvent(new Event('office:logout'))} title="Salir de la oficina"><LogOut size={18} /></button>
+    </div>
+  );
+}

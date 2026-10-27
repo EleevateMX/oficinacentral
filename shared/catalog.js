@@ -1,0 +1,104 @@
+// Catálogo de objetos que se pueden colocar en el mapa.
+// w/h están en tiles. Los muebles se alinean a la cuadrícula; las decoraciones
+// se pueden colocar libremente (pasos de 1/4 de tile) y no bloquean el paso.
+
+export const CATEGORIES = [
+  { id: 'escritorio', name: 'Escritorio' },
+  { id: 'tech', name: 'Tecnología' },
+  { id: 'comida', name: 'Comida' },
+  { id: 'plantas', name: 'Plantas' },
+  { id: 'deco', name: 'Decoración' },
+  { id: 'muebles', name: 'Muebles' },
+  { id: 'salas', name: 'Salas' },
+  { id: 'exterior', name: 'Exterior' },
+];
+
+const f = (name, cat, w, h, opts = {}) => ({ name, cat, w, h, kind: 'furniture', solid: true, ...opts });
+const d = (name, cat, w, h, opts = {}) => ({ name, cat, w, h, kind: 'decor', solid: false, ...opts });
+
+export const CATALOG = {
+  // Muebles
+  desk: f('Escritorio', 'muebles', 3, 1, { colorable: true, color: '#a0673f', claimable: true }),
+  standingDesk: f('Escritorio blanco', 'muebles', 3, 1, { colorable: true, color: '#e8e8ee', claimable: true }),
+  cubicle: f('Cubículo', 'muebles', 4, 1, { colorable: true, color: '#f4f4f6', claimable: true }),
+  chair: f('Silla', 'muebles', 1, 1, { solid: false, colorable: true, color: '#3f4652', rotatable: true }),
+  gamingChair: f('Silla gamer', 'muebles', 1, 1, { solid: false, colorable: true, color: '#d9454f', rotatable: true }),
+  beanBag: f('Puff', 'muebles', 1, 1, { solid: false, colorable: true, color: '#9b5de5' }),
+  sofa: f('Sofá', 'muebles', 5, 1, { colorable: true, color: '#e8a27c', rotatable: true }),
+  sofaSmall: f('Sofá chico', 'muebles', 3, 1, { colorable: true, color: '#e9edf2', rotatable: true }),
+  table: f('Mesa', 'muebles', 4, 2, { colorable: true, color: '#9a6a43' }),
+  roundTable: f('Mesa redonda', 'muebles', 2, 1, { colorable: true, color: '#f1d39a' }),
+  meetingTable: f('Mesa de juntas', 'salas', 6, 3, { colorable: true, color: '#eef0f4' }),
+  confTable: f('Mesa larga', 'salas', 10, 2, { colorable: true, color: '#c88a55' }),
+  bookshelf: f('Librero', 'muebles', 3, 1),
+  shelf: f('Estante', 'muebles', 3, 1),
+  cabinet: f('Archivero', 'muebles', 1, 1, { colorable: true, color: '#d0d4da' }),
+  whiteboard: f('Pizarrón', 'salas', 3, 1),
+  tv: f('Pantalla', 'salas', 3, 1),
+  easel: f('Rotafolio', 'salas', 1, 1),
+  fridge: f('Refrigerador', 'comida', 1, 1),
+  counter: f('Barra de cocina', 'comida', 4, 1),
+  coffee: f('Cafetera', 'comida', 2, 1),
+  watercooler: f('Garrafón', 'comida', 1, 1),
+  arcade: f('Arcade', 'deco', 1, 1, { colorable: true, color: '#2bb673' }),
+  foosball: f('Futbolito', 'deco', 3, 2),
+  drum: f('Tambor', 'deco', 1, 1),
+  plant: f('Planta', 'plantas', 1, 1),
+  tallPlant: f('Planta alta', 'plantas', 1, 1),
+  tree2: f('Árbol de interior', 'plantas', 2, 2),
+  hedge: f('Seto', 'exterior', 1, 1),
+  flowers: f('Flores', 'exterior', 1, 1, { solid: false }),
+  bush: f('Arbusto', 'exterior', 1, 1),
+  tree: f('Pino', 'exterior', 1, 1),
+  bench: f('Banca', 'exterior', 2, 1, { rotatable: true }),
+  fountain: f('Fuente', 'exterior', 2, 2),
+  bikeRack: f('Bicicletas', 'deco', 3, 1),
+  coatRack: f('Perchero', 'deco', 1, 1),
+  robotArm: f('Brazo robot', 'tech', 1, 1),
+  serverRack: f('Servidor', 'tech', 1, 1),
+  painting: f('Cuadro', 'deco', 2, 1, { solid: false, colorable: true, color: '#e63946' }),
+  clock: f('Reloj', 'deco', 1, 1, { solid: false }),
+  window: f('Ventana', 'deco', 4, 1, { solid: false }),
+  rug: f('Tapete', 'deco', 3, 2, { solid: false, colorable: true, color: '#8ecae6', under: true }),
+
+  // Decoraciones de escritorio (no bloquean, posición libre)
+  monitor: d('Monitor', 'tech', 0.75, 0.75, { colorable: true, color: '#2b2f3a' }),
+  dualMonitor: d('Doble monitor', 'tech', 1.5, 0.75, { colorable: true, color: '#2b2f3a' }),
+  imac: d('Computadora', 'tech', 1, 1, { colorable: true, color: '#e8e8ee' }),
+  laptop: d('Laptop', 'tech', 0.75, 0.5, { colorable: true, color: '#9aa3ad' }),
+  keyboard: d('Teclado', 'tech', 0.75, 0.25, { colorable: true, color: '#3a3f4b' }),
+  pcTower: d('Torre PC', 'tech', 0.5, 0.75, { colorable: true, color: '#22252d' }),
+  controller: d('Control', 'tech', 0.5, 0.25, { colorable: true, color: '#e63946' }),
+  headphones: d('Audífonos', 'tech', 0.5, 0.5, { colorable: true, color: '#2bb673' }),
+  speaker: d('Bocina', 'tech', 0.25, 0.5, { colorable: true, color: '#2b2f3a' }),
+  camera: d('Cámara', 'tech', 0.5, 0.75),
+  mug: d('Taza', 'comida', 0.25, 0.25, { colorable: true, color: '#ffffff' }),
+  can: d('Lata', 'comida', 0.25, 0.25, { colorable: true, color: '#4361ee' }),
+  burger: d('Hamburguesa', 'comida', 0.5, 0.5),
+  fries: d('Papas', 'comida', 0.5, 0.5),
+  pizza: d('Pizza', 'comida', 0.75, 0.5),
+  cactus: d('Cactus', 'plantas', 0.5, 0.75),
+  smallPlant: d('Plantita', 'plantas', 0.5, 0.5),
+  blossom: d('Bonsái de cerezo', 'plantas', 0.75, 0.75),
+  books: d('Libros', 'escritorio', 0.5, 0.75, { colorable: true, color: '#3a86ff' }),
+  notebook: d('Libreta', 'escritorio', 0.5, 0.5),
+  lamp: d('Lámpara', 'escritorio', 0.5, 0.75, { colorable: true, color: '#f4a261' }),
+  photo: d('Foto', 'escritorio', 0.5, 0.5, { colorable: true, color: '#ffb703' }),
+  trophy: d('Trofeo', 'escritorio', 0.5, 0.5),
+  duck: d('Patito', 'deco', 0.5, 0.5, { colorable: true, color: '#ffd23f' }),
+  ball: d('Balón', 'deco', 0.5, 0.5),
+  figure: d('Figura', 'deco', 0.25, 0.5, { colorable: true, color: '#9b5de5' }),
+  flag: d('Banderín', 'deco', 0.5, 0.5, { colorable: true, color: '#06d6a0' }),
+};
+
+export const DESK_DECOR_LIMIT = 18;
+
+export function objSize(o) {
+  const c = CATALOG[o.type];
+  if (!c) return { w: 1, h: 1 };
+  const w = o.w ?? c.w;
+  const h = o.h ?? c.h;
+  return (o.rot ?? 0) % 2 === 1 && c.kind === 'furniture' ? { w: h, h: w } : { w, h };
+}
+
+export const COLORS = ['#2b2f3a', '#e8e8ee', '#a0673f', '#e63946', '#f4a261', '#ffd23f', '#2bb673', '#06d6a0', '#3a86ff', '#4361ee', '#9b5de5', '#f15bb5', '#8ecae6', '#ffffff'];

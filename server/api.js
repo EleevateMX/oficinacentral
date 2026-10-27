@@ -1,0 +1,569 @@
+import express from 'express';
+import { db, now, tx } from './db.js';
+import {
+  hashPassword, verifyPassword, createSession, destroySession, destroyUserSessions, userFromToken,
+  parseCookies, sessionCookie, SESSION_COOKIE, loginRateLimited, clearLoginAttempts,
+  validateNewAccount, defaultAvatar, randomToken,
+} from './auth.js';
+import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
+import * as world from './world.js';
+
+export const api = express.Router();
+api.use(express.json({ limit: '1mb' }));
+
+// ---------- Utilidades ----------
+const wrap = (fn) => (req, res, next) => {
+  try {
+    const r = fn(req, res, next);
+    if (r && typeof r.catch === 'function') r.catch(next);
+  } catch (e) {
+    next(e);
+  }
+};
+
+const fail = (res, status, error) => res.status(status).json({ error });
+
+function parseJSON(s, fallback) {
+  try { return JSON.parse(s); } catch { return fallback; }
+}
+
+export function publicUser(u) {
+  return {
+    id: u.id,
+    username: u.username,
+    displayName: u.display_name,
+    email: u.email || '',
+    role: u.role,
+    avatar: parseJSON(u.avatar, {}),
+    photoUrl: u.photo ? `/api/users/${u.id}/photo?v=${u.photo_v}` : null,
+    timezone: u.timezone,
+    statusText: u.status_text || '',
+    disabled: !!u.disabled,
+    lastActive: u.last_active,
+    createdAt: u.created_at,
+    ...publicPresence(u.id),
+  };
+}
+
+const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+
+function broadcastUser(id) {
+  const u = getUser(id);
+  if (u) emitAll('user', publicUser(u));
+}
+
+function broadcastFloor(floorId) {
+  const payload = world.floorPayload(floorId);
+  if (payload) emitAll('floor', payload);
+}
+
+function requireAuth(req, res, next) {
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const user = userFromToken(token);
+  if (!user) return fail(res, 401, 'No has iniciado sesión');
+  req.user = user;
+  req.token = token;
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') return fail(res, 403, 'Solo para administradores');
+  next();
+}
+
+function notify(userId, type, actorId, data = {}) {
+  const id = Number(db.prepare('INSERT INTO notifications (user_id, type, actor_id, data, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(userId, type, actorId, JSON.stringify(data), now()).lastInsertRowid);
+  emitToUser(userId, 'notification', notificationRow(db.prepare('SELECT * FROM notifications WHERE id = ?').get(id)));
+}
+
+const notificationRow = (r) => ({ id: r.id, type: r.type, actorId: r.actor_id, data: parseJSON(r.data, {}), read: !!r.read, createdAt: r.created_at });
+
+// ---------- Configuración pública ----------
+api.get('/config', (req, res) => {
+  let iceServers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.ICE_SERVERS) iceServers = parseJSON(process.env.ICE_SERVERS, iceServers);
+  res.json({ officeName: process.env.OFFICE_NAME || 'GTAHUB', iceServers });
+});
+
+// ---------- Autenticación ----------
+api.post('/auth/login', wrap((req, res) => {
+  const ip = req.ip;
+  if (loginRateLimited(ip)) return fail(res, 429, 'Demasiados intentos. Espera unos minutos.');
+  const { username, password } = req.body || {};
+  const u = db.prepare('SELECT * FROM users WHERE username = ? OR (email != \'\' AND email = ?)').get(String(username || '').trim(), String(username || '').trim().toLowerCase());
+  if (!u || !verifyPassword(String(password || ''), u.password_hash)) return fail(res, 401, 'Usuario o contraseña incorrectos');
+  if (u.disabled) return fail(res, 403, 'Tu cuenta está desactivada. Habla con un administrador.');
+  clearLoginAttempts(ip);
+  const token = createSession(u.id);
+  res.setHeader('Set-Cookie', sessionCookie(token));
+  res.json({ user: publicUser(u) });
+}));
+
+api.post('/auth/logout', (req, res) => {
+  destroySession(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
+  res.setHeader('Set-Cookie', sessionCookie('', { clear: true }));
+  res.json({ ok: true });
+});
+
+api.get('/auth/me', requireAuth, (req, res) => {
+  res.json({ user: publicUser(req.user), prefs: parseJSON(req.user.prefs, {}) });
+});
+
+// ---------- Invitaciones (públicas) ----------
+function validInvite(token) {
+  const inv = db.prepare('SELECT * FROM invites WHERE token = ?').get(String(token));
+  if (!inv || inv.revoked || inv.used_by || inv.expires_at < now()) return null;
+  return inv;
+}
+
+api.get('/invites/:token', (req, res) => {
+  const inv = validInvite(req.params.token);
+  if (!inv) return fail(res, 404, 'La invitación no es válida o ya expiró.');
+  const by = inv.created_by ? getUser(inv.created_by) : null;
+  res.json({ email: inv.email, role: inv.role, invitedBy: by?.display_name || null, expiresAt: inv.expires_at });
+});
+
+api.post('/invites/:token/accept', wrap((req, res) => {
+  const inv = validInvite(req.params.token);
+  if (!inv) return fail(res, 404, 'La invitación no es válida o ya expiró.');
+  const username = String(req.body?.username || '').trim();
+  const displayName = String(req.body?.displayName || '').trim();
+  const password = String(req.body?.password || '');
+  const email = String(req.body?.email || inv.email || '').trim().toLowerCase().slice(0, 120);
+  const err = validateNewAccount({ username, password, displayName });
+  if (err) return fail(res, 400, err);
+  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) return fail(res, 409, 'Ese usuario ya existe.');
+  const userId = tx(() => {
+    const id = Number(db.prepare(`INSERT INTO users (username, email, display_name, password_hash, role, avatar, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(username, email, displayName, hashPassword(password), inv.role, JSON.stringify(defaultAvatar(username)), now()).lastInsertRowid);
+    db.prepare('UPDATE invites SET used_by = ?, used_at = ? WHERE token = ?').run(id, now(), inv.token);
+    return id;
+  });
+  const token = createSession(userId);
+  res.setHeader('Set-Cookie', sessionCookie(token));
+  broadcastUser(userId);
+  res.json({ user: publicUser(getUser(userId)) });
+}));
+
+// Todo lo de abajo requiere sesión
+api.use(requireAuth);
+
+// ---------- Usuarios y perfil ----------
+api.get('/users', (req, res) => {
+  const rows = db.prepare('SELECT * FROM users ORDER BY display_name COLLATE NOCASE').all();
+  res.json({ users: rows.map(publicUser) });
+});
+
+api.get('/users/:id/photo', (req, res) => {
+  const u = db.prepare('SELECT photo FROM users WHERE id = ?').get(Number(req.params.id));
+  const m = u?.photo?.match(/^data:(image\/(png|jpeg|webp|gif));base64,(.+)$/);
+  if (!m) return res.status(404).end();
+  res.setHeader('Content-Type', m[1]);
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.send(Buffer.from(m[3], 'base64'));
+});
+
+const AVATAR_KEYS = ['skin', 'hair', 'hairStyle', 'shirt', 'pants', 'accessory', 'shoes'];
+
+api.patch('/me', wrap((req, res) => {
+  const b = req.body || {};
+  const u = req.user;
+  const displayName = b.displayName !== undefined ? String(b.displayName).trim() : u.display_name;
+  if (!displayName || displayName.length > 40) return fail(res, 400, 'El nombre debe tener entre 1 y 40 caracteres.');
+  let timezone = u.timezone;
+  if (b.timezone !== undefined) {
+    try { new Intl.DateTimeFormat('es', { timeZone: b.timezone }); timezone = b.timezone; } catch { return fail(res, 400, 'Zona horaria inválida'); }
+  }
+  const statusText = b.statusText !== undefined ? String(b.statusText).slice(0, 80) : u.status_text;
+  let avatar = parseJSON(u.avatar, {});
+  if (b.avatar && typeof b.avatar === 'object') {
+    for (const k of AVATAR_KEYS) if (typeof b.avatar[k] === 'string') avatar[k] = b.avatar[k].slice(0, 20);
+  }
+  const email = b.email !== undefined ? String(b.email).trim().toLowerCase().slice(0, 120) : u.email;
+  db.prepare('UPDATE users SET display_name = ?, timezone = ?, status_text = ?, avatar = ?, email = ? WHERE id = ?')
+    .run(displayName, timezone, statusText, JSON.stringify(avatar), email, u.id);
+  broadcastUser(u.id);
+  res.json({ user: publicUser(getUser(u.id)) });
+}));
+
+api.put('/me/photo', wrap((req, res) => {
+  const dataUrl = String(req.body?.dataUrl || '');
+  if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(dataUrl)) return fail(res, 400, 'Imagen inválida');
+  if (dataUrl.length > 700_000) return fail(res, 413, 'La imagen es muy grande');
+  db.prepare('UPDATE users SET photo = ?, photo_v = photo_v + 1 WHERE id = ?').run(dataUrl, req.user.id);
+  broadcastUser(req.user.id);
+  res.json({ user: publicUser(getUser(req.user.id)) });
+}));
+
+api.delete('/me/photo', (req, res) => {
+  db.prepare('UPDATE users SET photo = NULL, photo_v = photo_v + 1 WHERE id = ?').run(req.user.id);
+  broadcastUser(req.user.id);
+  res.json({ user: publicUser(getUser(req.user.id)) });
+});
+
+api.put('/me/prefs', (req, res) => {
+  const prefs = req.body && typeof req.body === 'object' ? req.body : {};
+  const s = JSON.stringify(prefs);
+  if (s.length > 20_000) return fail(res, 413, 'Preferencias demasiado grandes');
+  db.prepare('UPDATE users SET prefs = ? WHERE id = ?').run(s, req.user.id);
+  res.json({ prefs });
+});
+
+api.post('/me/password', wrap((req, res) => {
+  const { current, password } = req.body || {};
+  if (!verifyPassword(String(current || ''), req.user.password_hash)) return fail(res, 400, 'La contraseña actual no es correcta');
+  if (!password || String(password).length < 8) return fail(res, 400, 'La nueva contraseña debe tener al menos 8 caracteres');
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), req.user.id);
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, req.token);
+  res.json({ ok: true });
+}));
+
+// ---------- Administración ----------
+const admin = express.Router();
+admin.use(requireAdmin);
+
+const inviteRow = (r) => ({
+  token: r.token, email: r.email, role: r.role, note: r.note, createdAt: r.created_at, expiresAt: r.expires_at,
+  createdBy: r.created_by, usedBy: r.used_by, usedAt: r.used_at, revoked: !!r.revoked,
+  status: r.revoked ? 'revoked' : r.used_by ? 'used' : r.expires_at < now() ? 'expired' : 'pending',
+});
+
+admin.get('/invites', (req, res) => {
+  res.json({ invites: db.prepare('SELECT * FROM invites ORDER BY created_at DESC').all().map(inviteRow) });
+});
+
+admin.post('/invites', (req, res) => {
+  const role = req.body?.role === 'admin' ? 'admin' : 'member';
+  const days = Math.min(30, Math.max(1, Number(req.body?.days) || 7));
+  const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 120);
+  const note = String(req.body?.note || '').slice(0, 120);
+  const token = randomToken(24);
+  db.prepare('INSERT INTO invites (token, email, role, note, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(token, email, role, note, req.user.id, now(), now() + days * 864e5);
+  res.json({ invite: inviteRow(db.prepare('SELECT * FROM invites WHERE token = ?').get(token)) });
+});
+
+admin.delete('/invites/:token', (req, res) => {
+  db.prepare('UPDATE invites SET revoked = 1 WHERE token = ? AND used_by IS NULL').run(req.params.token);
+  res.json({ ok: true });
+});
+
+admin.patch('/users/:id', wrap((req, res) => {
+  const id = Number(req.params.id);
+  const u = getUser(id);
+  if (!u) return fail(res, 404, 'Usuario no encontrado');
+  const role = req.body?.role !== undefined ? (req.body.role === 'admin' ? 'admin' : 'member') : u.role;
+  const disabled = req.body?.disabled !== undefined ? (req.body.disabled ? 1 : 0) : u.disabled;
+  if (id === req.user.id && (role !== 'admin' || disabled)) return fail(res, 400, 'No puedes quitarte tu propio acceso de administrador.');
+  if (u.role === 'admin' && (role !== 'admin' || disabled)) {
+    const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled = 0").get().n;
+    if (admins <= 1) return fail(res, 400, 'Debe quedar al menos un administrador.');
+  }
+  db.prepare('UPDATE users SET role = ?, disabled = ? WHERE id = ?').run(role, disabled, id);
+  if (disabled) { destroyUserSessions(id); disconnectUser(id); }
+  broadcastUser(id);
+  res.json({ user: publicUser(getUser(id)) });
+}));
+
+admin.post('/users/:id/reset-password', wrap((req, res) => {
+  const id = Number(req.params.id);
+  if (!getUser(id)) return fail(res, 404, 'Usuario no encontrado');
+  const password = randomToken(9);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), id);
+  destroyUserSessions(id);
+  disconnectUser(id);
+  res.json({ password });
+}));
+
+api.use('/admin', admin);
+
+// ---------- Chat ----------
+const dmKey = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+
+function parseConv(conv, userId) {
+  const m = /^([cd]):(\d+)$/.exec(String(conv || ''));
+  if (!m) return null;
+  const id = Number(m[2]);
+  if (m[1] === 'c') return db.prepare('SELECT 1 FROM channels WHERE id = ?').get(id) ? { channelId: id, key: `c:${id}` } : null;
+  if (id === userId || !getUser(id)) return null;
+  return { dm: dmKey(userId, id), otherId: id, key: `d:${dmKey(userId, id)}` };
+}
+
+const messageRow = (r) => ({
+  id: r.id, userId: r.user_id, kind: r.kind, body: r.body, createdAt: r.created_at,
+  conv: r.channel_id ? `c:${r.channel_id}` : null, dm: r.dm_key,
+});
+
+function lastRead(userId, key) {
+  return db.prepare('SELECT last_read_id FROM reads WHERE user_id = ? AND conv = ?').get(userId, key)?.last_read_id || 0;
+}
+
+api.get('/chat', (req, res) => {
+  const uid = req.user.id;
+  const channels = db.prepare('SELECT * FROM channels ORDER BY id').all().map((c) => {
+    const key = `c:${c.id}`;
+    const unread = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE channel_id = ? AND id > ? AND user_id != ?').get(c.id, lastRead(uid, key), uid).n;
+    return { conv: key, id: c.id, name: c.name, unread };
+  });
+  const dms = db.prepare(`
+    SELECT dm_key, MAX(id) AS last_id FROM messages
+    WHERE dm_key IS NOT NULL AND (dm_key LIKE ? OR dm_key LIKE ?)
+    GROUP BY dm_key ORDER BY last_id DESC`).all(`${uid}:%`, `%:${uid}`).map((r) => {
+    const [a, b] = r.dm_key.split(':').map(Number);
+    const otherId = a === uid ? b : a;
+    const key = `d:${r.dm_key}`;
+    const unread = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE dm_key = ? AND id > ? AND user_id != ?').get(r.dm_key, lastRead(uid, key), uid).n;
+    return { conv: `d:${otherId}`, userId: otherId, lastId: r.last_id, unread };
+  });
+  res.json({ channels, dms });
+});
+
+api.get('/messages', (req, res) => {
+  const c = parseConv(req.query.conv, req.user.id);
+  if (!c) return fail(res, 400, 'Conversación inválida');
+  const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
+  const rows = c.channelId
+    ? db.prepare('SELECT * FROM messages WHERE channel_id = ? AND id < ? ORDER BY id DESC LIMIT 60').all(c.channelId, before)
+    : db.prepare('SELECT * FROM messages WHERE dm_key = ? AND id < ? ORDER BY id DESC LIMIT 60').all(c.dm, before);
+  res.json({ messages: rows.reverse().map(messageRow), hasMore: rows.length === 60 });
+});
+
+function postMessage(user, c, body, kind = 'text') {
+  const id = Number(db.prepare('INSERT INTO messages (channel_id, dm_key, user_id, kind, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(c.channelId ?? null, c.dm ?? null, user.id, kind, body, now()).lastInsertRowid);
+  const msg = messageRow(db.prepare('SELECT * FROM messages WHERE id = ?').get(id));
+  if (c.channelId) {
+    emitAll('message', msg);
+    // Menciones
+    const names = new Set([...body.matchAll(/@([a-zA-Z0-9_.-]{3,24})/g)].map((m) => m[1].toLowerCase()));
+    for (const n of names) {
+      const target = db.prepare('SELECT id FROM users WHERE username = ?').get(n);
+      if (target && target.id !== user.id) notify(target.id, 'mention', user.id, { conv: c.key, messageId: id, preview: body.slice(0, 140) });
+    }
+  } else {
+    emitToUser(user.id, 'message', msg);
+    emitToUser(c.otherId, 'message', msg);
+  }
+  db.prepare('INSERT INTO reads (user_id, conv, last_read_id) VALUES (?, ?, ?) ON CONFLICT(user_id, conv) DO UPDATE SET last_read_id = excluded.last_read_id')
+    .run(user.id, c.key, id);
+  return msg;
+}
+
+api.post('/messages', wrap((req, res) => {
+  const c = parseConv(req.body?.conv, req.user.id);
+  if (!c) return fail(res, 400, 'Conversación inválida');
+  const body = String(req.body?.body || '').trim();
+  if (!body) return fail(res, 400, 'Mensaje vacío');
+  if (body.length > 4000) return fail(res, 400, 'Mensaje demasiado largo');
+  res.json({ message: postMessage(req.user, c, body) });
+}));
+
+api.post('/reads', (req, res) => {
+  const c = parseConv(req.body?.conv, req.user.id);
+  if (!c) return fail(res, 400, 'Conversación inválida');
+  const lastId = Number(req.body?.lastId) || 0;
+  db.prepare('INSERT INTO reads (user_id, conv, last_read_id) VALUES (?, ?, ?) ON CONFLICT(user_id, conv) DO UPDATE SET last_read_id = MAX(last_read_id, excluded.last_read_id)')
+    .run(req.user.id, c.key, lastId);
+  res.json({ ok: true });
+});
+
+api.post('/channels', requireAdmin, (req, res) => {
+  const name = String(req.body?.name || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 30);
+  if (!name) return fail(res, 400, 'Nombre inválido');
+  try {
+    db.prepare('INSERT INTO channels (name) VALUES (?)').run(name);
+  } catch {
+    return fail(res, 409, 'Ese canal ya existe');
+  }
+  emitAll('channels', {});
+  res.json({ ok: true });
+});
+
+// Saludar (wave)
+api.post('/wave/:userId', wrap((req, res) => {
+  const c = parseConv(`d:${req.params.userId}`, req.user.id);
+  if (!c) return fail(res, 400, 'Usuario inválido');
+  postMessage(req.user, c, 'wave', 'wave');
+  notify(c.otherId, 'wave', req.user.id, {});
+  res.json({ ok: true });
+}));
+
+// ---------- Notificaciones ----------
+api.get('/notifications', (req, res) => {
+  const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);
+  res.json({ notifications: rows.map(notificationRow) });
+});
+
+api.post('/notifications/read', (req, res) => {
+  if (req.body?.id) db.prepare('UPDATE notifications SET read = 1 WHERE user_id = ? AND id = ?').run(req.user.id, Number(req.body.id));
+  else db.prepare('UPDATE notifications SET read = 1 WHERE user_id = ?').run(req.user.id);
+  res.json({ ok: true });
+});
+
+// ---------- Calendario ----------
+const eventRow = (r) => ({
+  id: r.id, title: r.title, description: r.description, location: r.location,
+  startsAt: r.starts_at, endsAt: r.ends_at, createdBy: r.created_by,
+  attendees: db.prepare('SELECT user_id FROM event_attendees WHERE event_id = ?').all(r.id).map((a) => a.user_id),
+});
+
+api.get('/events', (req, res) => {
+  const from = Number(req.query.from) || now() - 7 * 864e5;
+  const to = Number(req.query.to) || now() + 30 * 864e5;
+  const rows = db.prepare('SELECT * FROM events WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at').all(from, to);
+  res.json({ events: rows.map(eventRow) });
+});
+
+function readEventBody(b) {
+  const title = String(b?.title || '').trim().slice(0, 120);
+  const startsAt = Number(b?.startsAt);
+  const endsAt = Number(b?.endsAt);
+  if (!title) return { error: 'El evento necesita un título' };
+  if (!startsAt || !endsAt || endsAt <= startsAt) return { error: 'Revisa las horas del evento' };
+  const attendees = Array.isArray(b?.attendees) ? [...new Set(b.attendees.map(Number).filter((id) => getUser(id)))] : [];
+  return {
+    title, startsAt, endsAt, attendees,
+    description: String(b?.description || '').slice(0, 2000),
+    location: String(b?.location || '').slice(0, 120),
+  };
+}
+
+api.post('/events', wrap((req, res) => {
+  const e = readEventBody(req.body);
+  if (e.error) return fail(res, 400, e.error);
+  const id = tx(() => {
+    const eid = Number(db.prepare('INSERT INTO events (title, description, location, starts_at, ends_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(e.title, e.description, e.location, e.startsAt, e.endsAt, req.user.id, now()).lastInsertRowid);
+    for (const a of e.attendees) db.prepare('INSERT OR IGNORE INTO event_attendees (event_id, user_id) VALUES (?, ?)').run(eid, a);
+    return eid;
+  });
+  for (const a of e.attendees) if (a !== req.user.id) notify(a, 'event', req.user.id, { eventId: id, title: e.title, startsAt: e.startsAt });
+  emitAll('events', {});
+  res.json({ event: eventRow(db.prepare('SELECT * FROM events WHERE id = ?').get(id)) });
+}));
+
+api.patch('/events/:id', wrap((req, res) => {
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(req.params.id));
+  if (!row) return fail(res, 404, 'Evento no encontrado');
+  if (row.created_by !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'Solo quien creó el evento puede editarlo');
+  const e = readEventBody({ ...eventRow(row), ...req.body });
+  if (e.error) return fail(res, 400, e.error);
+  tx(() => {
+    db.prepare('UPDATE events SET title = ?, description = ?, location = ?, starts_at = ?, ends_at = ? WHERE id = ?')
+      .run(e.title, e.description, e.location, e.startsAt, e.endsAt, row.id);
+    db.prepare('DELETE FROM event_attendees WHERE event_id = ?').run(row.id);
+    for (const a of e.attendees) db.prepare('INSERT OR IGNORE INTO event_attendees (event_id, user_id) VALUES (?, ?)').run(row.id, a);
+  });
+  emitAll('events', {});
+  res.json({ event: eventRow(db.prepare('SELECT * FROM events WHERE id = ?').get(row.id)) });
+}));
+
+api.delete('/events/:id', (req, res) => {
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(req.params.id));
+  if (!row) return fail(res, 404, 'Evento no encontrado');
+  if (row.created_by !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'Solo quien creó el evento puede borrarlo');
+  db.prepare('DELETE FROM events WHERE id = ?').run(row.id);
+  emitAll('events', {});
+  res.json({ ok: true });
+});
+
+// ---------- Mundo: pisos, objetos, áreas, escritorios ----------
+api.get('/floors', (req, res) => res.json({ floors: world.listFloors() }));
+
+api.get('/floors/:id', (req, res) => {
+  const p = world.floorPayload(Number(req.params.id));
+  if (!p) return fail(res, 404, 'Piso no encontrado');
+  res.json({ floor: p });
+});
+
+api.post('/floors', requireAdmin, wrap((req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 40) || `Piso ${world.listFloors().length + 1}`;
+  const f = world.createFloor(name, req.body?.template || 'open');
+  emitAll('floors', { floors: world.listFloors() });
+  res.json({ floor: world.floorPayload(f.id) });
+}));
+
+api.patch('/floors/:id', requireAdmin, wrap((req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 40);
+  if (!name) return fail(res, 400, 'Nombre inválido');
+  world.renameFloor(Number(req.params.id), name);
+  emitAll('floors', { floors: world.listFloors() });
+  res.json({ ok: true });
+}));
+
+api.delete('/floors/:id', requireAdmin, wrap((req, res) => {
+  const id = Number(req.params.id);
+  world.deleteFloor(id);
+  const fallback = world.defaultFloorId();
+  for (const [uid, p] of presence) if (p.floorId === id) relocate(uid, fallback);
+  db.prepare('UPDATE users SET floor_id = NULL, pos_x = NULL, pos_y = NULL WHERE floor_id = ?').run(id);
+  emitAll('floors', { floors: world.listFloors() });
+  res.json({ ok: true });
+}));
+
+// Si un objeto sólido cae encima de alguien, lo movemos a la casilla libre más cercana.
+function unstickPlayers(floorId) {
+  const f = world.getFloor(floorId)?.state;
+  if (!f) return;
+  for (const [uid, p] of presence) if (p.floorId === floorId && f.solid[p.y]?.[p.x]) relocate(uid, floorId, p.x, p.y);
+}
+
+api.post('/floors/:id/objects', wrap((req, res) => {
+  const floorId = Number(req.params.id);
+  const id = world.addObject(req.user, floorId, req.body || {});
+  broadcastFloor(floorId);
+  unstickPlayers(floorId);
+  res.json({ id });
+}));
+
+api.patch('/objects/:id', wrap((req, res) => {
+  const floorId = world.updateObject(req.user, Number(req.params.id), req.body || {});
+  broadcastFloor(floorId);
+  unstickPlayers(floorId);
+  res.json({ ok: true });
+}));
+
+api.delete('/objects/:id', wrap((req, res) => {
+  const floorId = world.deleteObject(req.user, Number(req.params.id));
+  broadcastFloor(floorId);
+  res.json({ ok: true });
+}));
+
+api.post('/floors/:id/areas', requireAdmin, wrap((req, res) => {
+  const floorId = world.addArea(Number(req.params.id), req.body || {});
+  broadcastFloor(floorId);
+  res.json({ ok: true });
+}));
+
+api.patch('/areas/:id', requireAdmin, wrap((req, res) => {
+  const floorId = world.updateArea(Number(req.params.id), req.body || {});
+  broadcastFloor(floorId);
+  res.json({ ok: true });
+}));
+
+api.delete('/areas/:id', requireAdmin, wrap((req, res) => {
+  const floorId = world.deleteArea(Number(req.params.id));
+  broadcastFloor(floorId);
+  res.json({ ok: true });
+}));
+
+api.post('/desks/:id/claim', wrap((req, res) => {
+  const changed = world.claimDesk(req.user.id, Number(req.params.id));
+  changed.forEach(broadcastFloor);
+  res.json({ ok: true });
+}));
+
+api.post('/desks/:id/release', wrap((req, res) => {
+  const changed = world.releaseDesk(Number(req.params.id), req.user);
+  changed.forEach(broadcastFloor);
+  res.json({ ok: true });
+}));
+
+// ---------- Errores ----------
+api.use((err, req, res, next) => {
+  if (err instanceof world.WorldError) return fail(res, err.status, err.message);
+  if (err?.type === 'entity.too.large') return fail(res, 413, 'El contenido es demasiado grande');
+  console.error(err);
+  fail(res, 500, 'Error interno del servidor');
+});
