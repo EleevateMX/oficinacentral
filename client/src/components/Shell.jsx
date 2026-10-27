@@ -19,6 +19,7 @@ import SearchPalette from './SearchPalette.jsx';
 import { handleLaunchUrl, syncPush } from '../lib/push.js';
 import Onboarding, { Loader } from './Onboarding.jsx';
 import AppBanner from './AppBanner.jsx';
+import { setupAutoPip } from '../lib/pip.js';
 
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
@@ -41,6 +42,7 @@ export default function Shell({ session, onLogout }) {
       syncPush();
       if (['linked', 'welcome'].includes(returnInfo.discord)) office.toast({ title: discordMessage });
       if (!office.state.prefs.onboarding?.hide) office.set({ onboarding: true });
+      setupAutoPip();
     }).catch((e) => console.error(e));
     const out = () => onLogout();
     window.addEventListener('office:logout', out);
