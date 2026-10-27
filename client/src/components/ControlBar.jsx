@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, MonitorCheck, PictureInPicture2 } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, MonitorCheck, PictureInPicture2, Ear } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
@@ -24,6 +24,7 @@ export default function ControlBar({ compact = false }) {
   const me = useOffice((s) => s.me);
   const users = useOffice((s) => s.users);
   const media = useOffice((s) => s.media);
+  const hearing = useOffice((s) => s.talkingWith);
   const [menu, setMenu] = useState(null);
   const ref = useRef(null);
   useClickOutside(ref, () => setMenu(null));
@@ -111,6 +112,25 @@ export default function ControlBar({ compact = false }) {
       <button className={`cb-btn ${media.screen ? 'on sharing' : ''}`} onClick={() => office.toggleScreen()} title={media.screen ? 'Dejar de compartir' : 'Compartir pantalla'}>
         <MonitorUp size={18} />
       </button>
+      {/* Quién te oye ahora */}
+      <div className="cb-group">
+        <button className={`cb-btn cb-hear ${hearing.length ? 'on' : ''}`} onClick={() => setMenu(menu === 'hear' ? null : 'hear')} title="Quién te oye ahora">
+          <Ear size={18} /><b>{hearing.length}</b>
+        </button>
+        {menu === 'hear' && (
+          <div className="popover up hear-pop">
+            <div className="pop-title">Te oyen ahora</div>
+            {hearing.length ? hearing.map((id) => users[id] && (
+              <button key={id} className="pop-item hear-row" onClick={() => { office.set({ profileCard: id }); setMenu(null); }}>
+                <Avatar user={users[id]} size={24} /> <span>{users[id].displayName}</span>
+              </button>
+            )) : <div className="muted small hear-empty">Nadie te oye ahora. Acércate a alguien o entra a una sala.</div>}
+            <div className="muted small hear-note">
+              {media.mic ? 'Solo estas personas reciben tu audio, tu cámara y tu pantalla.' : 'Tu micrófono está apagado: ahora no te oyen aunque estén cerca.'}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="cb-sep" />
       {!compact && (
         <button className="cb-btn" onClick={() => office.set({ modal: { type: 'prefs', section: 'general' } })} title="Preferencias"><Settings size={18} /></button>

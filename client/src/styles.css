@@ -1131,3 +1131,12 @@ body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
 .rail-btn.bday-on { color: var(--accent, #FE3377); }
 .rail-btn .badge:not(:empty) { }
 @media (max-width: 640px) { .bday-months { grid-template-columns: repeat(2, 1fr); } }
+
+/* Quién te oye */
+.cb-hear { width: auto !important; padding: 0 10px; gap: 6px; display: inline-flex; align-items: center; }
+.cb-hear b { font-size: 13px; font-weight: 700; }
+.cb-hear.on { color: #3DDC84; background: rgba(61, 220, 132, .14); }
+.hear-pop { min-width: 260px; max-width: 300px; left: 50%; transform: translateX(-50%); }
+.hear-row { display: flex; align-items: center; gap: 8px; }
+.hear-empty { padding: 4px 8px 6px; }
+.hear-note { padding: 6px 8px 4px; border-top: 1px solid var(--border, rgba(127,127,127,.2)); margin-top: 4px; line-height: 1.4; }
