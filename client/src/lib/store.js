@@ -7,6 +7,7 @@ import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
 import { FX, pickFx } from './fx.js';
 import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
+import { EMOTES, PAIR_RANGE } from '@shared/emotes.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -42,6 +43,8 @@ class Office {
     this.admitted = new Set(); // salas cerradas donde me dejaron pasar
     this.pendingDoor = null; // "Ir a su lado" hacia alguien en sala cerrada
     this.reactions = {}; // id -> { emoji, until }
+    this.emotes = {}; // id -> { kind, start, until, target } (bailar, saludar…)
+    this.pendingEmote = null;
     this.fx = {}; // id -> efecto de Ctrl+D en curso
     this.floorCache = new Map();
   }
@@ -225,6 +228,7 @@ class Office {
       const floorChanged = p.floorId !== m.floorId;
       Object.assign(p, { x: m.x, y: m.y, dir: m.dir, floorId: m.floorId });
       if (m.tp || floorChanged) { p.rx = m.x; p.ry = m.y; }
+      delete this.emotes[m.id]; // al moverse se corta la acción
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
     s.on('call:answer', ({ from, accept }) => {
@@ -271,6 +275,7 @@ class Office {
     s.on('fx', ({ id, kind, from, to }) => {
       if (FX[kind]) this.fx[id] = { kind, from, to, start: performance.now(), dur: FX[kind].dur };
     });
+    s.on('emote', ({ id, kind, target }) => this.startEmote(id, kind, target));
     s.on('react', ({ id, emoji }) => {
       this.reactions[id] = { emoji, until: performance.now() + 3500 };
     });
@@ -365,6 +370,52 @@ class Office {
     Object.assign(p, { x, y, dir, floorId });
     if (opts.tp) { p.rx = x; p.ry = y; }
     this.socket.emit('move', { x, y, dir, floorId, tp: !!opts.tp });
+    delete this.emotes[this.state.me.id];
+    // Ibas a chocar los cinco o abrazar a alguien: al llegar a su lado se hace
+    const pe = this.pendingEmote;
+    if (pe) {
+      const q = this.players[pe.target];
+      if (!q?.online && q?.online !== undefined) this.pendingEmote = null;
+      else if (q && q.floorId === floorId && Math.max(Math.abs(q.x - x), Math.abs(q.y - y)) <= 1) {
+        this.pendingEmote = null;
+        setTimeout(() => this.emote(pe.kind, pe.target), 150);
+      }
+    }
+  }
+
+  // ---------- Acciones del personaje ----------
+  startEmote(id, kind, target) {
+    const def = EMOTES[kind];
+    if (!def) return;
+    const now = performance.now();
+    this.emotes[id] = { kind, target, start: now, until: now + def.dur };
+    if (def.pair && target != null) {
+      this.emotes[target] = { kind, target: id, start: now, until: now + def.dur };
+      if (target === this.state.me.id) {
+        const who = this.state.users[id]?.displayName?.split(' ')[0] || 'Alguien';
+        this.toast({ title: kind === 'hug' ? `🤗 ${who} te dio un abrazo` : `🙌 ${who} chocó los cinco contigo`, action: { label: kind === 'hug' ? 'Devolver' : 'Otra vez', run: () => this.emote(kind, id) } });
+        playSound('wave', this.state.prefs.audio.notifVolume);
+      }
+    }
+  }
+
+  emote(kind, target) {
+    const def = EMOTES[kind];
+    const me = this.myPlayer;
+    if (!def || !me || !this.socket) return;
+    if (def.pair) {
+      const q = this.players[target];
+      if (!q || !this.state.users[target]?.online) return this.toast({ title: 'Esa persona no está conectada' });
+      const far = q.floorId !== me.floorId || Math.max(Math.abs(q.x - me.x), Math.abs(q.y - me.y)) > PAIR_RANGE;
+      if (far) {
+        // Primero ir a su lado; al llegar se hace la acción
+        this.pendingEmote = { kind, target };
+        this.goTo(target);
+        return;
+      }
+    }
+    this.socket.emit('emote', { kind, target: def.pair ? target : undefined });
+    this.startEmote(this.state.me.id, kind, def.pair ? target : undefined);
   }
 
   async changeFloor(floorId, target) {

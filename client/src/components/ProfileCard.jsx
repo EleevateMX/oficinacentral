@@ -3,6 +3,7 @@ import { since } from '../lib/time.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase, MonitorUp, Phone, DoorClosed, Volume2, MapPin } from 'lucide-react';
 import { areaAt } from '@shared/map.js';
+import { EMOTES, PAIR_EMOTES } from '@shared/emotes.js';
 import { fmtBirthday, isBirthday, daysUntil, whenLabel } from '../lib/birthdays.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
@@ -106,6 +107,13 @@ export default function ProfileCard({ userId }) {
       )}
       {!isMe && !room?.closed && desk && (
         <button className="btn ghost pc-row" onClick={() => { office.goToDesk(desk); close(); }}><Briefcase size={15} /> Ir al escritorio de {u.displayName.split(' ')[0]}</button>
+      )}
+      {!isMe && u.online && (
+        <div className="pc-emotes">
+          {PAIR_EMOTES.map((k) => (
+            <button key={k} className="btn ghost tiny" onClick={() => { office.emote(k, u.id); close(); }}>{EMOTES[k].emoji} {EMOTES[k].label}</button>
+          ))}
+        </div>
       )}
       {!isMe && u.online && (
         <label className="pc-vol">

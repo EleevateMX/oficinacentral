@@ -7,6 +7,8 @@ import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambienc
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
+import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
+import { EMOTE_BY_KEY } from '@shared/emotes.js';
 
 // Fecha de hoy ('MM-DD') para el gorrito de cumpleaños; se recalcula cada minuto
 let bdayToday = { at: 0, md: '' };
@@ -247,6 +249,11 @@ export default function MapView({ active }) {
         if (!h.includes(dir)) h.push(dir);
         if (!e.repeat) input.current.tap = dir;
         input.current.path = [];
+      }
+      // Acciones con letra: B bailar, H saludar, G guiño, J saltar…
+      if (!em && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && EMOTE_BY_KEY[e.key.toUpperCase()] && !KEYS[e.code]) {
+        office.emote(EMOTE_BY_KEY[e.key.toUpperCase()]);
+        return;
       }
       if (/^[1-6]$/.test(e.key) && !em) office.react(['👋', '👍', '❤️', '😂', '🎉', '🔥'][Number(e.key) - 1]);
     };
@@ -607,8 +614,14 @@ export default function MapView({ active }) {
         const side = seat?.obj && (seat.dir === 'left' || seat.dir === 'right');
         const sitDX = side ? (seat.dir === 'right' ? 4 : -4) : 0;
         const sitDY = 0;
-        const ax = (p.rx + 0.5) * T + sitDX, ay = (p.ry + 1) * T - 2 + hopY + sitDY;
-        drawAvatar(ctx, ax, ay, u?.avatar, seat?.dir || p.dir, step, !!seat, blink);
+        // Acción en curso (bailar, saludar, guiño…)
+        let em = !p.moving && office.emotes[id];
+        if (em && em.until < t) { delete office.emotes[id]; em = null; }
+        const emOther = em && em.target != null ? office.players[em.target] : null;
+        const pose = em ? emotePose(em, t, p, emOther) : null;
+        const ax = (p.rx + 0.5) * T + sitDX + (pose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (pose?.dy || 0);
+        drawAvatar(ctx, ax, ay, u?.avatar, pose?.dir || seat?.dir || p.dir, pose?.step || step, !!seat, blink || !!pose?.blink);
+        if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (seat ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
         if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!seat);
         // Sentado de lado: el brazo de enfrente del sillón (o la base de la silla) queda delante de las piernas
         if (side) {
