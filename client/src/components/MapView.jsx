@@ -550,14 +550,19 @@ export default function MapView({ active }) {
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
-        // Etiqueta EN VIVO de quien transmite su pantalla
-        if (p.screen) {
+        // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
+        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946']].filter(Boolean);
+        if (tags.length) {
           ctx.font = '800 9px "Public Sans", system-ui, sans-serif';
-          const lw = ctx.measureText('EN VIVO').width + 10;
-          ctx.fillStyle = '#e63946';
-          ctx.beginPath(); ctx.roundRect(sp.x - lw / 2, y - 27, lw, 14, 4); ctx.fill();
-          ctx.fillStyle = '#fff';
-          ctx.fillText('EN VIVO', sp.x - lw / 2 + 5, y - 19.5);
+          const ws = tags.map(([t]) => ctx.measureText(t).width + 10);
+          let tx = sp.x - (ws.reduce((a, w) => a + w, 0) + (tags.length - 1) * 4) / 2;
+          tags.forEach(([t, bg, fg], i) => {
+            ctx.fillStyle = bg;
+            ctx.beginPath(); ctx.roundRect(tx, y - 27, ws[i], 14, 4); ctx.fill();
+            ctx.fillStyle = fg;
+            ctx.fillText(t, tx + 5, y - 19.5);
+            tx += ws[i] + 4;
+          });
           ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         }
         // Globito con el último mensaje del chat de la sala

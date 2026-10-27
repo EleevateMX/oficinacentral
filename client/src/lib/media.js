@@ -1,3 +1,5 @@
+import { openMic } from './noise.js';
+
 // Calidad de pantalla compartida
 export const SCREEN_PRESETS = {
   text: { label: 'Texto nítido', desc: 'Código, documentos y diseño. 1080p a 15 fps.', fps: 15, hint: 'detail', bitrate: 2_500_000, degrade: 'maintain-resolution' },
@@ -26,9 +28,10 @@ export class MediaManager extends EventTarget {
     this.screenTrack = null;
     this.screenAudioTrack = null;
     this.settings = {
-      noiseSuppression: true, echoCancellation: true, autoGainControl: true, hd: false, micId: '', camId: '', speakerId: '',
+      noiseSuppression: true, echoCancellation: true, autoGainControl: true, aiNoise: 'rnnoise', hd: false, micId: '', camId: '', speakerId: '',
       screenQuality: 'balanced', screenAudio: true, screenVolume: 1,
     };
+    this.mic = null; // { track, raw, ai, stop } (ver noise.js)
     this.closeTimers = new Map();
     this.watchers = new Set(); // quiénes están viendo mi pantalla
     this.streamVolumes = new Map(); // volumen por pantalla que veo
@@ -41,7 +44,7 @@ export class MediaManager extends EventTarget {
   }
 
   get state() {
-    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack, viewers: [...this.watchers] };
+    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack, aiNoise: !!this.mic?.ai, viewers: [...this.watchers] };
   }
 
   updateSettings(s) {
@@ -56,18 +59,14 @@ export class MediaManager extends EventTarget {
   // ---------- Medios locales ----------
   async setMic(on) {
     if (on && !this.audioTrack) {
-      const s = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          noiseSuppression: this.settings.noiseSuppression,
-          echoCancellation: this.settings.echoCancellation,
-          autoGainControl: this.settings.autoGainControl,
-          ...(this.settings.micId ? { deviceId: { exact: this.settings.micId } } : {}),
-        },
-      });
-      this.audioTrack = s.getAudioTracks()[0];
+      const mic = await openMic(this.settings);
+      if (this.audioTrack) { mic.stop(); return; } // se encendió dos veces a la vez
+      this.mic = mic;
+      this.audioTrack = mic.track;
       this.localStream.addTrack(this.audioTrack);
     } else if (!on && this.audioTrack) {
-      this.audioTrack.stop();
+      this.mic?.stop();
+      this.mic = null;
       this.localStream.removeTrack(this.audioTrack);
       this.audioTrack = null;
     }
@@ -356,6 +355,7 @@ export class MediaManager extends EventTarget {
   destroy() {
     this.socket.off('rtc', this.onSignal);
     for (const id of [...this.peers.keys()]) this.closePeer(id, true);
+    this.mic?.stop();
     this.audioTrack?.stop();
     this.videoTrack?.stop();
     this.screenTrack?.stop();

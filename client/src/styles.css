@@ -897,3 +897,15 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 .auth-or { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 12px; margin: 4px 0; }
 .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .shift-tr { grid-template-columns: minmax(0, 2fr) 1fr 1fr 1fr !important; }
+
+/* Clips y grabaciones */
+.rec-btn { display: inline-flex; align-items: center; gap: 4px; }
+.rec-btn .rec-ico { color: #e63946; }
+.rec-btn.recording { background: #e63946; color: #fff; border-color: #e63946; font-variant-numeric: tabular-nums; }
+.rec-badge { display: inline-flex; align-items: center; background: #fff; color: #e63946; font: 800 10px/1 var(--font-ui, sans-serif); letter-spacing: .04em; padding: 4px 6px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; animation: rec-blink 1.6s ease-in-out infinite; }
+.rec-badge.small { font-size: 9px; padding: 3px 5px; box-shadow: none; }
+.live-bar > .rec-badge { align-self: center; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.rec-banner { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #e63946; color: #fff; font-size: 13px; font-weight: 600; }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #fff; animation: rec-blink 1.6s ease-in-out infinite; }
+@keyframes rec-blink { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .rec-badge, .rec-dot { animation: none; } }
