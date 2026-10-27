@@ -96,3 +96,11 @@ client/src/      interfaz (React + Vite)
   lib/media.js   audio/video WebRTC por cercanía
   components/    pantallas: mapa, chat, calendario, actividad, perfil, preferencias, decorador
 ```
+
+## Personajes
+
+- Estilo chibi en pixel-art: cuadros de **32×48 px**, hoja PNG de **96×192** (3 cuadros × 4 direcciones: abajo, izquierda, derecha, arriba).
+- 10 personajes prediseñados y un personalizador (piel, peinado, ropa, colores, accesorio) en **Editar perfil → Avatar**.
+- Los admins suben personajes dibujados a mano en **Preferencias → Personajes** (se valida el tamaño).
+- `node tools/characters/generate.mjs` exporta las hojas, la galería y la plantilla a `docs/personajes/`.
+  Para agregar un prediseñado, añade su ficha a `PRESETS` en `shared/sprite.js`.
