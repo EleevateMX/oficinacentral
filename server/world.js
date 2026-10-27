@@ -85,7 +85,7 @@ export function furnishDesks(floorId) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Piso 1', 'hq'); setSetting('migr_cubicles_v1', '1'); setSetting('migr_reception_v1', '1'); return; }
+  if (!rows.length) { createFloor('Piso 1', 'hq'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1']) setSetting(k, '1'); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
@@ -95,6 +95,14 @@ export function loadWorld() {
   if (!getSetting('migr_reception_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) addReceptionExtras(r.id);
     setSetting('migr_reception_v1', '1');
+  }
+  // Una vez: centrar la recepción (mostrador, logo y letrero) en oficinas ya creadas
+  if (!getSetting('migr_reception_center_v1')) {
+    const mv = db.prepare('UPDATE objects SET x = x + 0.5 WHERE floor_id = ? AND type = ? AND ABS(x - ?) < 0.01 AND ABS(y - ?) < 0.01');
+    for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) {
+      for (const [type, x, y] of [['reception', 40, 49], ['officeChair', 42, 48], ['cubeLogo', 42.25, 49.1], ['hexLamp', 40.2, 48.9], ['monitor', 43.5, 48.9], ['floorLogo', 41, 51], ['neonLogo', 41, 47.1]]) mv.run(r.id, type, x, y);
+    }
+    setSetting('migr_reception_center_v1', '1');
   }
   for (const r of rows) rebuild(r.id);
 }

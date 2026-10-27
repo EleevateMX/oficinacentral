@@ -32,7 +32,8 @@ export default function EditProfile() {
   const me = useOffice((s) => s.users[s.me.id] || s.me);
   const [form, setForm] = useState({ displayName: me.displayName, timezone: me.timezone || 'America/Mexico_City', statusText: me.statusText || '', email: me.email || '' });
   const [avatar, setAvatar] = useState(me.avatar || {});
-  const [step, setStep] = useState('main');
+  const modalReq = useOffice((s) => s.modal);
+  const [step, setStep] = useState(modalReq?.step || 'main');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef(null);
@@ -67,7 +68,7 @@ export default function EditProfile() {
   if (step === 'avatar') {
     return (
       <Modal title={<span className="row gap8"><button className="icon-btn" onClick={() => setStep('main')} aria-label="Volver"><ArrowLeft size={18} /></button> Personaliza tu avatar</span>} onClose={close} width={800}>
-        <AvatarEditor avatar={avatar} onChange={setAvatar} />
+        <AvatarEditor avatar={avatar} onChange={setAvatar} initialTab={modalReq?.tab} />
         <div className="modal-actions">
           <button className="btn" onClick={() => setStep('main')}>Listo</button>
           <button className="btn primary" onClick={save} disabled={busy}>Guardar</button>
@@ -163,12 +164,12 @@ const TABS = [
   ['pet', 'Mascota'],
 ];
 
-export function AvatarEditor({ avatar, onChange: rawChange }) {
+export function AvatarEditor({ avatar, onChange: rawChange, initialTab }) {
   // La mascota se conserva aunque cambies de personaje
   const onChange = (a) => rawChange({ ...a, pet: avatar.pet, petColor: avatar.petColor });
   const characters = useOffice((s) => s.characters);
   const theme = useOffice((s) => s.config.theme);
-  const [tab, setTab] = useState(avatar.sprite || avatar.preset ? 'chars' : 'face');
+  const [tab, setTab] = useState(initialTab || (avatar.sprite || avatar.preset ? 'chars' : 'face'));
   const [pack, setPack] = useState(theme === 'gtahub' ? 'gtahub' : 'all');
   const spec = normalizeSpec(avatar.sprite ? {} : avatar);
   const set = (k) => (v) => onChange({ ...spec, preset: undefined, sprite: undefined, id: undefined, name: undefined, pack: undefined, [k]: v });

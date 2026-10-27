@@ -5,7 +5,6 @@ import React, { useEffect, useState } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
 import { returnInfo, discordMessage } from '../App.jsx';
-import { Boot } from './brand.jsx';
 import PeoplePanel from './PeoplePanel.jsx';
 import MapView from './MapView.jsx';
 import { ChatPanel, ChatView } from './Chat.jsx';
@@ -18,6 +17,7 @@ import Preferences from './settings/Preferences.jsx';
 import Toasts from './Toasts.jsx';
 import SearchPalette from './SearchPalette.jsx';
 import { handleLaunchUrl, syncPush } from '../lib/push.js';
+import Onboarding, { Loader } from './Onboarding.jsx';
 
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
@@ -28,12 +28,18 @@ export default function Shell({ session, onLogout }) {
   const connected = useOffice((s) => s.connected);
   const mobilePane = useOffice((s) => s.mobilePane);
   const mobile = useIsMobile();
+  const config = useOffice((s) => s.config);
+  const onboarding = useOffice((s) => s.onboarding);
+  // La pantalla de carga se queda un momento la primera vez (para que se vea)
+  const [minWait, setMinWait] = useState(!session.prefs?.onboarding?.seen);
+  useEffect(() => { if (minWait) { const t = setTimeout(() => setMinWait(false), 2200); return () => clearTimeout(t); } return undefined; }, [minWait]);
 
   useEffect(() => {
     office.start(session.user, session.prefs).then(() => {
       handleLaunchUrl();
       syncPush();
       if (['linked', 'welcome'].includes(returnInfo.discord)) office.toast({ title: discordMessage });
+      if (!office.state.prefs.onboarding?.hide) office.set({ onboarding: true });
     }).catch((e) => console.error(e));
     const out = () => onLogout();
     window.addEventListener('office:logout', out);
@@ -43,8 +49,8 @@ export default function Shell({ session, onLogout }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!ready) {
-    return <Boot text="Entrando a la oficina…" />;
+  if (!ready || minWait) {
+    return <Loader config={config} />;
   }
 
   const panel = { map: <PeoplePanel />, chat: <ChatPanel />, calendar: <CalendarPanel />, activity: <ActivityPanel /> }[view];
@@ -73,6 +79,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'board' && <Whiteboard objectId={modal.objectId} />}
       {modal?.type === 'notices' && <Notices />}
       {modal?.type === 'feedback' && <Feedback />}
+      {onboarding && !modal && <Onboarding />}
       <Toasts />
     </div>
   );

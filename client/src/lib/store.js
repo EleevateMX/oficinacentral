@@ -12,6 +12,7 @@ export const DEFAULT_PREFS = {
   v: 2,
   colorMode: 'light',
   skipWelcome: true,
+  onboarding: { hide: false, seen: false },
   calendar: { weekDays: 7, firstDay: 0 },
   audio: { aiNoise: 'rnnoise', noiseSuppression: true, echoCancellation: true, autoGainControl: true, notifVolume: 0.6, muteOnHidden: false },
   video: { hd: false, hideSelf: false },
