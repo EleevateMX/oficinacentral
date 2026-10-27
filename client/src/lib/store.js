@@ -39,6 +39,8 @@ class Office {
     this.listeners = new Set();
     this.state = this.initial();
     this.players = {}; // posiciones en vivo (no dispara renders)
+    this.admitted = new Set(); // salas cerradas donde me dejaron pasar
+    this.pendingDoor = null; // "Ir a su lado" hacia alguien en sala cerrada
     this.reactions = {}; // id -> { emoji, until }
     this.fx = {}; // id -> efecto de Ctrl+D en curso
     this.floorCache = new Map();
@@ -231,7 +233,24 @@ class Office {
     s.on('room:knock', ({ from, areaId }) => {
       const who = this.state.users[from]?.displayName || 'Alguien';
       playSound('wave', this.state.prefs.audio.notifVolume);
-      this.toast({ title: `🚪 ${who} está tocando la puerta`, action: { label: 'Abrir', run: () => this.setRoomClosed(areaId, false) }, duration: 12000 });
+      this.toast({
+        title: `🚪 ${who} está tocando la puerta`,
+        action: { label: 'Dejar pasar', run: () => { s.emit('room:admit', { areaId, userId: from }); this.toast({ title: `Dejaste pasar a ${who}` }); } },
+        actions: [{ label: 'Abrir sala', run: () => this.setRoomClosed(areaId, false) }],
+        duration: 20000,
+      });
+    });
+    s.on('room:admitted', ({ areaId, by }) => {
+      this.admitted.add(areaId);
+      const who = this.state.users[by]?.displayName || 'Alguien';
+      this.toast({ title: `🚪 ${who} te dejó pasar` });
+      const d = this.pendingDoor;
+      if (d?.areaId === areaId) {
+        this.pendingDoor = null;
+        this.set({ view: 'map' });
+        this.pathTarget = d.target;
+        this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
+      }
     });
     s.on('room-state', ({ areaId, closed, by }) => {
       const f = this.state.floor;
@@ -267,7 +286,11 @@ class Office {
       if (this.floorCache.has(payload.id) || this.state.floor?.id === payload.id) {
         const f = buildFloor(payload);
         this.floorCache.set(payload.id, f);
-        if (this.state.floor?.id === payload.id) { this.set({ floor: f }); this.updateProximity(); }
+        if (this.state.floor?.id === payload.id) {
+          for (const id of this.admitted) if (!f.areas.find((a) => a.id === id)?.closed) this.admitted.delete(id);
+          this.set({ floor: f });
+          this.updateProximity();
+        }
       }
     });
     s.on('clip', ({ from }) => {
@@ -399,6 +422,12 @@ class Office {
     const t = performance.now();
     if (this.lastKnockPrompt && t - this.lastKnockPrompt < 4000) return;
     this.lastKnockPrompt = t;
+    // Venías con "Ir a su lado": se toca la puerta sola y esperas a que te dejen pasar
+    if (this.pendingDoor?.areaId === area.id) {
+      this.socket?.emit('room:knock', { areaId: area.id });
+      this.toast({ title: `🚪 Tocaste la puerta de ${area.name}. Espera a que te dejen pasar`, duration: 8000 });
+      return;
+    }
     this.toast({ title: `🔒 ${area.name} está cerrada`, action: { label: 'Tocar la puerta', run: () => { this.socket?.emit('room:knock', { areaId: area.id }); this.toast({ title: 'Tocaste la puerta 🚪' }); } } });
   }
 
@@ -441,6 +470,11 @@ class Office {
       return;
     }
     this.pathTarget = { x: target.x, y: target.y + 1, near: true };
+    // Si está en una sala cerrada te deja en la puerta y la toca por ti
+    const f = this.state.floor;
+    const room = f && areaAt(f, target.x, target.y);
+    const myRoom = f && areaAt(f, me.x, me.y);
+    this.pendingDoor = room?.closed && myRoom?.id !== room.id && !this.admitted.has(room.id) ? { areaId: room.id, target: this.pathTarget } : null;
     this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
   }
 

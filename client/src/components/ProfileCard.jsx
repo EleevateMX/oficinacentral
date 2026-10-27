@@ -90,6 +90,9 @@ export default function ProfileCard({ userId }) {
           </div>
         )}
       </div>
+      {!isMe && room?.closed && !office.admitted.has(room.id) && (
+        <div className="pc-door">🔒 Está en <b>{room.name}</b> (cerrada): «Ir a su lado» te deja en la puerta y quien está dentro decide si te deja pasar.</div>
+      )}
       {!isMe && room?.closed && (
         <button className="btn ghost pc-row" onClick={() => { office.socket?.emit('room:knock', { areaId: room.id }); office.toast({ title: `🚪 Tocaste la puerta de ${room.name}` }); }}>
           <DoorClosed size={15} /> Tocar la puerta de {room.name}

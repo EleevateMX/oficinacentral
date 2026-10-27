@@ -54,7 +54,19 @@ test('cerrar una sala, no dejar entrar y tocar la puerta', async () => {
     // Tocar la puerta le avisa al de adentro
     const knock = new Promise((r) => a.once('room:knock', r));
     b.emit('room:knock', { areaId: room.id });
-    assert.equal((await knock).areaId, room.id);
+    const k = await knock;
+    assert.equal(k.areaId, room.id);
+    // Quien está dentro la deja pasar: ahora sí puede entrar caminando y la sala sigue cerrada
+    const admittedMsg = new Promise((r) => b.once('room:admitted', r));
+    a.emit('room:admit', { areaId: room.id, userId: k.from });
+    assert.equal((await admittedMsg).areaId, room.id);
+    const moved = new Promise((r) => a.once('move', r));
+    b.emit('move', { floorId: 1, x: inside.x, y: inside.y });
+    const mv = await moved;
+    assert.deepEqual([mv.x, mv.y], [inside.x, inside.y]);
+    assert.equal((await admin.get('/floors/1')).data.floor.areas.find((x) => x.id === room.id).closed, true);
+    b.emit('move', { floorId: 1, x: outside.x, y: outside.y, tp: true });
+    await wait(100);
     // Al salir el último, la sala se abre sola
     const reopened = new Promise((r) => b.on('floor', (p) => { if (!p.areas.find((x) => x.id === room.id).closed) r(); }));
     a.emit('move', { floorId: 1, x: outside.x, y: outside.y, tp: true });

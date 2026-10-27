@@ -285,7 +285,7 @@ export default function MapView({ active }) {
         if (next) {
           input.current.lastStep = t;
           const shut = closedRoomAt(f, mine, next);
-          if (shut) {
+          if (shut && !office.admitted.has(shut.id)) {
             // Sala cerrada: no se entra; se ofrece tocar la puerta
             input.current.path = [];
             input.current.held = [];

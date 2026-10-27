@@ -57,6 +57,10 @@ export function relocate(userId, floorId, x, y) {
 }
 
 // Una sala cerrada se vuelve a abrir sola cuando queda vacía
+// Personas a las que alguien de dentro dejó pasar a una sala cerrada (se borra al abrirse)
+const admitted = new Map();
+const isAdmitted = (areaId, userId) => !!admitted.get(areaId)?.has(userId);
+
 function reopenEmptyRooms() {
   for (const id of closedAreaIds()) {
     let busy = false;
@@ -66,6 +70,7 @@ function reopenEmptyRooms() {
     }
     if (busy) continue;
     setAreaClosed(id, false);
+    admitted.delete(id);
     const fid = floorOfArea(id);
     if (fid) io?.emit('floor', floorPayload(fid));
   }
@@ -117,7 +122,7 @@ export function initRealtime(httpServer) {
       const changingFloor = floorId !== p.floorId;
       // Movimiento normal: máximo 1 casilla por paso. Teletransporte permitido (Ir a / cambiar de piso).
       // No se puede entrar caminando a una sala cerrada (sí con "Ir a"/teletransporte de quien ya estaba dentro)
-      if (!isWalkable(f, x, y) || (!changingFloor && closedRoomAt(f, p, { x, y }))) {
+      if (!isWalkable(f, x, y) || (!changingFloor && (() => { const r = closedRoomAt(f, p, { x, y }); return r && !isAdmitted(r.id, userId); })())) {
         socket.emit('player', { id: userId, ...publicPresence(userId) });
         return;
       }
@@ -143,6 +148,7 @@ export function initRealtime(httpServer) {
       const a = f && areaAt(f.state, p.x, p.y);
       if (!a || a.id !== Number(m?.areaId)) return;
       setAreaClosed(a.id, !!m.closed);
+      if (!m.closed) admitted.delete(a.id);
       io.emit('floor', floorPayload(f.id));
       io.emit('room-state', { areaId: a.id, closed: !!m.closed, by: userId });
     });
@@ -157,6 +163,17 @@ export function initRealtime(httpServer) {
         const f = getFloor(q.floorId)?.state;
         if (f && areaAt(f, q.x, q.y)?.id === areaId) emitToUser(id, 'room:knock', { from: userId, areaId });
       }
+    });
+
+    // Quien está dentro de una sala cerrada deja pasar a alguien que tocó la puerta
+    socket.on('room:admit', (m) => {
+      const areaId = Number(m?.areaId);
+      const guest = Number(m?.userId);
+      const f = getFloor(p.floorId)?.state;
+      if (!f || !isAreaClosed(areaId) || areaAt(f, p.x, p.y)?.id !== areaId || !presence.has(guest)) return;
+      if (!admitted.has(areaId)) admitted.set(areaId, new Set());
+      admitted.get(areaId).add(guest);
+      emitToUser(guest, 'room:admitted', { areaId, by: userId });
     });
 
     socket.on('state', (s) => {

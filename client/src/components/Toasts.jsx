@@ -8,7 +8,9 @@ export default function Toasts() {
       {toasts.map((t) => (
         <div key={t.id} className={`toast ${t.kind || ''}`}>
           <span>{t.title}</span>
-          {t.action && <button className="btn tiny" onClick={() => { t.action.run(); office.set((st) => ({ toasts: st.toasts.filter((x) => x.id !== t.id) })); }}>{t.action.label}</button>}
+          {[t.action, ...(t.actions || [])].filter(Boolean).map((a) => (
+            <button key={a.label} className="btn tiny" onClick={() => { a.run(); office.set((st) => ({ toasts: st.toasts.filter((x) => x.id !== t.id) })); }}>{a.label}</button>
+          ))}
         </div>
       ))}
     </div>
