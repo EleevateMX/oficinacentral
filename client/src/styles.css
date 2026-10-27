@@ -927,3 +927,6 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
   background: var(--panel); color: var(--text); padding: 18px 22px; border-radius: 16px; box-shadow: var(--shadow); max-width: 320px; }
 .away-card b { font-size: 16px; }
 .away-card span { font-size: 13px; color: var(--muted, #888); margin-bottom: 6px; }
+
+.status-input { width: calc(100% - 16px); margin: 6px 8px 4px; font-size: 13px; padding: 7px 10px; }
+.pet-preview { display: block; margin-top: 10px; border-radius: 12px; background: var(--bg-soft, rgba(127,127,127,.1)); image-rendering: pixelated; }

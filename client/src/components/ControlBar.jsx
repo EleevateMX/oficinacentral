@@ -5,6 +5,8 @@ import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS } from './ui.jsx';
 
+const QUICK_STATUS = ['🎧 Concentrado', '📞 En llamada', '🍔 Comiendo', '☕ En pausa', '🚗 En camino', '🏠 Desde casa', '🤒 Enfermo', '🎮 Jugando'];
+const setStatusText = (statusText) => api.patch('/me', { statusText }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
 const EMOJIS = ['👋', '👍', '❤️', '😂', '🎉', '🔥', '👏', '🤔', '☕', '✅'];
 
 function useClickOutside(ref, onOut) {
@@ -40,6 +42,16 @@ export default function ControlBar({ compact = false }) {
                 <span className="dot" style={{ background: s.color }} /> {s.label}
               </button>
             ))}
+            <div className="pop-sep" />
+            <div className="pop-label">Estado personalizado</div>
+            <div className="shift-chips">
+              {QUICK_STATUS.map((st) => (
+                <button key={st} className={`chip-btn ${meU.statusText === st ? 'on' : ''}`} onClick={() => setStatusText(meU.statusText === st ? '' : st)}>{st}</button>
+              ))}
+            </div>
+            <input className="status-input" placeholder="Escribe tu estado y presiona Enter" defaultValue={QUICK_STATUS.includes(meU.statusText) ? '' : meU.statusText || ''} maxLength={80}
+              onKeyDown={(e) => { if (e.key === 'Enter') { setStatusText(e.currentTarget.value.trim()); setMenu(null); } }} />
+            {meU.statusText && <button className="pop-item" onClick={() => setStatusText('')}>Quitar estado</button>}
             {shifts.length > 0 && (
               <>
                 <div className="pop-sep" />

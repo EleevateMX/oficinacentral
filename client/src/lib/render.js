@@ -1075,7 +1075,9 @@ export function sortObjects(objects) {
 
 // ---------------- Avatares ----------------
 // cx = centro horizontal, by = base (pies). El sprite mide 32×48.
-export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false) {
+export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false, blink = false) {
+  // Parpadeo: la misma ficha con los ojos cerrados (no aplica a personajes dibujados ni lentes de sol)
+  if (blink && !avatar?.sprite && avatar?.eyewear !== 'sunglasses' && (dir === 'down' || dir === 'left' || dir === 'right')) avatar = { ...avatar, eyes: 'sleepy' };
   if (sit) {
     // Sentado: más abajo y sin piernas (quedan detrás del asiento)
     const top = Math.round(by - FRAME_H + 4);

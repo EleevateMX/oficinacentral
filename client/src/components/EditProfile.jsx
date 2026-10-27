@@ -6,6 +6,8 @@ import { Modal, AvatarCanvas, initials, Select } from './ui.jsx';
 import { SPRITE_OPTIONS, STYLE_NAMES, PARTS, PACKS, PRESETS, normalizeSpec, randomSpec } from '@shared/sprite.js';
 import { Shuffle, Plus } from 'lucide-react';
 import { timezones, tzOffsetLabel } from '../lib/time.js';
+import { PETS, PET_COLORS } from '@shared/pets.js';
+import { drawPet } from '../lib/pets.js';
 
 // Reduce la imagen a 256×256 (recorte cuadrado centrado)
 function resizeImage(file) {
@@ -158,9 +160,12 @@ const TABS = [
   ['face', 'Cara y cabello'],
   ['clothes', 'Ropa'],
   ['acc', 'Accesorios'],
+  ['pet', 'Mascota'],
 ];
 
-export function AvatarEditor({ avatar, onChange }) {
+export function AvatarEditor({ avatar, onChange: rawChange }) {
+  // La mascota se conserva aunque cambies de personaje
+  const onChange = (a) => rawChange({ ...a, pet: avatar.pet, petColor: avatar.petColor });
   const characters = useOffice((s) => s.characters);
   const theme = useOffice((s) => s.config.theme);
   const [tab, setTab] = useState(avatar.sprite || avatar.preset ? 'chars' : 'face');
@@ -239,6 +244,23 @@ export function AvatarEditor({ avatar, onChange }) {
               {row('Zapatos', 'shoes', 'color')}
             </>
           )}
+          {tab === 'pet' && (
+            <>
+              <div className="ae-label">Te acompaña por la oficina</div>
+              <div className="chip-row">
+                {PETS.map((p) => (
+                  <button type="button" key={p.id} className={`chip-btn ${(avatar.pet || 'none') === p.id ? 'on' : ''}`} onClick={() => rawChange({ ...avatar, pet: p.id, petColor: undefined })}>{p.name}</button>
+                ))}
+              </div>
+              {avatar.pet && avatar.pet !== 'none' && (
+                <>
+                  <div className="ae-label">Color</div>
+                  <Swatches label="Color de la mascota" options={PET_COLORS} value={avatar.petColor || PETS.find((p) => p.id === avatar.pet)?.color} onChange={(c) => rawChange({ ...avatar, petColor: c })} />
+                  <PetPreview kind={avatar.pet} color={avatar.petColor} />
+                </>
+              )}
+            </>
+          )}
           {tab === 'acc' && (
             <>
               {row('Gorra o sombrero', 'hat')}
@@ -252,4 +274,25 @@ export function AvatarEditor({ avatar, onChange }) {
       </div>
     </div>
   );
+}
+
+function PetPreview({ kind, color }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    let raf;
+    const loop = (t) => {
+      const c = ref.current;
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.setTransform(4, 0, 0, 4, 0, 0);
+      drawPet(ctx, kind, color, 20, 24, 1, t / 1000, Math.floor(t / 2000) % 2 === 0);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [kind, color]);
+  return <canvas ref={ref} width={160} height={110} className="pet-preview" />;
 }
