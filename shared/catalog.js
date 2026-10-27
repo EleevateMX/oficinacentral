@@ -28,13 +28,14 @@ export const CATALOG = {
   woodDesk: f('Escritorio de madera', 'muebles', 3, 1, { colorable: true, color: '#7a4a2b', claimable: true }),
   glassDesk: f('Escritorio de cristal', 'muebles', 3, 1, { colorable: true, color: '#a9d6e5', claimable: true }),
   cubicle: f('Cubículo', 'muebles', 4, 1, { colorable: true, color: '#f4f4f6', claimable: true }),
+  cubicleWalls: f('Mamparas de cubículo', 'muebles', 3, 2, { solid: false, colorable: true, color: '#9fb1c9' }),
   chair: f('Silla', 'muebles', 1, 1, { solid: false, colorable: true, color: '#3f4652', rotatable: true }),
   gamingChair: f('Silla gamer', 'muebles', 1, 1, { solid: false, colorable: true, color: '#d9454f', rotatable: true }),
   beanBag: f('Puff', 'muebles', 1, 1, { solid: false, colorable: true, color: '#9b5de5' }),
   officeChair: f('Silla ejecutiva', 'muebles', 1, 1, { solid: false, colorable: true, color: '#1d1d22', rotatable: true }),
   stool: f('Banco', 'muebles', 1, 1, { solid: false, colorable: true, color: '#a0673f' }),
-  sofa: f('Sofá', 'muebles', 5, 1, { colorable: true, color: '#e8a27c', rotatable: true }),
-  sofaSmall: f('Sofá chico', 'muebles', 3, 1, { colorable: true, color: '#e9edf2', rotatable: true }),
+  sofa: f('Sofá', 'muebles', 5, 1, { solid: false, colorable: true, color: '#e8a27c', rotatable: true }),
+  sofaSmall: f('Sofá chico', 'muebles', 3, 1, { solid: false, colorable: true, color: '#e9edf2', rotatable: true }),
   table: f('Mesa', 'muebles', 4, 2, { colorable: true, color: '#9a6a43' }),
   roundTable: f('Mesa redonda', 'muebles', 2, 1, { colorable: true, color: '#f1d39a' }),
   meetingTable: f('Mesa de juntas', 'salas', 6, 3, { colorable: true, color: '#eef0f4' }),
@@ -60,7 +61,7 @@ export const CATALOG = {
   flowers: f('Flores', 'exterior', 1, 1, { solid: false }),
   bush: f('Arbusto', 'exterior', 1, 1),
   tree: f('Pino', 'exterior', 1, 1),
-  bench: f('Banca', 'exterior', 2, 1, { rotatable: true }),
+  bench: f('Banca', 'exterior', 2, 1, { solid: false, rotatable: true }),
   fountain: f('Fuente', 'exterior', 2, 2),
   bikeRack: f('Bicicletas', 'deco', 3, 1),
   coatRack: f('Perchero', 'deco', 1, 1),
@@ -75,7 +76,7 @@ export const CATALOG = {
   reception: f('Recepción', 'muebles', 5, 1, { colorable: true, color: '#101010' }),
   vending: f('Máquina de snacks', 'comida', 1, 1, { colorable: true, color: '#FE3377' }),
   planter: f('Jardinera', 'plantas', 3, 1, { colorable: true, color: '#c99c72' }),
-  armchair: f('Sillón', 'muebles', 1, 1, { colorable: true, color: '#FFCC00', rotatable: true }),
+  armchair: f('Sillón', 'muebles', 1, 1, { solid: false, colorable: true, color: '#FFCC00', rotatable: true }),
   bigScreen: f('Pantalla gigante', 'salas', 5, 1, { colorable: true, color: '#101010', interactive: 'screen' }),
   flagPole: f('Asta con bandera', 'gtahub', 1, 1, { colorable: true, brand: true }),
 
@@ -166,6 +167,28 @@ export const CATALOG = {
 
 // Modelos de escritorio y de silla que cada quien puede elegir para su lugar
 export const DESK_TYPES = ['desk', 'standingDesk', 'gamingDesk', 'woodDesk', 'glassDesk'];
+// Muebles donde el personaje se sienta. dir: hacia dónde mira ('rot' = según la rotación).
+export const SEAT_TYPES = { chair: 'rot', gamingChair: 'rot', officeChair: 'rot', armchair: 'rot', sofa: 'sofa', sofaSmall: 'sofa', bench: 'down', stool: null, beanBag: null };
+const ROT_FACE = ['up', 'right', 'down', 'left'];
+const seatCache = new WeakMap();
+// Asiento en la casilla (x, y): { dir } o null
+export function seatAt(f, x, y) {
+  if (!f?.objects) return null;
+  let m = seatCache.get(f.objects);
+  if (!m) {
+    m = new Map();
+    for (const o of f.objects) {
+      const kind = SEAT_TYPES[o.type];
+      if (kind === undefined) continue;
+      const dir = kind === 'rot' ? ROT_FACE[(o.rot || 0) % 4] : kind === 'sofa' ? ((o.rot || 0) === 2 ? 'up' : 'down') : kind;
+      const { w, h } = objSize(o);
+      for (let j = o.y; j < o.y + h; j++) for (let i = o.x; i < o.x + w; i++) m.set(`${i},${j}`, { dir });
+    }
+    seatCache.set(f.objects, m);
+  }
+  return m.get(`${x},${y}`) || null;
+}
+
 export const CHAIR_TYPES = ['chair', 'gamingChair', 'officeChair', 'beanBag', 'stool'];
 
 export const DESK_DECOR_LIMIT = 30;

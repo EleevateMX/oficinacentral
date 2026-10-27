@@ -4,7 +4,7 @@ import { office, useOffice } from '../lib/store.js';
 import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt } from '@shared/map.js';
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
-import { CATALOG, COLORS, objSize } from '@shared/catalog.js';
+import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand } from '../lib/render.js';
 import { mapBrand } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
@@ -14,6 +14,7 @@ import VideoStrip from './VideoStrip.jsx';
 import { ScreenStage } from './Streams.jsx';
 import RoomChat from './RoomChat.jsx';
 import Decorator from './Decorator.jsx';
+import { Avatar } from './ui.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
@@ -90,6 +91,13 @@ export default function MapView({ active }) {
   const ed = useOffice((s) => s.editor);
   const perf = useOffice((s) => s.prefs.performance.mode);
   const [hoverDesk, setHoverDesk] = useState(null);
+  const hoverRef = useRef(null);
+  const tipTimer = useRef(null);
+  // Se oculta con un pequeño retraso para poder llegar al botón
+  const hideTipSoon = () => {
+    clearTimeout(tipTimer.current);
+    tipTimer.current = setTimeout(() => { hoverRef.current = null; setHoverDesk(null); }, 350);
+  };
   const [toolbar, setToolbar] = useState(null);
   const [colorOpen, setColorOpen] = useState(false);
   const [zoomPct, setZoomPct] = useState(150);
@@ -457,7 +465,8 @@ export default function MapView({ active }) {
         const u = us[id];
         const step = p.moving ? (Math.floor((p.anim || 0) * 8) % 2) + 1 : 0;
         ctx.globalAlpha = p.status === 'away' ? 0.6 : 1;
-        drawAvatar(ctx, (p.rx + 0.5) * T, (p.ry + 1) * T - 2, u?.avatar, p.dir, step);
+        const seat = !p.moving && seatAt(f, Math.round(p.rx), Math.round(p.ry));
+        drawAvatar(ctx, (p.rx + 0.5) * T, (p.ry + 1) * T - 2, u?.avatar, seat?.dir || p.dir, step, !!seat);
         ctx.globalAlpha = 1;
       }
 
@@ -745,8 +754,17 @@ export default function MapView({ active }) {
     }
     const d = deskAt(floor, Math.floor(w.x), Math.floor(w.y));
     const over = d && inRect({ ...d.zone, y: d.zone.y + 1, h: d.zone.h - 2 }, Math.floor(w.x), Math.floor(w.y)) ? d : null;
-    setHoverDesk((prev) => (prev?.desk?.id === over?.id ? prev : over ? { desk: over, ...input.current.pointer } : null));
-    canvasRef.current.style.cursor = 'pointer';
+    if (over) {
+      clearTimeout(tipTimer.current);
+      if (hoverRef.current?.id !== over.id) {
+        // La burbuja va anclada encima del escritorio, no donde está el mouse
+        const { w: ow } = objSize(over.object);
+        const p = worldToScreen(over.object.x + ow / 2, over.object.y - 0.45);
+        hoverRef.current = over;
+        setHoverDesk({ desk: over, x: p.x, y: p.y, area: areaAt(floor, over.object.x, over.object.y)?.name || '' });
+      }
+    } else hideTipSoon();
+    canvasRef.current.style.cursor = over ? 'pointer' : 'default';
   };
 
   const onPointerUp = async (e) => {
@@ -826,7 +844,7 @@ export default function MapView({ active }) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={pinchEnd}
-        onPointerLeave={() => { input.current.pointer = null; setHoverDesk(null); }}
+        onPointerLeave={() => { input.current.pointer = null; hideTipSoon(); }}
         onWheel={onWheel}
         onContextMenu={(e) => { e.preventDefault(); if (editMode) office.set((st) => ({ editor: { ...st.editor, placing: null, tool: 'select' } })); }}
       />
@@ -836,17 +854,21 @@ export default function MapView({ active }) {
       <ScreenStage />
 
       {hoverDesk && !editMode && (
-        <div className="desk-tip" style={{ left: hoverDesk.x, top: hoverDesk.y - 46 }}>
-          {hoverOwner ? (
-            <span>🪑 Escritorio de <b>{hoverOwner.displayName}</b></span>
-          ) : (
-            <span>Escritorio libre</span>
-          )}
+        <div className="desk-tip" style={{ left: hoverDesk.x, top: hoverDesk.y }}
+          onMouseEnter={() => clearTimeout(tipTimer.current)} onMouseLeave={hideTipSoon}>
+          {hoverOwner ? <Avatar user={hoverOwner} size={28} /> : <span className="desk-tip-ico"><Armchair size={16} /></span>}
+          <div className="desk-tip-text">
+            <b>{isMyDesk ? 'Tu escritorio' : hoverOwner ? hoverOwner.displayName : 'Escritorio libre'}</b>
+            <span>{hoverDesk.area || 'Oficina'}{hoverOwner && !isMyDesk ? ` · ${hoverOwner.online ? 'En línea' : 'Desconectado'}` : ''}</span>
+          </div>
           {!hoverOwner && (
-            <button className="btn tiny primary" onClick={() => claim(hoverDesk.desk.id)}>Reclamar</button>
+            <button className="btn tiny primary" onClick={() => { claim(hoverDesk.desk.id); hoverRef.current = null; }}>Reclamar</button>
           )}
           {isMyDesk && (
             <button className="btn tiny" onClick={() => office.set({ editMode: 'decor' })}><Brush size={12} /> Decorar</button>
+          )}
+          {hoverOwner && !isMyDesk && hoverOwner.online && (
+            <button className="btn tiny" onClick={() => office.goTo(hoverOwner.id)}>Ir</button>
           )}
         </div>
       )}

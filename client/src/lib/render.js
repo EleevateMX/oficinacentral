@@ -304,25 +304,71 @@ D.cubicle = (ctx, x, y, w, h, o, c) => {
   R(ctx, '#e47b70', x, y - 10, 3, h + 10);
   R(ctx, '#e47b70', x + w - 3, y - 10, 3, h + 10);
 };
-D.chair = (ctx, x, y, w, h, o, c) => {
+// Sillas vistas desde arriba: base de 5 ruedas, asiento acolchado, respaldo y
+// descansabrazos. Se dibujan "mirando hacia arriba" (respaldo abajo) y se giran.
+function withRot(ctx, x, y, w, h, r, fn) {
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.rotate(((r || 0) * Math.PI) / 2);
+  fn();
+  ctx.restore();
+}
+function chairBase(ctx, s = 1) {
+  ctx.fillStyle = 'rgba(0,0,0,.16)';
+  ctx.beginPath(); ctx.ellipse(1, 3, 13 * s, 10 * s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#3b3f47'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+  for (let k = 0; k < 5; k++) {
+    const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
+    const ex = Math.cos(a) * 12 * s, ey = Math.sin(a) * 12 * s;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(ex, ey); ctx.stroke();
+    circle(ctx, '#1f2228', ex, ey, 2.1 * s);
+  }
+}
+function drawChair(ctx, col, { back = 6, arms = true, tall = false, tufts = false, accent = null } = {}) {
+  chairBase(ctx);
+  // asiento
+  RR(ctx, shade(col, -0.22), -10, -9, 20, 18, 6);
+  RR(ctx, col, -9, -10, 18, 16, 6);
+  const g = ctx.createLinearGradient(0, -10, 0, 6);
+  g.addColorStop(0, 'rgba(255,255,255,.28)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(-8, -9, 16, 12, 5); ctx.fill();
+  if (tufts) for (const [tx, ty] of [[-4, -5], [4, -5], [-4, 1], [4, 1]]) circle(ctx, shade(col, -0.25), tx, ty, 1.1);
+  // descansabrazos
+  if (arms) {
+    RR(ctx, shade(col, -0.35), -13, -6, 4, 12, 2);
+    RR(ctx, shade(col, -0.35), 9, -6, 4, 12, 2);
+  }
+  // respaldo (curvo, del lado de abajo)
+  const by = tall ? 3 : 5;
+  RR(ctx, shade(col, -0.3), -12, by, 24, back + 3, 5);
+  RR(ctx, shade(col, -0.1), -11, by - 1, 22, back, 5);
+  R(ctx, 'rgba(255,255,255,.22)', -8, by, 16, 1.5);
+  if (accent) { R(ctx, accent, -3, by - 1, 2, back); R(ctx, accent, 1, by - 1, 2, back); }
+  if (tall) RR(ctx, shade(col, -0.45), -6, by + back + 1, 12, 4, 2); // cabecera
+}
+// Mamparas de cubículo: panel detrás del escritorio y laterales
+D.cubicleWalls = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color;
-  const r = o.rot || 0;
-  RR(ctx, 'rgba(0,0,0,.12)', x + 7, y + 22, 18, 6, 3);
-  RR(ctx, col, x + 7, y + 8, 18, 16, 4);
-  RR(ctx, shade(col, 0.12), x + 9, y + 10, 14, 10, 3);
-  const back = shade(col, -0.15);
-  if (r === 0) RR(ctx, back, x + 6, y + 20, 20, 8, 3);
-  if (r === 2) RR(ctx, back, x + 6, y + 3, 20, 8, 3);
-  if (r === 1) RR(ctx, back, x + 4, y + 6, 7, 20, 3);
-  if (r === 3) RR(ctx, back, x + 21, y + 6, 7, 20, 3);
+  const edge = shade(col, -0.28);
+  const top = shade(col, 0.18);
+  // panel trasero (se ve su canto superior y su cara)
+  R(ctx, 'rgba(0,0,0,.14)', x - 1, y + 2, w + 2, 4);
+  R(ctx, edge, x - 2, y - 12, w + 4, 14);
+  R(ctx, col, x - 1, y - 11, w + 2, 11);
+  R(ctx, top, x - 2, y - 12, w + 4, 3);
+  for (let k = 8; k < w - 4; k += 12) R(ctx, shade(col, -0.08), x + k, y - 8, 1, 6);
+  // laterales
+  for (const sx of [x - 2, x + w - 2]) {
+    R(ctx, edge, sx, y - 12, 4, h - 4);
+    R(ctx, top, sx, y - 12, 4, 2);
+    R(ctx, 'rgba(0,0,0,.12)', sx + 4, y - 6, 2, h - 10);
+  }
+};
+D.chair = (ctx, x, y, w, h, o, c) => {
+  withRot(ctx, x, y, w, h, o.rot, () => drawChair(ctx, o.color || c.color, { back: 6 }));
 };
 D.gamingChair = (ctx, x, y, w, h, o, c) => {
-  D.chair(ctx, x, y, w, h, o, c);
-  const col = o.color || c.color;
-  const r = o.rot || 0;
-  if (r === 0) R(ctx, '#222', x + 12, y + 22, 8, 4);
-  if (r === 2) R(ctx, '#222', x + 12, y + 5, 8, 4);
-  R(ctx, shade(col, 0.25), x + 14, y + 12, 4, 6);
+  withRot(ctx, x, y, w, h, o.rot, () => drawChair(ctx, o.color || c.color, { back: 8, tall: true, accent: '#1d1d22' }));
 };
 D.beanBag = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color;
@@ -698,9 +744,7 @@ D.glassDesk = (ctx, x, y, w, h, o, c) => {
   R(ctx, '#9aa3ad', x + 3, y + h - 8, 2, 8); R(ctx, '#9aa3ad', x + w - 5, y + h - 8, 2, 8);
 };
 D.officeChair = (ctx, x, y, w, h, o, c) => {
-  D.chair(ctx, x, y, w, h, o, c);
-  R(ctx, '#555', x + 15, y + 24, 2, 4);
-  R(ctx, '#555', x + 9, y + 27, 14, 2);
+  withRot(ctx, x, y, w, h, o.rot, () => drawChair(ctx, o.color || c.color, { back: 8, tufts: true }));
 };
 D.stool = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color;
@@ -1031,7 +1075,18 @@ export function sortObjects(objects) {
 
 // ---------------- Avatares ----------------
 // cx = centro horizontal, by = base (pies). El sprite mide 32×48.
-export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0) {
+export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false) {
+  if (sit) {
+    // Sentado: más abajo y sin piernas (quedan detrás del asiento)
+    const top = Math.round(by - FRAME_H + 4);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx - FRAME_W, top - 2, FRAME_W * 2, FRAME_H - 8);
+    ctx.clip();
+    drawSprite(ctx, getSheet(avatar), Math.round(cx - FRAME_W / 2), top, dir, 0);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = 'rgba(0,0,0,.2)';
   ctx.beginPath();
   ctx.ellipse(cx, by - 1, 10, 3.5, 0, 0, Math.PI * 2);

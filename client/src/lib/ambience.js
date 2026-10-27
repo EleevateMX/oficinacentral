@@ -13,9 +13,9 @@ const audio = () => {
 export function daylight(date = new Date()) {
   const h = date.getHours() + date.getMinutes() / 60;
   if (h >= 8 && h < 17.5) return null; // día
-  if (h >= 17.5 && h < 19.5) { const k = (h - 17.5) / 2; return { color: `rgba(255,140,60,${0.08 + k * 0.1})`, night: k > 0.7 ? (k - 0.7) / 0.3 * 0.5 : 0 }; } // atardecer
-  if (h >= 6 && h < 8) { const k = 1 - (h - 6) / 2; return { color: `rgba(255,190,120,${0.06 + k * 0.08})`, night: k * 0.4 }; } // amanecer
-  return { color: 'rgba(18,28,70,.34)', night: 1 }; // noche
+  if (h >= 17.5 && h < 19.5) { const k = (h - 17.5) / 2; return { color: `rgba(255,140,60,${0.04 + k * 0.06})`, night: k > 0.7 ? (k - 0.7) / 0.3 * 0.5 : 0 }; } // atardecer
+  if (h >= 6 && h < 8) { const k = 1 - (h - 6) / 2; return { color: `rgba(255,190,120,${0.03 + k * 0.05})`, night: k * 0.4 }; } // amanecer
+  return { color: 'rgba(18,28,70,.15)', night: 1 }; // noche
 }
 
 // Objetos que brillan de noche

@@ -89,7 +89,9 @@ export function objectAt(floor, wx, wy, filter = () => true) {
   const decor = list.filter((o) => CATALOG[o.type]?.kind === 'decor' && hit(o));
   if (decor.length) return decor[decor.length - 1];
   const furn = list.filter((o) => CATALOG[o.type]?.kind !== 'decor' && hit(o));
-  return furn.sort((a, b) => a.y + objSize(a).h - (b.y + objSize(b).h)).pop() || null;
+  // Las mamparas cubren escritorio y silla: se eligen solo si no hay otra cosa
+  const key = (o) => (o.type === 'cubicleWalls' ? -1e9 : o.y + objSize(o).h);
+  return furn.sort((a, b) => key(a) - key(b)).pop() || null;
 }
 
 export function myDesk(floor, meId) {
