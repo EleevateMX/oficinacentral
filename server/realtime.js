@@ -11,6 +11,7 @@ import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
 import { trackConnect, trackArea, trackDisconnect, bumpCounter } from './stats.js';
 import { checkAchievements } from './achievements.js';
+import { initStage, initStageIO, stageCleanup } from './stage.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -89,6 +90,7 @@ export function disconnectUser(userId) {
 
 export function initRealtime(httpServer) {
   io = new Server(httpServer, { maxHttpBufferSize: 1e6 });
+  initStageIO(io, presence);
 
   io.use((socket, next) => {
     const token = parseCookies(socket.handshake.headers.cookie)[SESSION_COOKIE];
@@ -138,6 +140,7 @@ export function initRealtime(httpServer) {
       if (['up', 'down', 'left', 'right'].includes(m.dir)) p.dir = m.dir;
       socket.broadcast.emit('move', { id: userId, floorId, x, y, dir: p.dir, tp: !!m.tp || changingFloor });
       if (closedAreaIds().length) reopenEmptyRooms();
+      stageCleanup(userId); // fila de manos del escenario: sale si dejó el área
       // Cuando ya están los dos en una sala 1:1, la puerta se cierra sola (para no molestar a los demás)
       const here = areaAt(f, x, y);
       trackArea(userId, here?.id);
@@ -230,6 +233,7 @@ export function initRealtime(httpServer) {
     initBoards(io, socket, userId);
     initGames(io, socket, userId);
     initNotes(io, socket, userId);
+    initStage(socket, userId);
 
     // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
     let roomMsgTimes = [];
@@ -287,6 +291,7 @@ export function initRealtime(httpServer) {
         try { trackDisconnect(userId); checkAchievements(userId); } catch (e) { console.error('[stats]', e.message); }
         savePosition(userId);
         presence.delete(userId);
+        stageCleanup(userId, { gone: true });
         io.emit('player', { id: userId, online: false });
         if (closedAreaIds().length) reopenEmptyRooms();
       }

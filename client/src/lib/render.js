@@ -964,6 +964,57 @@ D.brandRug = (ctx, x, y, w, h, o) => {
   ctx.restore();
 };
 
+// ---- Escenario con micrófono (ver shared/stage.js) ----
+function stageMicStand(ctx, cx, by, col) {
+  R(ctx, 'rgba(0,0,0,.25)', cx - 5, by - 1, 10, 2);
+  R(ctx, '#2a2a30', cx - 4, by - 2, 8, 2);
+  R(ctx, '#3a3a42', cx - 0.75, by - 20, 1.5, 18);
+  R(ctx, '#3a3a42', cx - 0.75, by - 20, 6, 1.5);
+  RR(ctx, '#1d1d22', cx + 3.5, by - 23, 4.5, 6, 2);
+  R(ctx, col, cx + 4, by - 20, 3.5, 1);
+}
+D.stage = (ctx, x, y, w, h, o) => {
+  const { p, s } = brandCols(o);
+  const dark = '#141414';
+  const face = 7;
+  // sombra y frente de la tarima
+  R(ctx, 'rgba(0,0,0,.22)', x + 3, y + h - 2, w - 2, face + 4);
+  RR(ctx, dark, x, y, w, h, 5);
+  // duela oscura
+  for (let j = 1; j * 8 < h - face; j++) R(ctx, '#1f1f25', x + 3, y + j * 8, w - 6, 1);
+  for (let i = 0; i * 24 < w; i++) R(ctx, '#232329', x + 12 + i * 24 + ((i % 2) * 6), y + 3, 1, h - face - 4);
+  // orilla rosa y frente con focos
+  ctx.strokeStyle = p; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(x + 1.5, y + 1.5, w - 3, h - face - 1, 4); ctx.stroke();
+  const g = ctx.createLinearGradient(x, y + h - face, x, y + h + 2);
+  g.addColorStop(0, shade(p, -0.1)); g.addColorStop(1, shade(p, -0.45));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x, y + h - face, w, face + 2, [0, 0, 5, 5]); ctx.fill();
+  const n = Math.max(4, Math.floor(w / 12));
+  const k = Math.floor(ANIM_T / 260);
+  for (let i = 0; i < n; i++) {
+    const on = (i + k) % 3 !== 0;
+    circle(ctx, on ? s : shade(s, -0.45), x + (i + 0.5) * (w / n), y + h - face / 2 + 1, 1.8);
+  }
+  // logo tenue al centro y bocinas atrás
+  ctx.save(); ctx.globalAlpha = 0.28;
+  const cy = y + (h - face) / 2;
+  if (!drawLogo(ctx, x + w / 2, cy, Math.min(h - face - 6, 42))) { ctx.strokeStyle = s; ctx.lineWidth = 2; hexPath(ctx, x + w / 2, cy, Math.min(14, (h - face) / 2 - 3)); ctx.stroke(); }
+  ctx.restore();
+  for (const sx of [x + 4, x + w - 14]) {
+    RR(ctx, '#0a0a0c', sx, y + 3, 10, 13, 2);
+    circle(ctx, '#2c2c34', sx + 5, y + 7, 2.2); circle(ctx, '#2c2c34', sx + 5, y + 12.5, 2.6);
+  }
+  stageMicStand(ctx, x + w / 2 - 4, y + h - face - 2, p);
+};
+D.stageMic = (ctx, x, y, w, h, o) => {
+  const { p } = brandCols(o);
+  ctx.save();
+  ctx.strokeStyle = p; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.ellipse(x + w / 2, y + h - 7, w / 2 - 3, 6, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  stageMicStand(ctx, x + w / 2 - 3, y + h - 6, p);
+};
+
 // Vitrina de trofeos (sala de juegos)
 D.trophyCase = (ctx, x, y, w, h, o) => {
   const { p, s, d } = brandCols(o);

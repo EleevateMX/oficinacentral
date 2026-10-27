@@ -1,6 +1,6 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx, getSetting, setSetting } from './db.js';
-import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, areaAt } from '../shared/map.js';
+import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, STAGE_EXTRAS, areaAt } from '../shared/map.js';
 import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 import { AREA_SHAPES } from '../shared/map.js';
 
@@ -85,7 +85,7 @@ export function furnishDesks(floorId) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Piso 1', 'hq'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1']) setSetting(k, '1'); return; }
+  if (!rows.length) { createFloor('Piso 1', 'hq'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1']) setSetting(k, '1'); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
@@ -109,6 +109,11 @@ export function loadWorld() {
     db.prepare("UPDATE objects SET type = 'wavingFlag' WHERE type = 'flagPole'").run();
     setSetting('migr_flags_v1', '1');
   }
+  // Una vez: escenario en Staff / Orgs para las oficinas ya creadas (solo si el lugar está libre)
+  if (!getSetting('migr_stage_v1')) {
+    for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) addStageExtras(r.id);
+    setSetting('migr_stage_v1', '1');
+  }
   for (const r of rows) rebuild(r.id);
 }
 
@@ -117,6 +122,20 @@ function addReceptionExtras(floorId) {
   const ins = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
   for (const [type, x, y, o] of RECEPTION_EXTRAS) {
     if (!exists.get(floorId, type, x, y)) ins.run(floorId, type, x, y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, now());
+  }
+}
+
+function addStageExtras(floorId) {
+  const t = getTemplate('hq');
+  const objs = db.prepare('SELECT * FROM objects WHERE floor_id = ? AND desk_id IS NULL').all(floorId).map(rowToObject);
+  const ins = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  for (const [type, x, y, o] of STAGE_EXTRAS) {
+    if (objs.some((q) => q.type === type)) continue; // ya pusieron uno
+    const box = { x, y, ...objSize({ type, ...o }) };
+    const hits = (q) => { const b = bbox(q); return b.x < box.x + box.w && box.x < b.x + b.w && b.y < box.y + box.h && box.y < b.y + b.h; };
+    let free = !objs.some((q) => (CATALOG[q.type]?.solid || CATALOG[q.type]?.under) && hits(q));
+    for (let j = box.y; free && j < box.y + box.h; j++) for (let i = box.x; i < box.x + box.w; i++) if (t.walls[j]?.[i]) free = false;
+    if (free) ins.run(floorId, type, x, y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, now());
   }
 }
 

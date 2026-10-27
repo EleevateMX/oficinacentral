@@ -2,6 +2,7 @@ import { useSyncExternalStore, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { api } from './api.js';
 import { MediaManager } from './media.js';
+import { initStageClient } from './stage.js';
 import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable, PROXIMITY_RADIUS } from '@shared/map.js';
 import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
@@ -161,6 +162,7 @@ class Office {
   connect() {
     const s = io({ withCredentials: true });
     this.socket = s;
+    initStageClient(this, s); // escenario: fila de manos levantadas
     s.on('connect', () => {
       this.set({ connected: true });
       s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push

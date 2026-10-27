@@ -5,6 +5,7 @@ import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS } from './ui.jsx';
 import { openPip, pipSupported } from '../lib/pip.js';
+import { handButton } from '../lib/stage.js';
 
 const QUICK_STATUS = ['🎧 Concentrado', '📞 En llamada', '🍔 Comiendo', '☕ En pausa', '🚗 En camino', '🏠 Desde casa', '🤒 Enfermo', '🎮 Jugando'];
 const setStatusText = (statusText) => api.patch('/me', { statusText }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
@@ -24,6 +25,7 @@ export default function ControlBar({ compact = false }) {
   const me = useOffice((s) => s.me);
   const users = useOffice((s) => s.users);
   const media = useOffice((s) => s.media);
+  const handUp = useOffice((s) => !!s.stage?.queue?.includes(s.me?.id)); // fila del escenario
   const hearing = useOffice((s) => s.talkingWith);
   const [menu, setMenu] = useState(null);
   const ref = useRef(null);
@@ -108,7 +110,7 @@ export default function ControlBar({ compact = false }) {
         )}
       </div>
       {!compact && (
-        <button className="cb-btn" onClick={() => office.react('✋')} title="Levantar la mano"><Hand size={18} /></button>
+        <button className={`cb-btn ${handUp ? 'on' : ''}`} onClick={() => handButton(office) || office.react('✋')} title={handUp ? 'Bajar la mano' : 'Levantar la mano'}><Hand size={18} /></button>
       )}
       <button className={`cb-btn ${media.screen ? 'on sharing' : ''}`} onClick={() => office.toggleScreen()} title={media.screen ? 'Dejar de compartir' : 'Compartir pantalla'}>
         <MonitorUp size={18} />

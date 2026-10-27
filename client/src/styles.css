@@ -1245,3 +1245,27 @@ body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
   .ach-grid { grid-template-columns: 1fr; }
   .ach-modal .modal-body { max-height: none; flex: 1; }
 }
+/* ===== Escenario con micrófono + fila de manos levantadas ===== */
+.stage-pill { position: absolute; right: 12px; top: 128px; z-index: 18; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 8px; border-radius: 999px;
+  background: rgba(20,20,20,.92); color: #fff; font-size: 12.5px; box-shadow: 0 6px 20px rgba(0,0,0,.28); border: 1px solid rgba(254,51,119,.45); max-width: calc(100% - 24px); }
+.stage-pill-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stage-count { color: #FFCC00; font-weight: 700; }
+.stage-ico { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #FE3377; color: #fff; box-shadow: 0 0 10px rgba(254,51,119,.6); }
+.stage-hand { border-radius: 999px; background: #FFCC00; border-color: #FFCC00; color: #141414; font-weight: 700; gap: 4px; display: inline-flex; align-items: center; }
+.stage-hand:hover { filter: brightness(1.05); }
+.stage-hand.on { background: transparent; color: #FFCC00; border-color: rgba(255,204,0,.6); }
+.stage-panel { position: absolute; right: 12px; top: 128px; z-index: 18; width: 320px; max-width: calc(100% - 24px); max-height: 50%; display: flex; flex-direction: column;
+  background: rgba(20,20,20,.95); color: #fff; border-radius: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.35); border: 1px solid rgba(254,51,119,.45); overflow: hidden; }
+.stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: linear-gradient(90deg, rgba(254,51,119,.28), rgba(254,51,119,0)); }
+.stage-head b { display: block; font-size: 13px; }
+.stage-head small { display: block; font-size: 11.5px; color: #c9c9cf; }
+.stage-sub { padding: 8px 12px 4px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #FFCC00; }
+.stage-empty { padding: 2px 12px 12px; font-size: 12px; color: #a9a9b2; }
+.stage-queue { list-style: none; margin: 0; padding: 0 8px 8px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.stage-queue li { display: flex; align-items: center; gap: 7px; padding: 5px 6px; border-radius: 9px; background: rgba(255,255,255,.05); }
+.stage-pos { width: 18px; height: 18px; flex: none; border-radius: 50%; background: #FFCC00; color: #141414; font-size: 10.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+.stage-name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stage-queue .btn.tiny { height: 24px; padding: 0 7px; font-size: 11px; border-radius: 999px; }
+.stage-queue .btn.primary { background: #FE3377; border-color: #FE3377; }
+.stage-queue .btn.ghost { background: transparent; color: #c9c9cf; border-color: rgba(255,255,255,.18); }
+.shell.mobile .stage-pill, .shell.mobile .stage-panel { top: auto; bottom: 108px; right: 8px; }

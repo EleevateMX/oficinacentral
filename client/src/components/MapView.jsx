@@ -29,6 +29,9 @@ import Decorator from './Decorator.jsx';
 import { drawPet } from '../lib/pets.js';
 import { pose, drawFxUnder, drawFxOver } from '../lib/fx.js';
 import { Avatar } from './ui.jsx';
+import { stageAt } from '@shared/stage.js';
+import { drawStageSpots } from '../lib/stageFx.js';
+import StagePanel from './StagePanel.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
@@ -665,6 +668,7 @@ export default function MapView({ active }) {
         ctx.globalAlpha = 1;
       }
 
+      drawStageSpots(ctx, f, t, T, viewRect); // reflectores del escenario
       // Fantasmas, murciélagos y un tinte morado de temporada
       if (hw) {
         if (hw.npcs) drawHalloweenSky(ctx, hw.npcs, t, viewRect);
@@ -738,6 +742,7 @@ export default function MapView({ active }) {
       // Etiquetas (en coordenadas de pantalla para que el texto sea nítido)
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
       ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left'; // algún dibujo de temporada lo deja centrado
       // Nombres de áreas
       if (v.zoom >= 0.3) {
         ctx.font = '700 12px "Public Sans", system-ui, sans-serif';
@@ -821,7 +826,8 @@ export default function MapView({ active }) {
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
         // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
-        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414']].filter(Boolean);
+        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414'],
+          stageAt(f, p.x, p.y) && ['🎤 En el escenario', '#FE3377', '#fff'], office.state.stage?.queue?.includes(Number(id)) && ['✋ Mano levantada', '#FFCC00', '#141414']].filter(Boolean);
         if (tags.length) {
           ctx.font = '800 9px "Public Sans", system-ui, sans-serif';
           const ws = tags.map(([t]) => ctx.measureText(t).width + 10);
@@ -1236,6 +1242,7 @@ export default function MapView({ active }) {
         </div>
       )}
       <MeetingNotes room={roomHere} hidden={!!editMode} />
+      {!myAway && !editMode && <StagePanel />}
       {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>

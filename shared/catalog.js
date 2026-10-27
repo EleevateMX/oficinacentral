@@ -88,6 +88,9 @@ export const CATALOG = {
   bamboo: f('Bambú', 'plantas', 1, 1),
   plantShelf: f('Repisa de plantas', 'plantas', 2, 1),
   willowTree: f('Sauce llorón', 'exterior', 3, 3),
+  // Escenario: quien se sube lo oye toda el área (ver shared/stage.js)
+  stage: f('Escenario', 'salas', 6, 3, { solid: false, under: true, colorable: true, brand: true, stage: true }),
+  stageMic: f('Micrófono de escenario', 'salas', 1, 1, { solid: false, colorable: true, brand: true, stage: true }),
 
   // Decoraciones de escritorio (no bloquean, posición libre)
   monitor: d('Monitor', 'tech', 0.75, 0.75, { colorable: true, color: '#2b2f3a' }),
