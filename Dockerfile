@@ -1,5 +1,5 @@
 # ---------- Compilación del cliente ----------
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ COPY shared ./shared
 RUN npm run build
 
 # ---------- Imagen final ----------
-FROM node:22-alpine
+FROM node:26-alpine
 ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data \
