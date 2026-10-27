@@ -50,8 +50,8 @@ if (fs.existsSync(dist)) {
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const brand = () => {
     const c = officeConfig();
-    const gta = c.theme === 'gtahub';
-    const name = c.theme === 'nuvora' && !c.logoUrl ? 'Nuvora' : c.officeName;
+    const gta = c.theme === 'gtahub' || /gtahub/i.test(c.officeName || '');
+    const name = c.officeName || 'Nuvora';
     return { name, title: name === 'Nuvora' ? 'Nuvora — Oficina virtual' : `${name} — Oficina virtual by Nuvora`, icons: gta ? '/themes/gtahub' : null, logo: c.logoUrl };
   };
   const sendIndex = (req, res) => {
@@ -62,7 +62,7 @@ if (fs.existsSync(dist)) {
     if (b.logo) html = html.replace(/<link rel="icon"[^>]*>/, `<link rel="icon" href="${esc(b.logo)}" />`);
     else if (b.icons) {
       html = html
-        .replace(/<link rel="icon"[^>]*>/, `<link rel="icon" type="image/svg+xml" href="${b.icons}/favicon.svg" />`);
+        .replace(/<link rel="icon"[^>]*>/, `<link rel="icon" type="image/png" href="${b.icons}/favicon.png" />`);
     }
     if (b.icons) {
       html = html

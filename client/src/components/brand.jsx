@@ -1,3 +1,4 @@
+import { officeLogo } from '../lib/themes.js';
 // Identidad de Nuvora (Manual de marca v2): logo, símbolo y mascotas.
 // Formas planas, sin sombras ni degradados. Colores de la paleta oficial.
 import React from 'react';
@@ -85,7 +86,7 @@ export function Mascota({ nombre = 'nuvi', face = 'smile', pose = 'idle', size =
 
 // Marca de la oficina (logo propio) o, si no hay, el símbolo de Nuvora.
 export function OfficeMark({ config, size = 28, variante = 'negativo' }) {
-  const src = config?.logoUrl || (config?.theme === 'gtahub' ? '/themes/gtahub.svg' : null);
+  const src = officeLogo(config || {});
   if (src) return <img src={src} alt={config.officeName || ''} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />;
   return <Simbolo variante={variante} size={size} />;
 }

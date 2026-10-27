@@ -1,9 +1,10 @@
 import React from 'react';
 import { Mascota, OfficeMark, ByNuvora, Logo } from './brand.jsx';
+import { officeLogo } from '../lib/themes.js';
 
 export default function AuthLayout({ config = {}, title, subtitle, children, host }) {
   const isNuvora = (config.theme || 'nuvora') === 'nuvora';
-  const hasOwnMark = config.logoUrl || config.theme === 'gtahub';
+  const hasOwnMark = !!officeLogo(config);
   return (
     <div className="auth">
       <main className="auth-card">

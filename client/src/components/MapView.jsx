@@ -5,8 +5,8 @@ import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
-import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand } from '../lib/render.js';
-import { mapBrand } from '../lib/themes.js';
+import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo } from '../lib/render.js';
+import { mapBrand, officeLogo } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
 import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
@@ -15,6 +15,7 @@ import { ScreenStage } from './Streams.jsx';
 import RoomChat from './RoomChat.jsx';
 import Decorator from './Decorator.jsx';
 import { drawPet } from '../lib/pets.js';
+import { pose, drawFxUnder, drawFxOver } from '../lib/fx.js';
 import { Avatar } from './ui.jsx';
 
 const T = TILE;
@@ -94,10 +95,20 @@ export default function MapView({ active }) {
   const [hoverDesk, setHoverDesk] = useState(null);
   const hoverRef = useRef(null);
   const tipTimer = useRef(null);
+  const tipRef = useRef(null);
+  const tipOver = useRef(false);
+  const hideTip = () => {
+    clearTimeout(tipTimer.current);
+    tipTimer.current = null;
+    tipOver.current = false;
+    hoverRef.current = null;
+    setHoverDesk(null);
+  };
+  const keepTip = () => { clearTimeout(tipTimer.current); tipTimer.current = null; };
   // Se oculta con un pequeño retraso para poder llegar al botón
   const hideTipSoon = () => {
-    clearTimeout(tipTimer.current);
-    tipTimer.current = setTimeout(() => { hoverRef.current = null; setHoverDesk(null); }, 350);
+    if (tipTimer.current || !hoverRef.current) return;
+    tipTimer.current = setTimeout(hideTip, 300);
   };
   const [toolbar, setToolbar] = useState(null);
   const [colorOpen, setColorOpen] = useState(false);
@@ -109,6 +120,14 @@ export default function MapView({ active }) {
   stateRef.current = { floor, me, users, editMode, ed, active };
 
   const config = useOffice((s) => s.config);
+
+  // El logo de la oficina se carga primero y, cuando llega, se vuelve a pintar el mapa
+  const [logoReady, setLogoReady] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    preloadBrandLogo(officeLogo(config)).then((ok) => ok && alive && setLogoReady((n) => n + 1));
+    return () => { alive = false; };
+  }, [config?.logoUrl, config?.theme]);
 
   // Capa estática (suelos, muros, objetos)
   useEffect(() => {
@@ -122,7 +141,7 @@ export default function MapView({ active }) {
     drawFloorLayer(ctx, floor);
     for (const o of sortObjects(floor.objects)) drawObject(ctx, o);
     staticRef.current = c;
-  }, [floor, config?.theme, config?.accent, config?.officeName]);
+  }, [floor, config?.theme, config?.accent, config?.officeName, config?.logoUrl, logoReady]);
 
   // Tamaño del canvas
   useEffect(() => {
@@ -185,6 +204,14 @@ export default function MapView({ active }) {
         return;
       }
       input.current.run = e.shiftKey;
+      // Ctrl+D: regresar a tu escritorio
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd' && !em) {
+        e.preventDefault();
+        input.current.path = [];
+        input.current.held = [];
+        office.goHome();
+        return;
+      }
       const dir = KEYS[e.code];
       if (dir) {
         e.preventDefault();
@@ -298,6 +325,12 @@ export default function MapView({ active }) {
       }
       let tx = (mine.rx + 0.5) * T;
       let ty = (mine.ry + 0.5) * T;
+      // Durante el efecto de Ctrl+D la cámara sigue al efecto (la nave, el cohete…)
+      const myFx = office.fx[meU.id];
+      if (myFx) {
+        const pr = (t - myFx.start) / myFx.dur;
+        if (pr >= 0 && pr < 1) { const c = pose(myFx, pr).cam; if (c) { tx = (c.x + 0.5) * T; ty = (c.y + 0.5) * T; } }
+      }
       // Vista general: centrada en el mapa hasta que te muevas
       if (v.overview) {
         if (v.overview.x === mine.x && v.overview.y === mine.y) { tx = (f.W * T) / 2; ty = (f.H * T) / 2; }
@@ -410,6 +443,16 @@ export default function MapView({ active }) {
           ctx.strokeStyle = mineDesk ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.35)';
           ctx.lineWidth = mineDesk ? 3 : 1;
           ctx.strokeRect(d.zone.x * T, d.zone.y * T, d.zone.w * T, d.zone.h * T);
+          // Al decorar: dónde se pueden poner cosas (sobre el escritorio)
+          if (em === 'decor' && d.decorZone) {
+            const z = d.decorZone;
+            ctx.fillStyle = 'rgba(255,255,255,.14)';
+            ctx.fillRect(z.x * T, z.y * T, z.w * T, z.h * T);
+            ctx.setLineDash([5, 4]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(z.x * T + 2, z.y * T + 2, z.w * T - 4, z.h * T - 4);
+            ctx.setLineDash([]);
+          }
         }
       }
 
@@ -467,6 +510,27 @@ export default function MapView({ active }) {
       const list = Object.entries(players).filter(([, p]) => p.floorId === f.id).sort((a, b) => a[1].ry - b[1].ry);
       for (const [id, p] of list) {
         const u = us[id];
+        // Efecto de regresar al escritorio (Ctrl+D): el efecto dibuja al personaje
+        const fxe = office.fx[id];
+        if (fxe) {
+          const pr = (t - fxe.start) / fxe.dur;
+          if (pr >= 1 || pr < 0) delete office.fx[id];
+          else {
+            const pz = pose(fxe, pr);
+            drawFxUnder(ctx, fxe, pr, t);
+            if (!pz.hidden) {
+              const ax = (pz.x + 0.5) * T;
+              const ay = (pz.y + 1) * T - 2;
+              ctx.save();
+              ctx.globalAlpha = Math.max(0, Math.min(1, pz.alpha ?? 1));
+              if (pz.sink) { ctx.beginPath(); ctx.rect(ax - T, ay - 3 * T, 2 * T, 3 * T); ctx.clip(); }
+              drawAvatar(ctx, ax, ay - (pz.lift || 0) + (pz.sink || 0) * 50, u?.avatar, 'down', 0);
+              ctx.restore();
+            }
+            drawFxOver(ctx, fxe, pr, t, pz);
+            continue;
+          }
+        }
         const step = p.moving ? (Math.floor((p.anim || 0) * 8) % 2) + 1 : 0;
         ctx.globalAlpha = p.status === 'away' ? 0.6 : 1;
         const seat = !p.moving && seatAt(f, Math.round(p.rx), Math.round(p.ry));
@@ -515,6 +579,20 @@ export default function MapView({ active }) {
           }
           ctx.restore();
         }
+      }
+
+      // Burbuja del escritorio: sigue al escritorio aunque se mueva la cámara y se va
+      // en cuanto el mouse ya no está ni sobre el escritorio ni sobre la burbuja
+      const hd = hoverRef.current;
+      if (hd) {
+        const { w: hw } = objSize(hd.object);
+        const hp = worldToScreen(hd.object.x + hw / 2, hd.object.y - 0.45);
+        if (tipRef.current) { tipRef.current.style.left = `${hp.x}px`; tipRef.current.style.top = `${hp.y}px`; }
+        const hptr = input.current.pointer;
+        const hw2 = hptr && screenToWorld(hptr.x, hptr.y);
+        const still = hw2 && inRect(hd.zone, Math.floor(hw2.x), Math.floor(hw2.y));
+        if (em || (!still && !tipOver.current)) hideTipSoon();
+        else keepTip();
       }
 
       // Etiquetas (en coordenadas de pantalla para que el texto sea nítido)
@@ -600,6 +678,18 @@ export default function MapView({ active }) {
             ctx.fillText(t, tx + 5, y - 19.5);
             tx += ws[i] + 4;
           });
+          ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        }
+        // Nombre de la mascota, chiquito debajo de ella
+        const petName = u.avatar?.petName;
+        if (petName && u.avatar?.pet && u.avatar.pet !== 'none' && p.petX != null && v.zoom >= 0.9) {
+          ctx.font = '600 10px "Public Sans", system-ui, sans-serif';
+          const pp = worldToScreen(p.petX + 0.5, p.petY + 1.05);
+          const pw = ctx.measureText(petName).width + 10;
+          ctx.fillStyle = 'rgba(16,16,16,.6)';
+          ctx.beginPath(); ctx.roundRect(pp.x - pw / 2, pp.y - 7, pw, 14, 7); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText(petName, pp.x - pw / 2 + 5, pp.y + 0.5);
           ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         }
         // Estado personalizado (🍔 Comiendo, 🎧 Concentrado…) arriba del nombre
@@ -796,7 +886,7 @@ export default function MapView({ active }) {
     const d = deskAt(floor, Math.floor(w.x), Math.floor(w.y));
     const over = d && inRect({ ...d.zone, y: d.zone.y + 1, h: d.zone.h - 2 }, Math.floor(w.x), Math.floor(w.y)) ? d : null;
     if (over) {
-      clearTimeout(tipTimer.current);
+      keepTip();
       if (hoverRef.current?.id !== over.id) {
         // La burbuja va anclada encima del escritorio, no donde está el mouse
         const { w: ow } = objSize(over.object);
@@ -824,8 +914,8 @@ export default function MapView({ active }) {
       const o = drag.obj;
       if (stateRef.current.editMode === 'decor') {
         const d = editor.myDesk(floor, me.id);
-        if (d && o.deskId === d.id && !editor.insideZone({ ...o, x: drag.x, y: drag.y }, d.zone)) {
-          office.toast({ title: 'Solo puedes decorar dentro de tu escritorio', kind: 'error' });
+        if (d && o.deskId === d.id && !editor.insideZone({ ...o, x: drag.x, y: drag.y }, d.decorZone || d.zone)) {
+          office.toast({ title: 'La decoración va sobre tu escritorio', kind: 'error' });
           return;
         }
       }
@@ -868,7 +958,7 @@ export default function MapView({ active }) {
     try {
       await api.post(`/desks/${deskId}/claim`);
       office.toast({ title: 'Ahora este es tu escritorio. ¡Decóralo!' });
-      setHoverDesk(null);
+      hideTip();
     } catch (e) {
       office.toast({ title: e.message, kind: 'error' });
     }
@@ -882,10 +972,13 @@ export default function MapView({ active }) {
     <div className={`map-wrap ${myAway ? 'is-away' : ''}`} ref={wrapRef} style={{ display: active ? 'block' : 'none' }}>
       {myAway && (
         <div className="away-veil">
-          <div className="away-card">
-            <b>Estás ausente</b>
-            <span>Los demás te ven en gris. Vuelve cuando quieras.</span>
-            <button className="btn primary" onClick={() => office.setStatus('active')}>Volver a estar en línea</button>
+          <div className="away-bar">
+            <Avatar user={{ ...users[me.id], online: true }} size={38} />
+            <div className="away-who">
+              <b>{users[me.id]?.displayName}</b>
+              <span>Ausente</span>
+            </div>
+            <button className="btn primary" onClick={() => office.setStatus('active')}>Volver a la oficina</button>
           </div>
         </div>
       )}
@@ -905,21 +998,21 @@ export default function MapView({ active }) {
       <ScreenStage />
 
       {hoverDesk && !editMode && (
-        <div className="desk-tip" style={{ left: hoverDesk.x, top: hoverDesk.y }}
-          onMouseEnter={() => clearTimeout(tipTimer.current)} onMouseLeave={hideTipSoon}>
+        <div className="desk-tip" ref={tipRef} style={{ left: hoverDesk.x, top: hoverDesk.y }}
+          onMouseEnter={() => { tipOver.current = true; keepTip(); }} onMouseLeave={() => { tipOver.current = false; hideTipSoon(); }}>
           {hoverOwner ? <Avatar user={hoverOwner} size={28} /> : <span className="desk-tip-ico"><Armchair size={16} /></span>}
           <div className="desk-tip-text">
             <b>{isMyDesk ? 'Tu escritorio' : hoverOwner ? hoverOwner.displayName : 'Escritorio libre'}</b>
             <span>{hoverDesk.area || 'Oficina'}{hoverOwner && !isMyDesk ? ` · ${hoverOwner.online ? 'En línea' : 'Desconectado'}` : ''}</span>
           </div>
           {!hoverOwner && (
-            <button className="btn tiny primary" onClick={() => { claim(hoverDesk.desk.id); hoverRef.current = null; }}>Reclamar</button>
+            <button className="btn tiny primary" onClick={() => claim(hoverDesk.desk.id)}>Reclamar</button>
           )}
           {isMyDesk && (
-            <button className="btn tiny" onClick={() => office.set({ editMode: 'decor' })}><Brush size={12} /> Decorar</button>
+            <button className="btn tiny" onClick={() => { hideTip(); office.set({ editMode: 'decor' }); }}><Brush size={12} /> Decorar</button>
           )}
           {hoverOwner && !isMyDesk && hoverOwner.online && (
-            <button className="btn tiny" onClick={() => office.goTo(hoverOwner.id)}>Ir</button>
+            <button className="btn tiny" onClick={() => { hideTip(); office.goTo(hoverOwner.id); }}>Ir</button>
           )}
         </div>
       )}
@@ -972,7 +1065,7 @@ export default function MapView({ active }) {
         <button className="icon-btn" title="Ver todo el mapa" onClick={fitMap}><MapIcon size={18} /></button>
       </div>
 
-      <ControlBar />
+      {!myAway && <ControlBar />}
     </div>
   );
 }

@@ -129,6 +129,8 @@ describe('decoración del escritorio', () => {
     // moverla dentro del escritorio sí, fuera no
     assert.equal((await owner.patch(`/objects/${obj.id}`, { x: desk.object.x + 1 })).status, 200);
     assert.equal((await owner.patch(`/objects/${obj.id}`, { x: desk.zone.x + desk.zone.w + 3 })).status, 403);
+    // no donde va la silla
+    assert.equal((await owner.patch(`/objects/${obj.id}`, { y: desk.object.y + 1.6 })).status, 403);
     // y se puede borrar
     assert.equal((await owner.del(`/objects/${obj.id}`)).status, 200);
   });

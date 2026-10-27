@@ -3,6 +3,7 @@ import { Search, Map, MessageCircle, Calendar, Bell, Settings, MessageSquareHear
 import { office, useOffice } from '../lib/store.js';
 import { Kbd } from './ui.jsx';
 import { OfficeMark, Simbolo } from './brand.jsx';
+import { officeLogo } from '../lib/themes.js';
 
 export default function Rail() {
   const view = useOffice((s) => s.view);
@@ -27,7 +28,7 @@ export default function Rail() {
 
   useEffect(() => {
     const total = unreadChat + unreadNotif;
-    const name = config.theme === 'nuvora' && !config.logoUrl ? 'Nuvora' : config.officeName || 'Nuvora';
+    const name = config.officeName || 'Nuvora';
     const title = name === 'Nuvora' ? 'Nuvora — Oficina virtual' : `${name} — Oficina virtual by Nuvora`;
     document.title = total ? `(${total}) ${title}` : title;
   }, [unreadChat, unreadNotif, config.officeName, config.theme, config.logoUrl]);
@@ -52,7 +53,7 @@ export default function Rail() {
       {item('calendar', Calendar, 'Calendario')}
       {item('activity', Bell, 'Actividad', unreadNotif)}
       <div className="rail-spacer" />
-      {(config.logoUrl || config.theme === 'gtahub') && (
+      {officeLogo(config) && (
         <a className="rail-btn rail-by" href="https://nuvora.mx" target="_blank" rel="noreferrer noopener" title="Estamos construyendo cosas increíbles" aria-label="Nuvora: estamos construyendo cosas increíbles">
           <Simbolo size={20} variante={dark ? 'negativo' : 'positivo'} />
         </a>

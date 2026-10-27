@@ -27,23 +27,28 @@ export function applyBrand(config = {}) {
   if (meta) meta.content = theme === 'gtahub' ? '#101010' : '#0A2B2C';
 }
 
-// Logo de la oficina: el subido por el admin, el del tema GTAHUB o el símbolo de Nuvora.
+// Marca GTAHUB: con su tema o si la oficina se llama GTAHUB (Nuvora es solo la plataforma)
+export const GTAHUB_LOGO = '/themes/gtahub/logo.png';
+export const isGtahub = (config = {}) => config.theme === 'gtahub' || /gtahub/i.test(config.officeName || '');
+
+// Logo de la oficina: el subido por el admin, el de GTAHUB o el símbolo de Nuvora.
 export function officeLogo(config = {}) {
   if (config.logoUrl) return config.logoUrl;
-  if (config.theme === 'gtahub') return '/themes/gtahub.svg';
+  if (isGtahub(config)) return GTAHUB_LOGO;
   return null;
 }
 
 // Colores de marca para el mapa (banderines, estandartes, neón, muros)
 export function mapBrand(config = {}) {
   const name = (config.officeName || 'Nuvora').toUpperCase();
+  const logo = officeLogo(config);
   if (config.theme === 'gtahub') {
-    return { name, primary: '#FE3377', secondary: '#FFCC00', dark: '#101010', light: '#ffffff',
+    return { name, logo, primary: '#FE3377', secondary: '#FFCC00', dark: '#101010', light: '#ffffff',
       walls: { face: '#2a2a30', cap: '#16161a', top: '#3a3a42', base: '#1c1c21', stripe: '#FE3377' } };
   }
   if (config.theme === 'custom' && config.accent) {
-    return { name, primary: config.accent, secondary: '#ffd23f', dark: '#1d1d22', light: '#ffffff', walls: null };
+    return { name, logo, primary: config.accent, secondary: '#ffd23f', dark: '#1d1d22', light: '#ffffff', walls: null };
   }
-  return { name, primary: '#157A6E', secondary: '#FF8A3D', dark: '#0A2B2C', light: '#F3F4EE',
+  return { name, logo, primary: '#157A6E', secondary: '#FF8A3D', dark: '#0A2B2C', light: '#F3F4EE',
     walls: { face: '#566b6a', cap: '#0A2B2C', top: '#6f8584', base: '#3f5150', stripe: '#FF8A3D' } };
 }

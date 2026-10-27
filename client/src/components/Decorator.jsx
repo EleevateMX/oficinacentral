@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Undo2, Redo2, Search, Plus, Trash2, Lock, Square, Pencil, MousePointer2, Crown, Eye } from 'lucide-react';
+import { X, Undo2, Redo2, Search, Plus, Trash2, Lock, Square, Pencil, MousePointer2, Crown, Eye, RotateCw, RotateCcw } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { CATALOG, CATEGORIES, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES, COLORS } from '@shared/catalog.js';
 import { AREA_COLORS, AREA_SHAPES, TEMPLATES } from '@shared/map.js';
@@ -367,11 +367,20 @@ function FloorsTab({ floor }) {
 }
 
 // Mi lugar: modelo y color del escritorio y de la silla propios
-function ModelPicker({ title, types, obj }) {
+function ModelPicker({ title, types, obj, rotate }) {
   if (!obj) return null;
+  const turn = (k) => editor.updateObject(obj, { rot: ((obj.rot || 0) + k + 4) % 4 }).catch(() => {});
   return (
     <div className="area-form">
-      <div className="area-form-title">{title}</div>
+      <div className="area-form-title row between">
+        <span>{title}</span>
+        {rotate && (
+          <span className="row gap4">
+            <button className="btn tiny" onClick={() => turn(-1)} title="Girar a la izquierda"><RotateCcw size={13} /></button>
+            <button className="btn tiny" onClick={() => turn(1)} title="Girar a la derecha"><RotateCw size={13} /> Girar</button>
+          </span>
+        )}
+      </div>
       <div className="model-grid">
         {types.map((t) => (
           <button key={t} className={`dec-item ${obj.type === t ? 'on' : ''}`} onClick={() => obj.type !== t && editor.updateObject(obj, { type: t }).catch(() => {})} title={CATALOG[t].name}>
@@ -400,7 +409,8 @@ function MyPlace({ floor, desk }) {
     <div className="dec-scroll">
       <p className="muted small">Así se ve tu lugar para todos. La decoración la colocas desde la pestaña Objetos.</p>
       <ModelPicker title="Escritorio" types={DESK_TYPES} obj={deskObj} />
-      <ModelPicker title="Silla" types={CHAIR_TYPES} obj={chair} />
+      <ModelPicker title="Silla" types={CHAIR_TYPES} obj={chair} rotate />
+      <p className="muted small">Tip: también puedes arrastrar la silla dentro de tu lugar y girarla con <b>R</b>.</p>
     </div>
   );
 }

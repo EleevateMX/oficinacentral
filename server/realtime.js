@@ -124,6 +124,16 @@ export function initRealtime(httpServer) {
     // Pestaña oculta o visible: si todas están ocultas, los avisos llegan por push (server/push.js)
     socket.on('visibility', (v) => { socket.data.hidden = !!v?.hidden; });
 
+    // Efecto de "regresar a mi escritorio": se reenvía a los demás para que lo vean
+    let lastFx = 0;
+    socket.on('fx', (m) => {
+      const t = Date.now();
+      if (t - lastFx < 1500 || !['zap', 'alien', 'portal', 'rocket'].includes(m?.kind)) return;
+      lastFx = t;
+      const pt = (q) => ({ x: Math.trunc(Number(q?.x) || 0), y: Math.trunc(Number(q?.y) || 0) });
+      socket.broadcast.emit('fx', { id: userId, kind: m.kind, from: pt(m.from), to: pt(m.to) });
+    });
+
     socket.on('react', (r) => {
       const emoji = typeof r?.emoji === 'string' ? r.emoji.slice(0, 8) : null;
       if (emoji) io.emit('react', { id: userId, emoji });

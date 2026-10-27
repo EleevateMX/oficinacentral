@@ -5,6 +5,8 @@ import { MediaManager } from './media.js';
 import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable } from '@shared/map.js';
 import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
+import { FX, pickFx } from './fx.js';
+import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -37,6 +39,7 @@ class Office {
     this.state = this.initial();
     this.players = {}; // posiciones en vivo (no dispara renders)
     this.reactions = {}; // id -> { emoji, until }
+    this.fx = {}; // id -> efecto de Ctrl+D en curso
     this.floorCache = new Map();
   }
 
@@ -220,6 +223,9 @@ class Office {
       if (m.tp || floorChanged) { p.rx = m.x; p.ry = m.y; }
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
+    s.on('fx', ({ id, kind, from, to }) => {
+      if (FX[kind]) this.fx[id] = { kind, from, to, start: performance.now(), dur: FX[kind].dur };
+    });
     s.on('react', ({ id, emoji }) => {
       this.reactions[id] = { emoji, until: performance.now() + 3500 };
     });
@@ -312,6 +318,34 @@ class Office {
     const pos = target || f.spawn;
     const dest = nearestWalkable(f, pos.x, pos.y);
     this.moveMe(dest.x, dest.y, 'down', { tp: true, floorId });
+    this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
+  }
+
+  // Ctrl+D: regresar a tu escritorio (rápido, y a veces con un efecto especial)
+  goHome() {
+    const f = this.state.floor;
+    const me = this.myPlayer;
+    if (!f || !me) return;
+    const myId = this.state.me.id;
+    const deskId = Object.entries(f.claims).find(([, uid]) => uid === myId)?.[0];
+    const desk = deskId && f.desks.find((d) => d.id === Number(deskId));
+    if (!desk) {
+      this.toast({ title: 'Aún no tienes escritorio en este piso. Pasa el mouse sobre uno libre y dale "Reclamar".' });
+      return;
+    }
+    const cur = this.fx[myId];
+    if (cur && performance.now() - cur.start < cur.dur) return;
+    const z = desk.zone;
+    const chair = f.objects.find((o) => CHAIR_TYPES.includes(o.type) && o.deskId == null && o.x >= z.x && o.y >= z.y && o.x < z.x + z.w && o.y < z.y + z.h);
+    const { w, h } = objSize(desk.object);
+    const want = chair ? { x: chair.x, y: chair.y } : { x: desk.object.x + Math.floor(w / 2), y: desk.object.y + h };
+    const to = nearestWalkable(f, want.x, want.y);
+    if (to.x === me.x && to.y === me.y) { this.toast({ title: 'Ya estás en tu escritorio 🪑' }); return; }
+    const kind = pickFx();
+    const from = { x: me.x, y: me.y };
+    this.fx[myId] = { kind, from, to, start: performance.now(), dur: FX[kind].dur };
+    this.socket.emit('fx', { kind, from, to });
+    this.moveMe(to.x, to.y, 'up', { tp: true });
     this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
   }
 

@@ -1,6 +1,6 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx, getSetting, setSetting } from './db.js';
-import { composeFloor, getTemplate, TEMPLATES, inRect } from '../shared/map.js';
+import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS } from '../shared/map.js';
 import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 import { AREA_SHAPES } from '../shared/map.js';
 
@@ -85,13 +85,26 @@ export function furnishDesks(floorId) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Piso 1', 'hq'); setSetting('migr_cubicles_v1', '1'); return; }
+  if (!rows.length) { createFloor('Piso 1', 'hq'); setSetting('migr_cubicles_v1', '1'); setSetting('migr_reception_v1', '1'); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
     setSetting('migr_cubicles_v1', '1');
   }
+  // Una vez: recepción renovada en oficinas ya creadas (si no hay nada en ese lugar)
+  if (!getSetting('migr_reception_v1')) {
+    for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) addReceptionExtras(r.id);
+    setSetting('migr_reception_v1', '1');
+  }
   for (const r of rows) rebuild(r.id);
+}
+
+function addReceptionExtras(floorId) {
+  const exists = db.prepare('SELECT 1 FROM objects WHERE floor_id = ? AND type = ? AND ABS(x - ?) < 0.01 AND ABS(y - ?) < 0.01');
+  const ins = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  for (const [type, x, y, o] of RECEPTION_EXTRAS) {
+    if (!exists.get(floorId, type, x, y)) ins.run(floorId, type, x, y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, now());
+  }
 }
 
 export function getFloor(id) {
@@ -233,7 +246,7 @@ function myDeskZone(user, f) {
   const mine = deskOf(user.id);
   if (!mine || mine.floorId !== f.id) return null;
   const d = f.state.desks.find((x) => x.id === mine.deskId);
-  return d ? { desk: d, zone: d.zone } : null;
+  return d ? { desk: d, zone: d.zone, decorZone: d.decorZone } : null;
 }
 
 // ---------- Departamentos: líderes y decoración abierta ----------
@@ -276,8 +289,10 @@ export function addObject(user, floorId, input) {
   if (user.role !== 'admin') {
     const box = bbox(o);
     const mine = myDeskZone(user, f);
-    if (c.kind === 'decor' && mine && rectInside(box, mine.zone)) {
+    if (c.kind === 'decor' && mine && rectInside(box, mine.decorZone)) {
       deskId = mine.desk.id;
+    } else if (c.kind === 'decor' && mine && rectInside(box, mine.zone)) {
+      throw new WorldError('La decoración va sobre tu escritorio, no donde está la silla', 403);
     } else {
       const area = areaFor(user, f, box);
       if (!area) {
@@ -290,7 +305,7 @@ export function addObject(user, floorId, input) {
       if (countAreaObjects(f, area) >= AREA_DECOR_LIMIT) throw new WorldError('El departamento llegó a su límite de objetos');
     }
   } else if (c.kind === 'decor') {
-    const d = f.state.desks.find((x) => rectInside(bbox(o), x.zone));
+    const d = f.state.desks.find((x) => rectInside(bbox(o), x.decorZone));
     deskId = d?.id ?? null;
   }
   if (deskId != null) {
@@ -346,14 +361,16 @@ export function updateObject(user, id, patch) {
   const o = normalize(patch, existing);
   const c = CATALOG[o.type];
   let deskId = row.desk_id;
-  if (role === 'decor' || role === 'chair') {
-    if (!rectInside(bbox(o), myDeskZone(user, f).zone)) throw new WorldError('Solo puedes decorar dentro de tu escritorio', 403);
+  if (role === 'decor') {
+    if (!rectInside(bbox(o), myDeskZone(user, f).decorZone)) throw new WorldError('La decoración va sobre tu escritorio', 403);
+  } else if (role === 'chair') {
+    if (!rectInside(bbox(o), myDeskZone(user, f).zone)) throw new WorldError('La silla se queda en tu lugar', 403);
   } else if (role === 'leader' || role === 'member') {
     const box = bbox(o);
     if (!areaFor(user, f, box, { leaderOnly: role === 'leader' })) throw new WorldError('Solo puedes mover cosas dentro de tu departamento', 403);
     if (othersDeskZone(user, f, box)) throw new WorldError('Ese lugar es el escritorio de otra persona', 403);
   } else if (role === 'admin' && c.kind === 'decor') {
-    deskId = f.state.desks.find((x) => rectInside(bbox(o), x.zone))?.id ?? null;
+    deskId = f.state.desks.find((x) => rectInside(bbox(o), x.decorZone))?.id ?? null;
   }
   validatePlacement(f, o, row.id);
   const dx = o.x - row.x;
