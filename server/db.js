@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
+export const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(path.join(DATA_DIR, 'office.db'));
@@ -164,10 +164,54 @@ function addColumn(table, col, def) {
 }
 addColumn('areas', 'shape', "TEXT NOT NULL DEFAULT 'soft'");
 addColumn('users', 'shift', 'TEXT');
+addColumn('messages', 'attachments', 'TEXT');
+addColumn('users', 'discord_id', 'TEXT');
+addColumn('users', 'discord_name', 'TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord ON users(discord_id) WHERE discord_id IS NOT NULL');
+addColumn('users', 'totp_secret', 'TEXT');
+addColumn('users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('users', 'totp_last', 'INTEGER NOT NULL DEFAULT -1');
+addColumn('users', 'totp_recovery', 'TEXT');
 addColumn('users', 'shift_at', 'INTEGER');
 addColumn('events', 'area_id', 'INTEGER');
 addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(`
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL DEFAULT 'idea',
+  text TEXT NOT NULL,
+  file_id TEXT,
+  meta TEXT,
+  status TEXT NOT NULL DEFAULT 'nuevo',
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS files (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  width INTEGER,
+  height INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS message_reactions (
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL,
+  PRIMARY KEY (message_id, user_id, emoji)
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  data TEXT,
+  ip TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE TABLE IF NOT EXISTS boards (
   object_id INTEGER PRIMARY KEY REFERENCES objects(id) ON DELETE CASCADE,
   strokes TEXT NOT NULL DEFAULT '[]',

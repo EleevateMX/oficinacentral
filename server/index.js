@@ -8,6 +8,10 @@ import { loadWorld } from './world.js';
 import { api } from './api.js';
 import { initRealtime } from './realtime.js';
 import { scheduleBackups } from './backup.js';
+import { alert, watchProcess } from './alerts.js';
+import { startPushScheduler } from './push.js';
+
+watchProcess();
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -40,21 +44,42 @@ app.use('/api', api);
 
 const dist = path.resolve('dist');
 if (fs.existsSync(dist)) {
-  app.use(express.static(dist, { index: false, maxAge: '1h' }));
+  app.use(express.static(dist, {
+    index: false,
+    maxAge: '1h',
+    setHeaders(res, file) {
+      const name = path.basename(file);
+      // El service worker, el manifiesto y la página siempre se revisan (si no, las actualizaciones tardan en llegar)
+      if (name === 'sw.js' || name === 'manifest.webmanifest' || name === 'index.html') {
+        res.setHeader('Cache-Control', 'no-cache');
+        if (name === 'sw.js') res.setHeader('Service-Worker-Allowed', '/');
+        if (name === 'manifest.webmanifest') res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+      } else if (file.includes(`${path.sep}assets${path.sep}`)) {
+        // Archivos con hash de Vite: no cambian nunca
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
   app.get(/^(?!\/api|\/socket\.io).*/, (req, res) => res.sendFile('index.html', { root: dist }));
 }
 
 const server = http.createServer(app);
 initRealtime(server);
 scheduleBackups();
+startPushScheduler();
 
 // Cierre ordenado (docker stop)
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     server.close();
     try { db.close(); } catch { /* ya cerrada */ }
-    process.exit(0);
+    alert('La oficina se está apagando', `Señal ${sig} (actualización o reinicio)`, { level: 'warn', key: 'shutdown' })
+      .finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
   });
 }
 
-server.listen(PORT, () => console.log(`Oficina lista en http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Oficina lista en http://localhost:${PORT}`);
+  alert('La oficina está en línea', `Puerto ${PORT} · Node ${process.version}`, { level: 'info', key: 'startup' });
+});

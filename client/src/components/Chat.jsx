@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Hash, ChevronDown, SquarePen, Hand, Navigation, Send, Bold, Italic, Code, Link2, Smile, AtSign, Plus, ChevronLeft } from 'lucide-react';
+import { Hash, ChevronDown, SquarePen, Hand, Navigation, Send, Bold, Italic, Code, Link2, Smile, AtSign, Plus, ChevronLeft, SmilePlus, Paperclip, FileText, Download } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar, Empty } from './ui.jsx';
@@ -137,7 +137,8 @@ export function ChatView() {
     const off = office.on('message', (m) => {
       if (m.convKey === conv) setMessages((list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
     });
-    return () => { alive = false; off(); };
+    const offR = office.on('reaction', (r) => setMessages((list) => list.map((x) => (x.id === r.id ? { ...x, reactions: r.reactions } : x))));
+    return () => { alive = false; off(); offR(); };
   }, [conv]);
 
   useLayoutEffect(() => {
@@ -209,9 +210,14 @@ export function ChatView() {
                       {m.userId === me.id ? <>Saludaste a <b>{other?.displayName}</b> 👋</> : <><b>{u?.displayName}</b> te saludó 👋</>}
                     </div>
                   ) : (
-                    <div className="msg-body"><Body text={m.body} users={users} meUsername={me.username} /></div>
+                    <>
+                      {m.body && <div className="msg-body"><Body text={m.body} users={users} meUsername={me.username} /></div>}
+                      {m.attachments?.length > 0 && <Attachments files={m.attachments} />}
+                    </>
                   )}
+                  {m.reactions?.length > 0 && <Reactions m={m} me={me} users={users} />}
                 </div>
+                {m.kind !== 'wave' && <ReactButton m={m} />}
               </div>
             </React.Fragment>
           );
@@ -225,8 +231,98 @@ export function ChatView() {
 
 const DRAFTS = new Map();
 
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '✅', '🙏'];
+
+function ReactButton({ m }) {
+  const [open, setOpen] = useState(false);
+  const react = (emoji) => { setOpen(false); api.post(`/messages/${m.id}/react`, { emoji }).catch((e) => office.toast({ title: e.message, kind: 'error' })); };
+  return (
+    <div className="msg-actions">
+      <button className="icon-btn" title="Reaccionar" onClick={() => setOpen(!open)}><SmilePlus size={16} /></button>
+      {open && (
+        <div className="popover down right emoji-pop" onMouseLeave={() => setOpen(false)}>
+          {QUICK_REACTIONS.map((x) => <button key={x} onClick={() => react(x)}>{x}</button>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Reactions({ m, me, users }) {
+  return (
+    <div className="reactions">
+      {m.reactions.map((r) => (
+        <button key={r.emoji} className={`reaction ${r.users.includes(me.id) ? 'mine' : ''}`} title={r.users.map((id) => users[id]?.displayName).join(', ')}
+          onClick={() => api.post(`/messages/${m.id}/react`, { emoji: r.emoji }).catch(() => {})}>
+          {r.emoji} <span>{r.users.length}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const fmtSize = (b) => (b < 1024 ? `${b} B` : b < 1048576 ? `${Math.round(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`);
+
+function Attachments({ files }) {
+  return (
+    <div className="attachments">
+      {files.map((f) => {
+        if (f.mime.startsWith('image/')) {
+          const k = f.width && f.height ? Math.min(1, 360 / f.width, 280 / f.height) : null;
+          return (
+            <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="att-img">
+              <img src={f.url} alt={f.name} loading="lazy" width={k ? Math.round(f.width * k) : undefined} height={k ? Math.round(f.height * k) : undefined} />
+            </a>
+          );
+        }
+        if (/^video\/(mp4|webm)$/.test(f.mime)) return <video key={f.id} className="att-video" src={f.url} controls preload="metadata" />;
+        if (/^audio\//.test(f.mime)) return <audio key={f.id} src={f.url} controls preload="none" />;
+        return (
+          <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="att-file" download={f.mime === 'application/pdf' ? undefined : f.name}>
+            <FileText size={22} /><span><b>{f.name}</b><small>{fmtSize(f.size)}</small></span><Download size={16} />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+// Sube un archivo y devuelve su ficha (con tamaño si es imagen)
+async function uploadFile(file) {
+  let dims = {};
+  if (file.type.startsWith('image/')) {
+    dims = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => { resolve({ 'X-Width': img.naturalWidth, 'X-Height': img.naturalHeight }); URL.revokeObjectURL(img.src); };
+      img.onerror = () => resolve({});
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const type = !file.type || file.type === 'application/json' ? 'application/octet-stream' : file.type;
+  const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(file.name || 'archivo'), ...dims }, body: file });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(res.status === 413 ? 'El archivo es demasiado grande (máx. 25 MB)' : data.error || 'No se pudo subir');
+  return data.file;
+}
+
 function Composer({ conv, placeholder, users }) {
   const [text, setText] = useState(DRAFTS.get(conv) || '');
+  const [files, setFiles] = useState([]); // { key, name, file?, uploading, error }
+  const fileRef = useRef(null);
+  const [drag, setDrag] = useState(false);
+
+  const addFiles = (list) => {
+    for (const f of [...list].slice(0, 10)) {
+      const key = `${Date.now()}-${Math.random()}`;
+      setFiles((fs) => [...fs, { key, name: f.name || 'imagen.png', uploading: true, preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : null }]);
+      uploadFile(f).then((file) => setFiles((fs) => fs.map((x) => (x.key === key ? { ...x, uploading: false, file } : x))))
+        .catch((e) => { office.toast({ title: e.message, kind: 'error' }); setFiles((fs) => fs.filter((x) => x.key !== key)); });
+    }
+  };
+  const onPaste = (e) => {
+    const list = [...(e.clipboardData?.files || [])];
+    if (list.length) { e.preventDefault(); addFiles(list); }
+  };
   const [mention, setMention] = useState(null);
   const [emoji, setEmoji] = useState(false);
   const ref = useRef(null);
@@ -238,14 +334,19 @@ function Composer({ conv, placeholder, users }) {
     if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(200, el.scrollHeight)}px`; }
   }, [text]);
 
+  const ready = files.filter((f) => f.file);
+  const uploading = files.some((f) => f.uploading);
   const send = async () => {
     const body = text.trim();
-    if (!body) return;
+    if ((!body && !ready.length) || uploading) return;
+    const sent = files;
     setText('');
+    setFiles([]);
     try {
-      await api.post('/messages', { conv, body });
+      await api.post('/messages', { conv, body, files: ready.map((f) => f.file.id) });
     } catch (e) {
       setText(body);
+      setFiles(sent);
       office.toast({ title: e.message, kind: 'error' });
     }
   };
@@ -291,7 +392,21 @@ function Composer({ conv, placeholder, users }) {
   };
 
   return (
-    <div className="composer">
+    <div className={`composer ${drag ? 'dragging' : ''}`}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); addFiles(e.dataTransfer.files); }}>
+      {files.length > 0 && (
+        <div className="pending-files">
+          {files.map((f) => (
+            <div key={f.key} className={`pending-file ${f.uploading ? 'uploading' : ''}`}>
+              {f.preview ? <img src={f.preview} alt="" /> : <FileText size={18} />}
+              <span className="ellipsis">{f.uploading ? 'Subiendo…' : f.name}</span>
+              <button onClick={() => setFiles((fs) => fs.filter((x) => x.key !== f.key))} aria-label="Quitar">×</button>
+            </div>
+          ))}
+        </div>
+      )}
       {candidates.length > 0 && (
         <div className="mention-pop">
           {candidates.map((u) => (
@@ -301,8 +416,10 @@ function Composer({ conv, placeholder, users }) {
           ))}
         </div>
       )}
-      <textarea ref={ref} rows={1} value={text} placeholder={placeholder} onChange={onChange} onKeyDown={onKey} />
+      <textarea ref={ref} rows={1} value={text} placeholder={placeholder} onChange={onChange} onKeyDown={onKey} onPaste={onPaste} />
       <div className="composer-tools">
+        <button className="icon-btn" title="Adjuntar imagen o archivo (también puedes pegar o arrastrar)" onClick={() => fileRef.current.click()}><Paperclip size={16} /></button>
+        <input ref={fileRef} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <button className="icon-btn" title="Mencionar" onClick={() => { setText(text + '@'); setMention(''); ref.current.focus(); }}><AtSign size={16} /></button>
         <div className="cb-group">
           <button className="icon-btn" title="Emoji" onClick={() => setEmoji(!emoji)}><Smile size={16} /></button>
@@ -320,7 +437,7 @@ function Composer({ conv, placeholder, users }) {
         <button className="icon-btn" title="Código" onClick={() => wrap('`')}><Code size={16} /></button>
         <button className="icon-btn" title="Enlace" onClick={() => wrap('https://', '')}><Link2 size={16} /></button>
         <div className="flex1" />
-        <button className="send-btn" disabled={!text.trim()} onClick={send} title="Enviar (Enter)"><Send size={16} /></button>
+        <button className="send-btn" disabled={(!text.trim() && !ready.length) || uploading} onClick={send} title="Enviar (Enter)"><Send size={16} /></button>
       </div>
     </div>
   );

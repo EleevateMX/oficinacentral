@@ -1,8 +1,10 @@
 import Whiteboard from './Whiteboard.jsx';
 import Notices from './Notices.jsx';
+import Feedback from './Feedback.jsx';
 import React, { useEffect, useState } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
+import { returnInfo, discordMessage } from '../App.jsx';
 import { Boot } from './brand.jsx';
 import PeoplePanel from './PeoplePanel.jsx';
 import MapView from './MapView.jsx';
@@ -15,6 +17,7 @@ import EditProfile from './EditProfile.jsx';
 import Preferences from './settings/Preferences.jsx';
 import Toasts from './Toasts.jsx';
 import SearchPalette from './SearchPalette.jsx';
+import { handleLaunchUrl, syncPush } from '../lib/push.js';
 
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
@@ -27,7 +30,11 @@ export default function Shell({ session, onLogout }) {
   const mobile = useIsMobile();
 
   useEffect(() => {
-    office.start(session.user, session.prefs).catch((e) => console.error(e));
+    office.start(session.user, session.prefs).then(() => {
+      handleLaunchUrl();
+      syncPush();
+      if (['linked', 'welcome'].includes(returnInfo.discord)) office.toast({ title: discordMessage });
+    }).catch((e) => console.error(e));
     const out = () => onLogout();
     window.addEventListener('office:logout', out);
     return () => {
@@ -65,6 +72,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'event' && <EventModal event={modal.event} />}
       {modal?.type === 'board' && <Whiteboard objectId={modal.objectId} />}
       {modal?.type === 'notices' && <Notices />}
+      {modal?.type === 'feedback' && <Feedback />}
       <Toasts />
     </div>
   );

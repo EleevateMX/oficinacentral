@@ -4,9 +4,10 @@
 // suscribe cada persona: voz y cámara de quien está en tu sala, y solo las
 // pantallas que eligiste ver.
 import {
-  Room, RoomEvent, Track, VideoPreset, LocalAudioTrack, LocalVideoTrack, createLocalAudioTrack, createLocalVideoTrack,
+  Room, RoomEvent, Track, VideoPreset, LocalAudioTrack, LocalVideoTrack, createLocalVideoTrack,
 } from 'livekit-client';
 import { SCREEN_PRESETS } from './media.js';
+import { openMic } from './noise.js';
 
 const MIC = Track.Source.Microphone;
 const CAM = Track.Source.Camera;
@@ -30,9 +31,10 @@ export class LiveKitManager extends EventTarget {
     this.streamVolumes = new Map();
     this.audioEls = new Map(); // `${id}:${source}` -> <audio>
     this.settings = {
-      noiseSuppression: true, echoCancellation: true, autoGainControl: true, hd: false, micId: '', camId: '', speakerId: '',
+      noiseSuppression: true, echoCancellation: true, autoGainControl: true, aiNoise: 'rnnoise', hd: false, micId: '', camId: '', speakerId: '',
       screenQuality: 'balanced', screenAudio: true, screenVolume: 1,
     };
+    this.mic = null; // { track, raw, ai, stop } (ver noise.js)
     this.room = new Room({ adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true });
     const refresh = () => { this.applySubscriptions(); this.emitPeers(); };
     for (const ev of [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.TrackPublished, RoomEvent.TrackUnpublished]) this.room.on(ev, refresh);
@@ -60,7 +62,7 @@ export class LiveKitManager extends EventTarget {
   }
 
   get state() {
-    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack, viewers: [...this.watchers] };
+    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack, aiNoise: !!this.mic?.ai, viewers: [...this.watchers] };
   }
 
   updateSettings(s) {
@@ -92,17 +94,26 @@ export class LiveKitManager extends EventTarget {
 
   async setMic(on) {
     if (on && !this.audioTrack) {
-      this.audioTrack = await createLocalAudioTrack({
-        noiseSuppression: this.settings.noiseSuppression,
-        echoCancellation: this.settings.echoCancellation,
-        autoGainControl: this.settings.autoGainControl,
-        ...(this.settings.micId ? { deviceId: { exact: this.settings.micId } } : {}),
-      });
-      await this.publish(this.audioTrack, { source: MIC, dtx: true, red: true });
+      // Pista propia (posiblemente ya procesada con RNNoise); LiveKit solo la publica
+      const mic = await openMic(this.settings);
+      if (this.audioTrack) { mic.stop(); return; }
+      this.mic = mic;
+      this.audioTrack = new LocalAudioTrack(mic.track, { deviceId: this.settings.micId || undefined }, true);
+      try {
+        await this.publish(this.audioTrack, { source: MIC, dtx: true, red: true });
+      } catch (e) {
+        this.audioTrack = null;
+        this.mic = null;
+        mic.stop();
+        throw e;
+      }
     } else if (!on && this.audioTrack) {
       const t = this.audioTrack;
+      const mic = this.mic;
       this.audioTrack = null;
+      this.mic = null;
       await this.unpublish(t);
+      mic?.stop();
     }
     this.rebuildLocal();
     this.emit('local', this.state);
@@ -257,6 +268,7 @@ export class LiveKitManager extends EventTarget {
 
   destroy() {
     for (const t of [this.audioTrack, this.videoTrack, this.screenTrack, this.screenAudioTrack]) t?.stop();
+    this.mic?.stop();
     for (const el of this.audioEls.values()) el.srcObject = null;
     this.room.disconnect();
   }

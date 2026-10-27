@@ -2,8 +2,9 @@ import { Server } from 'socket.io';
 import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId } from './world.js';
-import { isWalkable, nearestWalkable } from '../shared/map.js';
+import { isWalkable, nearestWalkable, canTalk } from '../shared/map.js';
 import { initBoards } from './boards.js';
+import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -18,7 +19,7 @@ export function getIO() {
 export function publicPresence(userId) {
   const p = presence.get(userId);
   if (!p) return { online: false };
-  return { online: true, floorId: p.floorId, x: p.x, y: p.y, dir: p.dir, status: p.status, mic: p.mic, cam: p.cam, screen: p.screen, watching: p.watching };
+  return { online: true, floorId: p.floorId, x: p.x, y: p.y, dir: p.dir, status: p.status, mic: p.mic, cam: p.cam, screen: p.screen, watching: p.watching, recording: !!p.recording };
 }
 
 export function emitToUser(userId, event, payload) {
@@ -78,10 +79,11 @@ export function initRealtime(httpServer) {
 
     let p = presence.get(userId);
     if (!p) {
-      p = { sockets: new Set(), ...spawnFor(user), dir: 'down', status: 'active', mic: false, cam: false, screen: false, watching: [], connectedAt: now() };
+      p = { sockets: new Set(), ...spawnFor(user), dir: 'down', status: 'active', mic: false, cam: false, screen: false, recording: false, watching: [], connectedAt: now() };
       presence.set(userId, p);
     }
     p.sockets.add(socket);
+    if (p.sockets.size === 1) shiftOnConnect(user);
     db.prepare('UPDATE users SET last_active = ? WHERE id = ?').run(now(), userId);
 
     const all = {};
@@ -112,11 +114,14 @@ export function initRealtime(httpServer) {
     socket.on('state', (s) => {
       if (!s || typeof s !== 'object') return;
       if (STATUSES.has(s.status)) p.status = s.status;
-      for (const k of ['mic', 'cam', 'screen']) if (typeof s[k] === 'boolean') p[k] = s[k];
+      for (const k of ['mic', 'cam', 'screen', 'recording']) if (typeof s[k] === 'boolean') p[k] = s[k];
       // Pantallas que esta persona está viendo (para que solo se le envíen esas)
       if (Array.isArray(s.watching)) p.watching = [...new Set(s.watching.map(Number).filter((id) => Number.isInteger(id) && id !== userId))].slice(0, 4);
       io.emit('player', { id: userId, ...publicPresence(userId) });
     });
+
+    // Pestaña oculta o visible: si todas están ocultas, los avisos llegan por push (server/push.js)
+    socket.on('visibility', (v) => { socket.data.hidden = !!v?.hidden; });
 
     socket.on('react', (r) => {
       const emoji = typeof r?.emoji === 'string' ? r.emoji.slice(0, 8) : null;
@@ -124,6 +129,23 @@ export function initRealtime(httpServer) {
     });
 
     initBoards(io, socket, userId);
+
+    // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
+    let roomMsgTimes = [];
+    socket.on('room-msg', (m) => {
+      const text = String(m?.text || '').trim().slice(0, 500);
+      if (!text) return;
+      const t = Date.now();
+      roomMsgTimes = roomMsgTimes.filter((x) => t - x < 10e3);
+      if (roomMsgTimes.length >= 8) return;
+      roomMsgTimes.push(t);
+      const f = getFloor(p.floorId)?.state;
+      if (!f) return;
+      const to = [userId];
+      for (const [id, q] of presence) if (id !== userId && canTalk(f, { ...p, floorId: p.floorId }, q)) to.push(id);
+      const msg = { from: userId, text, at: t, id: `${userId}-${t}`, to: to.length - 1 };
+      for (const id of to) io.to(`user:${id}`).emit('room-msg', msg);
+    });
 
     // Anotaciones sobre una pantalla compartida: se reenvían a quienes la ven
     socket.on('annot:join', (sharer) => socket.join(`annot:${Number(sharer)}`));
@@ -136,6 +158,20 @@ export function initRealtime(httpServer) {
       socket.to(`annot:${sharer}`).emit('annot', { sharer, from: userId, c: color, p: pts, id: String(m.id || '').slice(0, 20) });
     });
 
+    // Clip guardado: se avisa solo a quien transmite (y solo si de verdad lo estás viendo)
+    let clipTimes = [];
+    socket.on('clip', (m) => {
+      const sharer = Number(m?.sharer);
+      if (!Number.isInteger(sharer) || sharer === userId) return;
+      const target = presence.get(sharer);
+      if (!target?.screen || !p.watching.includes(sharer)) return;
+      const t = Date.now();
+      clipTimes = clipTimes.filter((x) => t - x < 60e3);
+      if (clipTimes.length >= 6) return; // máximo 6 avisos por minuto
+      clipTimes.push(t);
+      emitToUser(sharer, 'clip', { from: userId });
+    });
+
     // Señalización WebRTC: solo se reenvía a usuarios conectados
     socket.on('rtc', (msg) => {
       const to = Number(msg?.to);
@@ -146,6 +182,7 @@ export function initRealtime(httpServer) {
     socket.on('disconnect', () => {
       p.sockets.delete(socket);
       if (p.sockets.size === 0) {
+        closeShift(userId);
         savePosition(userId);
         presence.delete(userId);
         io.emit('player', { id: userId, online: false });

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'">
+  <title>Compartir pantalla</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="picker">
+    <header>
+      <h1>¿Qué quieres compartir?</h1>
+      <div class="tabs" role="tablist">
+        <button id="tabScreen" role="tab" aria-selected="true" type="button">Pantallas</button>
+        <button id="tabWindow" role="tab" aria-selected="false" type="button">Ventanas</button>
+      </div>
+      <div id="permission" class="warn" hidden>macOS no ha dado permiso para grabar la pantalla. Actívalo en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y audio del sistema, y vuelve a abrir Nuvora.</div>
+    </header>
+    <div id="grid" class="grid" role="listbox" aria-label="Fuentes"></div>
+    <footer>
+      <label class="check" id="audioRow"><input id="audio" type="checkbox" checked> <span>Compartir el audio de la PC</span></label>
+      <span id="audioNote" class="note"></span>
+      <span class="spacer"></span>
+      <button id="cancel" type="button">Cancelar</button>
+      <button id="share" class="primary" type="button" disabled>Compartir</button>
+    </footer>
+  </div>
+  <script src="picker.js"></script>
+</body>
+</html>

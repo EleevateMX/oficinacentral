@@ -12,6 +12,7 @@ import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
 import VideoStrip from './VideoStrip.jsx';
 import { ScreenStage } from './Streams.jsx';
+import RoomChat from './RoomChat.jsx';
 import Decorator from './Decorator.jsx';
 
 const T = TILE;
@@ -549,14 +550,38 @@ export default function MapView({ active }) {
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
-        // Etiqueta EN VIVO de quien transmite su pantalla
-        if (p.screen) {
+        // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
+        const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946']].filter(Boolean);
+        if (tags.length) {
           ctx.font = '800 9px "Public Sans", system-ui, sans-serif';
-          const lw = ctx.measureText('EN VIVO').width + 10;
-          ctx.fillStyle = '#e63946';
-          ctx.beginPath(); ctx.roundRect(sp.x - lw / 2, y - 27, lw, 14, 4); ctx.fill();
+          const ws = tags.map(([t]) => ctx.measureText(t).width + 10);
+          let tx = sp.x - (ws.reduce((a, w) => a + w, 0) + (tags.length - 1) * 4) / 2;
+          tags.forEach(([t, bg, fg], i) => {
+            ctx.fillStyle = bg;
+            ctx.beginPath(); ctx.roundRect(tx, y - 27, ws[i], 14, 4); ctx.fill();
+            ctx.fillStyle = fg;
+            ctx.fillText(t, tx + 5, y - 19.5);
+            tx += ws[i] + 4;
+          });
+          ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        }
+        // Globito con el último mensaje del chat de la sala
+        const bub = office.bubbles[id];
+        if (bub && bub.until > now) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, (bub.until - now) / 600);
+          ctx.font = '500 12px "Public Sans", system-ui, sans-serif';
+          const bw = Math.min(220, ctx.measureText(bub.text).width + 16);
+          const by = y - (p.screen ? 46 : 32);
           ctx.fillStyle = '#fff';
-          ctx.fillText('EN VIVO', sp.x - lw / 2 + 5, y - 19.5);
+          ctx.strokeStyle = 'rgba(0,0,0,.15)';
+          ctx.beginPath(); ctx.roundRect(sp.x - bw / 2, by - 12, bw, 24, 10); ctx.fill(); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(sp.x - 5, by + 12); ctx.lineTo(sp.x + 5, by + 12); ctx.lineTo(sp.x, by + 18); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#1d1d22';
+          let t = bub.text;
+          while (ctx.measureText(t).width > bw - 14 && t.length > 3) t = `${t.slice(0, -2)}…`;
+          ctx.fillText(t, sp.x - bw / 2 + 8, by + 1);
+          ctx.restore();
           ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         }
         if (p.mic) {
@@ -807,6 +832,7 @@ export default function MapView({ active }) {
       />
 
       <VideoStrip />
+      <RoomChat />
       <ScreenStage />
 
       {hoverDesk && !editMode && (

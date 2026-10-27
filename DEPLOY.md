@@ -135,10 +135,12 @@ Los datos no se pierden: viven en el volumen `office-data`.
 
 ## 8. Respaldos
 
-- La app crea **un respaldo diario** de la base de datos y guarda los últimos 14 (`BACKUP_KEEP`).
+- La app crea **un respaldo diario** de la base de datos en `/data/backups` y guarda los últimos 14 (`BACKUP_KEEP`).
+  Ese respaldo vive **en el mismo disco** que la base: si se pierde el servidor, se pierden los dos.
+  Por eso conviene activar los [respaldos fuera del servidor](#respaldos-fuera-del-servidor-cloudflare-r2).
 - Respaldo manual en cualquier momento: `docker compose exec app node server/cli/backup.js`
-- Ver respaldos: `docker compose exec app ls -lh /data/backups`
-- **Llévate copias fuera del servidor** (desde tu computadora):
+- Ver respaldos (locales y en el bucket): `docker compose exec app node server/cli/backup.js --list`
+- Copiarlos a tu computadora por SSH (alternativa sin bucket):
 
   ```bash
   ./deploy/backup-download.sh root@IP-DEL-VPS
@@ -146,14 +148,120 @@ Los datos no se pierden: viven en el volumen `office-data`.
 
   Además, activa los *snapshots/backups* del proveedor (en Hetzner cuesta ~20 % extra del precio del servidor).
 
+### Respaldos fuera del servidor (Cloudflare R2)
+
+Con `BACKUP_S3_*` configurado, después de cada respaldo diario la app:
+
+1. comprime el respaldo (`.db.gz`) y lo sube a `<bucket>/nuvora/office-<fecha>.db.gz`;
+2. sube los **adjuntos del chat** (`/data/uploads`) a `<bucket>/nuvora/uploads/<id>`. Cada adjunto se sube **una sola vez**:
+   la app pregunta al bucket cuáles ya tiene y solo manda los nuevos. Los adjuntos no se borran del bucket;
+3. borra del bucket los respaldos de la base más viejos, dejando los últimos 30 (`BACKUP_S3_KEEP`).
+   Solo toca archivos `office-*.db.gz` directamente dentro del prefijo.
+
+Si la subida falla (sin internet, llave equivocada…) lo reintenta 4 veces con espera creciente (2, 4, 8 y 16 s), lo anota en
+el registro (`docker compose logs app | grep respaldo`) y **la app sigue funcionando**; el respaldo local queda igual y
+se vuelve a intentar al día siguiente. Funciona con cualquier almacenamiento compatible con S3 (Cloudflare R2, AWS S3,
+Backblaze B2, MinIO), sin dependencias extra. R2 y S3 cifran los archivos guardados (*encryption at rest*) de forma automática.
+
+**Configurarlo con Cloudflare R2** (10 GB gratis al mes, sin costo por descargar):
+
+1. En el panel de Cloudflare: **R2 Object Storage → Create bucket**. Nombre, p. ej. `nuvora-respaldos`.
+   Déjalo **privado** (no actives el acceso público ni un dominio público).
+2. **R2 → Manage API tokens → Create API token** (*Account API token* o *User API token*):
+   - Permisos: **Object Read & Write**.
+   - *Specify bucket(s)*: **solo** `nuvora-respaldos`.
+   - Crea el token y copia **Access Key ID** y **Secret Access Key** (el secreto solo se muestra una vez).
+   - Copia también el endpoint S3: `https://<accountid>.r2.cloudflarestorage.com` (aparece en la misma pantalla y en
+     *R2 → Overview → Account ID*).
+3. En el `.env` del servidor:
+
+   ```bash
+   BACKUP_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+   BACKUP_S3_BUCKET=nuvora-respaldos
+   BACKUP_S3_ACCESS_KEY=<Access Key ID>
+   BACKUP_S3_SECRET_KEY=<Secret Access Key>
+   BACKUP_S3_REGION=auto        # en R2 siempre "auto"
+   BACKUP_S3_PREFIX=nuvora/     # carpeta dentro del bucket
+   BACKUP_S3_KEEP=30            # respaldos de la base que se conservan en el bucket
+   ```
+
+   (En Railway, pon las mismas variables en *Variables*.)
+4. Aplica los cambios y prueba un respaldo a mano:
+
+   ```bash
+   docker compose up -d
+   docker compose exec app node server/cli/backup.js           # debe decir "Subido fuera del servidor: …"
+   docker compose exec app node server/cli/backup.js --list    # muestra los respaldos del bucket (s3:…)
+   ```
+
+   En el panel de R2 verás la carpeta `nuvora/`. Si algo falla, el mensaje dice el motivo (p. ej. `403 SignatureDoesNotMatch`
+   = secreto equivocado; `403 AccessDenied` = el token no tiene permiso sobre ese bucket).
+
+Otros proveedores: **AWS S3** `BACKUP_S3_ENDPOINT=https://s3.<región>.amazonaws.com` y `BACKUP_S3_REGION=<región>`;
+**Backblaze B2** `https://s3.<región>.backblazeb2.com` (la región va en el endpoint, p. ej. `us-west-004`);
+**MinIO** la URL de tu servidor (`https://minio.tudominio.com`) y `BACKUP_S3_REGION=us-east-1`.
+
+**Estado del último respaldo:** se guarda en `/data/backups/estado.json` (hora, tamaño, si la subida salió bien o el error).
+
 ### Restaurar un respaldo
+
+`npm run restore` (o `node server/cli/restore.js`) acepta:
+
+| Argumento | Restaura… |
+| --- | --- |
+| `--latest` | el más reciente del bucket (o el local más reciente si no hay `BACKUP_S3_*`) |
+| `s3:nuvora/office-AAAA-MM-DDT….db.gz` | ese objeto del bucket (también vale solo el nombre, sin `nuvora/`) |
+| `/data/backups/office-….db` o un `.db.gz` | ese archivo (si pones solo el nombre, lo busca en `/data/backups`) |
+
+Qué hace, en orden:
+
+1. **Se niega a correr si la app está encendida**: revisa el candado `/data/servidor.lock` (la app lo renueva cada 30 s y lo
+   borra al apagarse; se ignora si tiene más de 2 minutos) y si responde `http://127.0.0.1:$PORT/api/health`.
+   `--force` lo salta (ver Railway abajo).
+2. Descarga/descomprime el respaldo y lo verifica con `PRAGMA integrity_check`. Si está dañado, **no cambia nada**.
+3. Guarda la base actual como `/data/office.db.antes-de-restaurar-<fecha>` (para deshacer, restaura ese archivo).
+4. Reemplaza `office.db` (y borra `office.db-wal`/`-shm` de la base anterior).
+5. Con `BACKUP_S3_*`, descarga los adjuntos del chat que falten en `/data/uploads` (`--sin-adjuntos` para omitirlo).
+   Si esto falla, la base ya quedó restaurada: vuelve a correr el comando y solo bajará lo que falte.
+
+En el VPS:
 
 ```bash
 cd ~/oficinacentral
 docker compose stop app
-docker compose run --rm --entrypoint sh app -c "cp /data/backups/office-AAAA-MM-DD....db /data/office.db && rm -f /data/office.db-wal /data/office.db-shm"
+docker compose run --rm app node server/cli/restore.js --latest
+# o un respaldo local concreto:
+# docker compose run --rm app node server/cli/restore.js /data/backups/office-AAAA-MM-DDT....db
 docker compose start app
 ```
+
+### Probar que se puede restaurar
+
+Un respaldo que nunca se probó no es un respaldo. Haz este simulacro cada cierto tiempo (p. ej. cada mes) **en tu computadora**,
+sin tocar el servidor:
+
+```bash
+git clone <este repositorio> nuvora-simulacro && cd nuvora-simulacro
+npm ci && npm run build
+
+# Las mismas BACKUP_S3_* del servidor (puedes crear un token de R2 aparte con solo "Object Read").
+export BACKUP_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+export BACKUP_S3_BUCKET=nuvora-respaldos
+export BACKUP_S3_ACCESS_KEY=...   BACKUP_S3_SECRET_KEY=...
+
+npm run backup -- --list                                    # ver qué hay en el bucket
+DATA_DIR=./simulacro PORT=3999 npm run restore -- --latest  # baja el último, lo verifica y lo deja en ./simulacro
+
+# Enciende una copia de la app con esos datos, en otro puerto y SIN subir respaldos al bucket:
+DATA_DIR=./simulacro PORT=3999 BACKUP_EVERY_HOURS=0 BACKUP_S3_ENDPOINT= INSECURE_COOKIES=1 npm start
+```
+
+Abre `http://localhost:3999`, entra con tu usuario de siempre y revisa que estén los mensajes, el calendario y los adjuntos
+recientes. Después borra la carpeta `./simulacro`. El mismo simulacro se puede hacer en el servidor contra una copia
+(`DATA_DIR=/tmp/simulacro`), siempre con otro `PORT` y con `BACKUP_EVERY_HOURS=0`.
+
+Las pruebas automáticas (`npm test`, `tests/backup.test.js`) repiten este camino contra un S3 falso: respaldo → subida →
+limpieza → restauración → encender la app y entrar.
 
 ---
 
@@ -164,6 +272,7 @@ docker compose start app
 | Ver estado | `docker compose ps` |
 | Ver errores | `docker compose logs --tail=100 app` |
 | Reiniciar | `docker compose restart app` |
+| Respaldo ahora / ver respaldos | `docker compose exec app node server/cli/backup.js` / `… backup.js --list` |
 | Crear/recuperar un admin | `docker compose exec app node server/cli/create-admin.js usuario 'contraseña' "Nombre"` |
 | Apagar todo | `docker compose down` (los datos se conservan) |
 
@@ -212,8 +321,15 @@ envía una copia a cada espectador (funciona bien hasta ~6 personas viendo). Par
 2. En Railway agrega `LIVEKIT_URL`, `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET` y vuelve a desplegar.
 3. Listo: la app usa LiveKit en automático. Con LiveKit ya no hace falta el TURN de Cloudflare (LiveKit trae el suyo).
 
-**Respaldos:** el respaldo diario se guarda dentro del volumen (`/data/backups`). Para bajarlo, usa *Volume → Backups* de Railway
-o el comando `npm run backup` desde una consola del servicio.
+**Respaldos:** el respaldo diario se guarda dentro del volumen (`/data/backups`), en el mismo disco que la base.
+- Configura las variables `BACKUP_S3_*` (ver [Respaldos fuera del servidor](#respaldos-fuera-del-servidor-cloudflare-r2)) para que
+  cada respaldo y los adjuntos lleguen también a Cloudflare R2.
+- Como complemento, activa los respaldos del volumen de Railway (*Volume → Backups*, con programación diaria o semanal):
+  copian el disco entero, pero se quedan dentro de Railway y se borran si borras el servicio, por eso no reemplazan a R2.
+- Desde una consola del servicio: `npm run backup` (respaldo ahora) y `npm run backup -- --list`.
+- **Restaurar en Railway:** la consola corre junto a la app encendida, así que hace falta `--force` y reiniciar enseguida:
+  `npm run restore -- --latest --force` y luego *Restart* del servicio. Lo que la app guarde entre ambos pasos se pierde
+  (avisa al equipo antes); la base que había antes de restaurar queda en `office.db.antes-de-restaurar-<fecha>`.
 
 
 ---
@@ -238,3 +354,16 @@ además manda una versión ligera a quien tenga mala conexión.
 4. Comprueba en la app: al compartir pantalla, en `docker compose logs livekit` aparece `participant active`.
 
 Para volver al modo directo, deja `LIVEKIT_URL` vacío y quita `--profile livekit`.
+
+
+---
+
+## Avisos de errores y caídas
+
+1. **Errores** (la app falla, se reinicia o hay errores repetidos en el navegador de alguien):
+   crea un webhook en un canal privado de Discord (*Editar canal → Integraciones → Webhooks → Nuevo*), copia la URL
+   y ponla en `ALERT_WEBHOOK_URL`. También funciona con un webhook de Slack. Los avisos repetidos se agrupan (uno cada 10 minutos).
+2. **Caídas** (el servidor completo deja de responder): la app no puede avisar si está apagada, así que usa un monitor externo
+   gratuito como **UptimeRobot** o **Better Stack**:
+   - Monitor HTTP(s) a `https://tu-dominio/api/health` cada 1–5 minutos (responde `{"ok":true,…}`).
+   - Notificación al mismo canal de Discord (ambos servicios aceptan webhooks de Discord) o por correo/SMS.

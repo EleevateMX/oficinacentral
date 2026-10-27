@@ -1,16 +1,20 @@
 import { SCREEN_PRESETS } from '../../lib/media.js';
+import { FeedbackAdmin } from '../Feedback.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music,
+  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
 import { listDevices } from '../../lib/media.js';
+import { aiNoiseSupported } from '../../lib/noise.js';
+import { recordingSupported, clipMime } from '../../lib/recorder.js';
 import { playSound } from '../../lib/sounds.js';
 import { Toggle, Select, Row, Radio, Avatar, Empty, AvatarCanvas } from '../ui.jsx';
 import { fmtDate } from '../../lib/time.js';
 import { THEMES } from '../../lib/themes.js';
 import { OfficeMark, ByNuvora } from '../brand.jsx';
+import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -29,6 +33,8 @@ const SECTIONS = [
   { id: 'members', label: 'Miembros', icon: UserCog },
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
+  { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
+  { id: 'feedback', label: 'Comentarios', icon: MessageSquareHeart, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -75,6 +81,8 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'office' && <OfficeAdmin />}
             {cur === 'characters' && <CharactersAdmin />}
             {cur === 'brand' && <BrandAdmin />}
+            {cur === 'security' && <SecurityAdmin />}
+            {cur === 'feedback' && <FeedbackAdmin api={api} />}
           </div>
         </section>
       </div>
@@ -111,6 +119,7 @@ function General() {
           <Select value={mode} onChange={(v) => office.updatePrefs({ colorMode: v })} options={[{ value: 'light', label: 'Claro' }, { value: 'dark', label: 'Oscuro' }, { value: 'system', label: 'Sistema' }]} />
         </Row>
       </Section>
+      <InstallAppSection />
       <Section title="Atajos de teclado">
         <div className="shortcuts">
           <div><kbd>W A S D</kbd> / <kbd>flechas</kbd> Caminar</div>
@@ -163,8 +172,16 @@ function AudioPrefs() {
             <Select value={dev.speakerId} onChange={(v) => setDev('speakerId', v)} options={devOpts(devices.speakers, 'Predeterminado')} />
           </Row>
         )}
-        <Row title="Reducir ruido de fondo" desc="Suprime el ruido para que tu voz se escuche más clara">
-          <Toggle checked={a.noiseSuppression} onChange={after((v) => set('noiseSuppression', v))} />
+        <Row
+          title="Supresión de ruido con IA"
+          desc={aiNoiseSupported()
+            ? 'Quita teclado, ventilador y ruido de fondo con RNNoise antes de enviar tu voz. Usa un poco de CPU.'
+            : 'Tu navegador no lo permite; se usa el filtro normal.'}
+        >
+          <Toggle checked={a.aiNoise === 'rnnoise' && aiNoiseSupported()} disabled={!aiNoiseSupported()} onChange={after((v) => set('aiNoise', v ? 'rnnoise' : 'off'))} />
+        </Row>
+        <Row title="Reducir ruido de fondo (navegador)" desc={a.aiNoise === 'rnnoise' && aiNoiseSupported() ? 'No hace falta con la supresión con IA encendida' : 'Filtro básico del navegador para que tu voz se escuche más clara'}>
+          <Toggle checked={a.noiseSuppression} disabled={a.aiNoise === 'rnnoise' && aiNoiseSupported()} onChange={after((v) => set('noiseSuppression', v))} />
         </Row>
         <Row title="Ajustar volumen del micrófono automáticamente" desc="Mantiene tu voz a un volumen estable">
           <Toggle checked={a.autoGainControl} onChange={after((v) => set('autoGainControl', v))} />
@@ -221,6 +238,16 @@ function ScreenPrefs() {
       <Row title="Volumen de las pantallas de otros">
         <input type="range" min="0" max="1" step="0.05" value={sc.volume} onChange={(e) => set('volume', Number(e.target.value))} />
       </Row>
+      {recordingSupported() && (
+        <>
+          <Row title="Clips de 30 segundos" desc={clipMime() ? 'Guarda en memoria los últimos 30 s de las pantallas que ves para el botón Clip. Apágalo si tu equipo va lento.' : 'Tu navegador no permite clips; sí puedes grabar.'}>
+            <Toggle checked={sc.clips !== false && !!clipMime()} disabled={!clipMime()} onChange={(v) => set('clips', v)} />
+          </Row>
+          <Row title="Grabar junta: incluir las voces de la sala" desc="Al grabar una pantalla también se graban tu micrófono y las voces de quienes están contigo. Todos verán el aviso ● REC.">
+            <Toggle checked={sc.recordRoom !== false} onChange={(v) => set('recordRoom', v)} />
+          </Row>
+        </>
+      )}
       <div className="muted small">Los cambios de calidad se aplican la próxima vez que compartas.</div>
     </Section>
   );
@@ -278,6 +305,9 @@ function Notifications() {
   };
   return (
     <>
+      <Section title="Este dispositivo">
+        <PushDeviceRow />
+      </Section>
       <Section title="Eventos del calendario">
         <Row title="Recordatorio 5 minutos antes"><Toggle checked={n.remind5} onChange={(v) => set('remind5', v)} /></Row>
         <Row title="Recordatorio al empezar"><Toggle checked={n.remindStart} onChange={(v) => set('remindStart', v)} /></Row>
@@ -385,8 +415,247 @@ function Account() {
           <button className="btn primary">Actualizar contraseña</button>
         </form>
       </Section>
+      <TwoFactor />
+      <DiscordLink />
       <Section title="Sesión">
         <button className="btn danger-text" onClick={() => window.dispatchEvent(new Event('office:logout'))}>Cerrar sesión</button>
+      </Section>
+    </>
+  );
+}
+
+// Vincular Discord para entrar con un clic
+function DiscordLink() {
+  const config = useOffice((s) => s.config);
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  if (!config.discordLogin) return null;
+  return (
+    <Section title="Discord">
+      {me.discordName ? (
+        <Row title={`Vinculado con @${me.discordName}`} desc="Puedes entrar con el botón “Entrar con Discord”.">
+          <button className="btn danger-text" onClick={() => api.post('/me/discord/unlink').catch((e) => office.toast({ title: e.message, kind: 'error' }))}>Desvincular</button>
+        </Row>
+      ) : (
+        <Row title="Vincular tu cuenta de Discord" desc="Para entrar con un clic, sin escribir tu contraseña.">
+          <a className="btn discord-btn" href="/api/auth/discord?mode=link">Vincular Discord</a>
+        </Row>
+      )}
+    </Section>
+  );
+}
+
+// Reporte de turnos (admin): horas por persona y turno
+function ShiftReport() {
+  const [range, setRange] = useState('week');
+  const [data, setData] = useState(null);
+  const bounds = () => {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    const day = (d.getDay() + 6) % 7; // lunes = 0
+    const monday = new Date(d); monday.setDate(d.getDate() - day);
+    if (range === 'week') return [monday.getTime(), Date.now()];
+    if (range === 'lastweek') { const a = new Date(monday); a.setDate(a.getDate() - 7); return [a.getTime(), monday.getTime()]; }
+    if (range === 'month') return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), Date.now()];
+    return [new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime(), new Date(d.getFullYear(), d.getMonth(), 1).getTime()];
+  };
+  useEffect(() => {
+    const [from, to] = bounds();
+    api.get(`/admin/shifts/report?from=${from}&to=${to}`).then(setData).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  }, [range]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hrs = (m) => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+  const byPerson = new Map();
+  for (const r of data?.rows || []) byPerson.set(r.userId, (byPerson.get(r.userId) || 0) + r.minutes);
+  const csv = () => {
+    const rows = [['persona', 'turno', 'horas', 'minutos', 'veces', 'dias'], ...data.rows.map((r) => [r.name, r.shift, (r.minutes / 60).toFixed(2), r.minutes, r.sessions, r.days])];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' }));
+    a.download = `turnos-${new Date(data.from).toISOString().slice(0, 10)}.csv`;
+    a.click();
+  };
+  return (
+    <Section title="Reporte de turnos">
+      <div className="row between gap8 wrap">
+        <Select value={range} onChange={setRange} options={[{ value: 'week', label: 'Esta semana' }, { value: 'lastweek', label: 'Semana pasada' }, { value: 'month', label: 'Este mes' }, { value: 'lastmonth', label: 'Mes pasado' }]} />
+        <button className="btn" disabled={!data?.rows.length} onClick={csv}><Download size={15} /> CSV</button>
+      </div>
+      <div className="table mt12">
+        <div className="tr th shift-tr"><div>Persona</div><div>Turno</div><div>Tiempo</div><div>Veces · días</div></div>
+        {data?.rows.map((r) => (
+          <div key={`${r.userId}-${r.shift}`} className="tr shift-tr">
+            <div className="ellipsis"><b>{r.name}</b> <span className="muted small">total {hrs(byPerson.get(r.userId))}</span></div>
+            <div>{r.shift}</div>
+            <div>{hrs(r.minutes)}</div>
+            <div className="muted">{r.sessions} · {r.days}</div>
+          </div>
+        ))}
+        {data && !data.rows.length && <div className="muted pad">Nadie estuvo en turno en este periodo.</div>}
+      </div>
+      <p className="muted small">Cuenta el tiempo marcado "En turno" mientras la persona estuvo conectada.</p>
+    </Section>
+  );
+}
+
+// Verificación en dos pasos con una app (Google Authenticator, Authy, 1Password…)
+function TwoFactor() {
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  const config = useOffice((s) => s.config);
+  const [setup, setSetup] = useState(null); // { secret, qr }
+  const [code, setCode] = useState('');
+  const [codes, setCodes] = useState(null);
+  const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState(null);
+  const on = me.twoFactor;
+
+  const start = async () => {
+    setMsg(null);
+    try {
+      const r = await api.post('/me/2fa/setup');
+      const QR = (await import('qrcode')).default;
+      setSetup({ secret: r.secret, qr: await QR.toDataURL(r.otpauth, { margin: 1, width: 220 }) });
+    } catch (e) { setMsg({ error: e.message }); }
+  };
+  const enable = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api.post('/me/2fa/enable', { code });
+      setCodes(r.recoveryCodes); setSetup(null); setCode(''); setMsg(null);
+    } catch (err) { setMsg({ error: err.message }); }
+  };
+  const disable = async (e) => {
+    e.preventDefault();
+    try { await api.post('/me/2fa/disable', { password: pw }); setPw(''); setMsg({ ok: 'Verificación en dos pasos desactivada' }); } catch (err) { setMsg({ error: err.message }); }
+  };
+  const regen = async () => {
+    const password = prompt('Escribe tu contraseña para generar códigos nuevos (los anteriores dejarán de servir):');
+    if (!password) return;
+    try { setCodes((await api.post('/me/2fa/recovery', { password })).recoveryCodes); } catch (err) { setMsg({ error: err.message }); }
+  };
+  const download = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([`Códigos de respaldo de ${config.officeName} (${me.username})\nCada código sirve una sola vez.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+    a.download = 'codigos-de-respaldo.txt';
+    a.click();
+  };
+
+  return (
+    <Section title="Verificación en dos pasos">
+      <p className="muted small">
+        Además de tu contraseña, al entrar se pide un código de 6 dígitos de una app en tu teléfono
+        (Google Authenticator, Microsoft Authenticator, Authy o 1Password).
+        {config.requireAdmin2fa && me.role === 'admin' && <b> Esta oficina la exige a los administradores.</b>}
+      </p>
+      {codes ? (
+        <div className="recovery">
+          <b>Guarda estos códigos de respaldo.</b> Sirven para entrar si pierdes tu teléfono; cada uno se usa una vez y no se volverán a mostrar.
+          <div className="recovery-grid">{codes.map((c) => <code key={c}>{c}</code>)}</div>
+          <div className="row gap8">
+            <button className="btn" onClick={download}><Download size={15} /> Descargar</button>
+            <CopyBtn text={codes.join('\n')} label="Copiar" />
+            <button className="btn primary" onClick={() => setCodes(null)}>Ya los guardé</button>
+          </div>
+        </div>
+      ) : on ? (
+        <>
+          <div className="form-ok">✓ Activada</div>
+          <div className="row gap8 wrap">
+            <button className="btn" onClick={regen}>Generar códigos de respaldo nuevos</button>
+          </div>
+          <form className="row gap8 wrap" onSubmit={disable}>
+            <input type="password" placeholder="Tu contraseña" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required />
+            <button className="btn danger-text">Desactivar</button>
+          </form>
+        </>
+      ) : setup ? (
+        <form className="twofa-setup" onSubmit={enable}>
+          <img src={setup.qr} alt="Código QR para tu app de autenticación" width={180} height={180} />
+          <div className="form">
+            <div className="small">1. Abre tu app de autenticación y escanea el código.</div>
+            <div className="small muted">¿No puedes escanear? Escribe esta clave: <code className="secret">{setup.secret.match(/.{1,4}/g).join(' ')}</code></div>
+            <div className="small">2. Escribe el código de 6 dígitos que aparece:</div>
+            <input className="code-input" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" autoFocus required />
+            <div className="row gap8">
+              <button className="btn primary">Activar</button>
+              <button className="btn" type="button" onClick={() => setSetup(null)}>Cancelar</button>
+            </div>
+          </div>
+        </form>
+      ) : (
+        <button className="btn primary" onClick={start}><Shield size={15} /> Activar verificación en dos pasos</button>
+      )}
+      {msg?.error && <div className="form-error">{msg.error}</div>}
+      {msg?.ok && <div className="form-ok">{msg.ok}</div>}
+    </Section>
+  );
+}
+
+function BackupStatus() {
+  const [st, setSt] = useState(null);
+  useEffect(() => { api.get('/admin/backups/status').then(setSt).catch(() => setSt(null)); }, []);
+  if (!st) return null;
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+  const mb = (b) => (b ? `${(b / 1048576).toFixed(1)} MB` : '');
+  const off = st.offsite || {};
+  return (
+    <Section title="Respaldos">
+      <Row title="Último respaldo diario" desc={st.lastBackupAt ? `${when(st.lastBackupAt)} · ${mb(st.size)} · ${st.localCount} guardados en el servidor` : 'Aún no se ha hecho ninguno'}>
+        <span className={`pill ${st.ok === false ? 'expired' : st.ok ? 'used' : 'pending'}`}>{st.ok === false ? 'Falló' : st.ok ? 'Correcto' : 'Pendiente'}</span>
+      </Row>
+      <Row title="Copia fuera del servidor" desc={!off.enabled ? 'Desactivada: configura BACKUP_S3_* (Cloudflare R2, S3…) para no depender de un solo disco.' : off.status === 'error' ? `Error: ${off.error}` : `${off.bucket}/${off.prefix} · ${when(off.uploadedAt)}${off.uploads ? ` · ${off.uploads.remote} archivos del chat` : ''}`}>
+        <span className={`pill ${!off.enabled ? 'revoked' : off.status === 'ok' ? 'used' : off.status === 'error' ? 'expired' : 'pending'}`}>{!off.enabled ? 'Sin configurar' : off.status === 'ok' ? 'Al día' : off.status === 'error' ? 'Error' : 'Pendiente'}</span>
+      </Row>
+    </Section>
+  );
+}
+
+// ---------- Seguridad (admin): exigir 2FA y registro de actividad ----------
+function SecurityAdmin() {
+  const config = useOffice((s) => s.config);
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  const [entries, setEntries] = useState([]);
+  const [q, setQ] = useState('');
+  const [more, setMore] = useState(true);
+  const load = async (before = null, reset = false) => {
+    try {
+      const { entries: list } = await api.get(`/admin/audit?limit=100&q=${encodeURIComponent(q)}${before ? `&before=${before}` : ''}`);
+      setEntries((prev) => (reset ? list : [...prev, ...list]));
+      setMore(list.length === 100);
+    } catch (e) { office.toast({ title: e.message, kind: 'error' }); }
+  };
+  useEffect(() => { const t = setTimeout(() => load(null, true), 250); return () => clearTimeout(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const csv = () => {
+    const rows = [['fecha', 'quien', 'accion', 'ruta', 'ip'], ...entries.map((e) => [new Date(e.createdAt).toISOString(), e.actorName || '', e.action, e.target || '', e.ip || ''])];
+    const body = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + body], { type: 'text/csv' }));
+    a.download = 'registro-de-actividad.csv';
+    a.click();
+  };
+  const toggle = (v) => api.patch('/admin/office', { requireAdmin2fa: v }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  return (
+    <>
+      <Section title="Verificación en dos pasos">
+        <Row title="Exigirla a los administradores" desc={me.twoFactor ? 'Un admin sin ella no podrá usar las funciones de administración hasta activarla.' : 'Primero actívala para ti en Cuenta.'}>
+          <Toggle checked={!!config.requireAdmin2fa} disabled={!me.twoFactor} onChange={toggle} />
+        </Row>
+      </Section>
+      <BackupStatus />
+      <Section title="Registro de actividad">
+        <p className="muted small">Quién invitó, cambió permisos, borró o configuró algo, y los inicios de sesión de admins y los fallidos.</p>
+        <div className="row gap8">
+          <input className="search-input flex1" placeholder="Buscar por persona o acción" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn" onClick={csv} disabled={!entries.length}><Download size={15} /> CSV</button>
+        </div>
+        <div className="audit-list">
+          {entries.map((e) => (
+            <div key={e.id} className="audit-row">
+              <span className="audit-when">{new Date(e.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              <span className="audit-who">{e.actorName || 'Alguien'}</span>
+              <span className="audit-what">{e.action}</span>
+              {e.ip && <span className="audit-ip muted">{e.ip}</span>}
+            </div>
+          ))}
+          {!entries.length && <div className="muted pad">Sin actividad registrada.</div>}
+          {more && entries.length > 0 && <button className="btn block" onClick={() => load(entries[entries.length - 1].id)}>Ver más</button>}
+        </div>
       </Section>
     </>
   );
@@ -463,7 +732,7 @@ function Members({ initialTab }) {
                 <div className="row gap8 ellipsis">
                   <Avatar user={u} size={34} />
                   <div className="ellipsis">
-                    <div>{u.displayName}{u.id === me.id && ' (tú)'}</div>
+                    <div>{u.displayName}{u.id === me.id && ' (tú)'}{u.twoFactor && <span className="tag-2fa" title="Verificación en dos pasos activada">2FA</span>}</div>
                     <div className="muted small ellipsis">{u.email || `@${u.username}`}</div>
                   </div>
                 </div>
@@ -478,6 +747,7 @@ function Members({ initialTab }) {
                     {u.id !== me.id && (
                       <>
                         <button className="icon-btn" title="Restablecer contraseña" onClick={() => resetPw(u)}><RotateCcw size={14} /></button>
+                        {u.twoFactor && <button className="icon-btn" title="Quitar verificación en dos pasos (si perdió su teléfono)" onClick={() => confirm(`¿Quitar la verificación en dos pasos de ${u.displayName}?`) && api.post(`/admin/users/${u.id}/reset-2fa`).catch((e) => office.toast({ title: e.message, kind: 'error' }))}><Shield size={14} /></button>}
                         <button className="icon-btn danger" title={u.disabled ? 'Reactivar' : 'Desactivar acceso'} onClick={() => (u.disabled || confirm(`¿Quitar el acceso a ${u.displayName}?`)) && patchUser(u, { disabled: !u.disabled })}>
                           {u.disabled ? <Check size={14} /> : <Ban size={14} />}
                         </button>
@@ -785,6 +1055,7 @@ function BrandAdmin() {
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
       <ShiftsAdmin shifts={config.shifts || []} save={save} />
+      <ShiftReport />
     </>
   );
 }

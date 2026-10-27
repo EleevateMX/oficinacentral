@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'">
+  <title>Nuvora — Sin conexión</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <img class="logo" src="../../assets/icon.png" alt="">
+    <h1>No se pudo abrir la oficina</h1>
+    <p class="muted">Revisa tu conexión a internet. Dirección: <b id="url"></b></p>
+    <p class="note" id="error"></p>
+    <div class="row">
+      <button id="retry" class="primary" type="button">Reintentar</button>
+      <button id="change" type="button">Cambiar oficina…</button>
+    </div>
+  </main>
+  <script src="offline.js"></script>
+</body>
+</html>

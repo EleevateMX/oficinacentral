@@ -27,6 +27,11 @@ La firma “by nuvora” se mantiene en el inicio de sesión.
 - **Calendario** semanal con línea de “ahora”, reuniones con invitados y sala (botón para ir a la sala), recordatorios.
 - **Actividad**: saludos, menciones e invitaciones, con filtro de no leídas.
 - **Perfil**: foto, avatar personalizable, nombre, zona horaria (muestra la hora local), estado personalizado.
+- **App instalable (PWA) y notificaciones push**: se instala en Android, iPhone/iPad (iOS 16.4+, desde Safari:
+  Compartir → Agregar a inicio) y escritorio. En **Preferencias → Notificaciones** cada dispositivo activa avisos que llegan
+  aunque la app esté cerrada: mensajes directos, @menciones (o todos los mensajes si así lo eliges), saludos, invitaciones
+  y recordatorios del calendario (5 min antes y al empezar). Si tienes la app abierta y a la vista, no se manda push.
+  El service worker solo se registra en la versión compilada y requiere HTTPS (o `localhost`).
 - **Preferencias**: general (modo claro/oscuro), calendario, audio, video, reuniones, notificaciones, privacidad,
   rendimiento, cuenta (cambiar contraseña) y, para admins, **Miembros** (roles, desactivar acceso, restablecer contraseña)
   e **Invitaciones**.
@@ -77,8 +82,13 @@ Variables de entorno:
 | `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Servidor de medios LiveKit (propio o LiveKit Cloud). Vacío = conexión directa P2P |
+| `ALERT_WEBHOOK_URL` | Webhook de Discord o Slack para avisos de errores, reinicios y caídas |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `PUBLIC_URL` | Entrar con Discord (vincular cuenta, entrar o aceptar invitación) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Notificaciones push (Web Push). Si faltan las llaves, se generan solas la primera vez y se guardan en la base de datos. `VAPID_SUBJECT` es un contacto `mailto:` o `https://` (por omisión `mailto:` + `ADMIN_EMAIL`) |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY` | Copia de cada respaldo (y de los adjuntos del chat) en un almacenamiento compatible con S3: Cloudflare R2, AWS S3, Backblaze B2, MinIO. Vacío = desactivado. Ver [`DEPLOY.md`](DEPLOY.md#respaldos-fuera-del-servidor-cloudflare-r2) |
+| `BACKUP_S3_REGION`, `BACKUP_S3_PREFIX`, `BACKUP_S3_KEEP` | Región (`auto` para R2), carpeta dentro del bucket (`nuvora/`) y cuántos respaldos guardar ahí (30) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |
 | `INSECURE_COOKIES=1` | Solo para pruebas en producción sin HTTPS |
 
@@ -88,7 +98,9 @@ Notas importantes:
 - El audio/video es **P2P** (malla). Funciona bien para grupos pequeños por conversación (hasta ~8 personas).
   En redes corporativas estrictas hace falta un servidor **TURN** (por ejemplo coturn), configurado así:
   `ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.tudominio.com:3478","username":"u","credential":"p"}]'`
-- Respalda la carpeta `data/` (contiene la base de datos SQLite).
+- Respalda la carpeta `data/` (contiene la base de datos SQLite y los adjuntos en `data/uploads/`), o configura `BACKUP_S3_*`.
+  `npm run backup` crea un respaldo ahora, `npm run backup -- --list` lista los respaldos y
+  `npm run restore -- <archivo | s3:clave | --latest>` restaura uno (con la app apagada).
 
 ## Estructura
 
@@ -154,3 +166,62 @@ npm run test:e2e  # prueba en navegador con Playwright
 ```
 
 GitHub Actions corre ambas en cada push y pull request (`.github/workflows/ci.yml`).
+
+## Seguridad
+
+- **Verificación en dos pasos** (app de autenticación) con 10 códigos de respaldo. En *Seguridad* un admin puede exigirla a todos los administradores.
+  Si alguien pierde su teléfono, otro admin la quita desde *Miembros*, o en el servidor: `npm run reset-2fa -- <usuario>`.
+- **Registro de actividad** (Preferencias → Seguridad): invitaciones, cambios de rol, cuentas desactivadas, contraseñas restablecidas,
+  pisos, áreas, líderes, logos, objetos borrados por admins, inicios de sesión de admins y los fallidos. Exportable a CSV.
+
+## Discord y turnos
+
+- **Entrar con Discord**: cada quien vincula su Discord en *Cuenta* y entra con un clic; una invitación también se puede aceptar con Discord.
+  Sigue siendo solo por invitación: un Discord sin vincular no entra. Si la persona tiene verificación en dos pasos, se pide igual.
+  Configura en Discord Developer Portal → OAuth2 la redirección `https://TU-DOMINIO/api/auth/discord/callback`.
+- **Reporte de turnos** (Marca de la oficina → Reporte de turnos): horas por persona y turno (esta semana, la pasada, este mes, el pasado),
+  número de veces y días, exportable a CSV. Cuenta el tiempo "En turno" mientras la persona está conectada.
+
+## App de escritorio
+
+En `desktop/` está la app para Windows y macOS (Electron). Abre la oficina en su propia ventana y añade lo que el navegador
+no puede hacer mientras juegas:
+
+- **Elegir oficina** la primera vez (p. ej. `oficina.gtahub.gg`); se cambia en la bandeja → *Cambiar oficina…*.
+  Solo navega dentro de esa dirección; los demás enlaces se abren en el navegador.
+- **Atajos globales** (funcionan con el juego en primer plano): silenciar/activar con **Ctrl+Shift+M** y
+  **mantener para hablar** con la tecla <kbd>`</kbd> (debajo de Esc) o un botón lateral del ratón. Se configuran en
+  la bandeja → *Configuración…*. Si el gancho de teclado no carga, queda solo el modo de alternar.
+- **Compartir pantalla con audio de la PC**: selector propio de pantallas y ventanas. En Windows 11 y macOS 14.2+
+  se excluyen las voces de la oficina del audio compartido (evita eco).
+- **Bandeja del sistema**: abrir, silenciar, cambiar oficina, iniciar con el sistema y salir. Cerrar la ventana la deja en la bandeja.
+
+```bash
+cd desktop
+npm install
+npm start            # abre la app en modo desarrollo
+npm run dist:win     # instalador NSIS en desktop/dist (desde Windows)
+npm run dist:mac     # .dmg arm64 y x64 en desktop/dist (desde macOS)
+npm run icons        # regenera los íconos desde el logo
+```
+
+GitHub Actions (`.github/workflows/desktop.yml`) genera el instalador de Windows y los `.dmg` de macOS cuando cambia
+`desktop/` (o a mano con *Run workflow*) y los deja como artefactos; no publica releases.
+
+Notas:
+
+- **Firma de código**: los instaladores salen **sin firmar** (Windows) y con **firma ad-hoc** (macOS). Windows mostrará
+  SmartScreen y macOS pedirá *clic derecho → Abrir* (o `xattr -dr com.apple.quarantine /Applications/Nuvora.app`).
+  Para producción: en Windows un certificado de firma de código (OV/EV o Azure Trusted Signing) con `CSC_LINK` y
+  `CSC_KEY_PASSWORD`; en macOS un certificado *Developer ID Application* (`CSC_LINK`/`CSC_KEY_PASSWORD`), quitar
+  `"identity": "-"`, activar `hardenedRuntime` con entitlements de micrófono/cámara y notarizar con `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD` y `APPLE_TEAM_ID`. Todos van como *secrets* del workflow.
+- **Audio del sistema en macOS**: requiere macOS 13 o superior. En 14.2+ Chromium usa CoreAudio Tap y macOS pide el permiso
+  *Grabación de audio del sistema* (la app ya declara `NSAudioCaptureUsageDescription`); en 13–14.1 usa ScreenCaptureKit.
+  En macOS 12 o anterior no hay audio del sistema (alternativa: un dispositivo virtual como BlackHole).
+  Sin firma de Developer ID, macOS puede volver a pedir los permisos tras cada actualización.
+- **Mantener para hablar en macOS** necesita el permiso de *Accesibilidad* (Ajustes del Sistema → Privacidad y seguridad).
+  En Windows, si el juego corre como administrador, la app también debe abrirse como administrador para escuchar las teclas.
+- El micrófono se abre y cierra en cada pulsación (igual que el botón de la barra), así que puede haber una pequeña
+  demora al empezar a hablar.
+- Las notificaciones de Windows funcionan con la app instalada (el instalador registra el AppUserModelID `mx.nuvora.desktop`).

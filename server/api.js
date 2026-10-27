@@ -8,7 +8,14 @@ import {
 } from './auth.js';
 import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
 import * as world from './world.js';
+import { alert } from './alerts.js';
+import * as sec from './security.js';
+import { registerFileRoutes, getFiles } from './files.js';
+import { registerDiscordRoutes, discordEnabled } from './discord.js';
+import { openShift, shiftReport } from './shifts.js';
+import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
+import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -41,6 +48,8 @@ export function publicUser(u) {
     timezone: u.timezone,
     statusText: u.status_text || '',
     shift: u.shift || null,
+    twoFactor: !!u.totp_enabled,
+    discordName: u.discord_name || null,
     shiftAt: u.shift_at || null,
     disabled: !!u.disabled,
     lastActive: u.last_active,
@@ -72,6 +81,8 @@ function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') return fail(res, 403, 'Solo para administradores');
+  // Si la oficina lo exige, un admin sin verificación en dos pasos no puede administrar
+  if (sec.requireAdmin2fa() && !req.user.totp_enabled) return res.status(403).json({ error: 'Activa la verificación en dos pasos (Preferencias → Cuenta) para usar las funciones de administrador.', code: 'need2fa' });
   next();
 }
 
@@ -79,6 +90,7 @@ function notify(userId, type, actorId, data = {}) {
   const id = Number(db.prepare('INSERT INTO notifications (user_id, type, actor_id, data, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(userId, type, actorId, JSON.stringify(data), now()).lastInsertRowid);
   emitToUser(userId, 'notification', notificationRow(db.prepare('SELECT * FROM notifications WHERE id = ?').get(id)));
+  pushNotification(userId, type, actorId, data);
 }
 
 const notificationRow = (r) => ({ id: r.id, type: r.type, actorId: r.actor_id, data: parseJSON(r.data, {}), read: !!r.read, createdAt: r.created_at });
@@ -86,7 +98,7 @@ const notificationRow = (r) => ({ id: r.id, type: r.type, actorId: r.actor_id, d
 // ---------- Configuración pública ----------
 api.get('/health', (req, res) => {
   db.prepare('SELECT 1').get();
-  res.json({ ok: true });
+  res.json({ ok: true, uptime: Math.round(process.uptime()), online: presence.size });
 });
 
 // Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
@@ -102,6 +114,8 @@ function officeConfig() {
     shifts: parseJSON(getSetting('shifts') || 'null', null) || DEFAULT_SHIFTS,
     // Servidor de medios: LiveKit si está configurado; si no, conexión directa (P2P)
     livekitUrl: livekitEnabled() ? process.env.LIVEKIT_URL : null,
+    requireAdmin2fa: sec.requireAdmin2fa(),
+    discordLogin: discordEnabled(),
   };
 }
 
@@ -166,12 +180,45 @@ api.post('/auth/login', wrap((req, res) => {
   if (loginRateLimited(ip)) return fail(res, 429, 'Demasiados intentos. Espera unos minutos.');
   const { username, password } = req.body || {};
   const u = db.prepare('SELECT * FROM users WHERE username = ? OR (email != \'\' AND email = ?)').get(String(username || '').trim(), String(username || '').trim().toLowerCase());
-  if (!u || !verifyPassword(String(password || ''), u.password_hash)) return fail(res, 401, 'Usuario o contraseña incorrectos');
+  if (!u || !verifyPassword(String(password || ''), u.password_hash)) {
+    sec.audit({ actor: u?.id ?? null, action: `Inicio de sesión fallido (${String(username || '').slice(0, 40)})`, ip });
+    return fail(res, 401, 'Usuario o contraseña incorrectos');
+  }
   if (u.disabled) return fail(res, 403, 'Tu cuenta está desactivada. Habla con un administrador.');
   clearLoginAttempts(ip);
+  // Segundo paso: código de la app de autenticación
+  if (u.totp_enabled) return res.json({ needs2fa: true, ticket: sec.newLoginTicket(u.id) });
+  finishLogin(req, res, u);
+}));
+
+function finishLogin(req, res, u) {
+  if (u.role === 'admin') sec.audit({ actor: u.id, action: 'Inició sesión (admin)', ip: req.ip });
   const token = createSession(u.id);
   res.setHeader('Set-Cookie', sessionCookie(token));
   res.json({ user: publicUser(u) });
+}
+
+api.post('/auth/2fa', wrap((req, res) => {
+  if (loginRateLimited(req.ip)) return fail(res, 429, 'Demasiados intentos. Espera unos minutos.');
+  const t = sec.readLoginTicket(req.body?.ticket);
+  if (!t) return fail(res, 401, 'El inicio de sesión expiró. Vuelve a escribir tu contraseña.');
+  const u = getUser(t.userId);
+  if (!u || u.disabled || !u.totp_enabled) return fail(res, 401, 'No se pudo verificar');
+  const code = String(req.body?.code || '').trim();
+  const step = sec.checkTotp(u.totp_secret, code, u.totp_last);
+  if (step != null) {
+    db.prepare('UPDATE users SET totp_last = ? WHERE id = ?').run(step, u.id);
+  } else {
+    const rest = sec.useRecoveryCode(u.totp_recovery, code);
+    if (!rest) {
+      sec.audit({ actor: u.id, action: 'Código de verificación incorrecto', ip: req.ip });
+      return fail(res, 401, 'Código incorrecto');
+    }
+    db.prepare('UPDATE users SET totp_recovery = ? WHERE id = ?').run(JSON.stringify(rest), u.id);
+    sec.audit({ actor: u.id, action: `Entró con un código de respaldo (quedan ${rest.length})`, ip: req.ip });
+  }
+  sec.dropLoginTicket(req.body?.ticket);
+  finishLogin(req, res, getUser(u.id));
 }));
 
 api.post('/auth/logout', (req, res) => {
@@ -190,6 +237,13 @@ function validInvite(token) {
   if (!inv || inv.revoked || inv.used_by || inv.expires_at < now()) return null;
   return inv;
 }
+
+registerDiscordRoutes(api, {
+  validInvite,
+  userFromReq: (req) => userFromToken(parseCookies(req.headers.cookie)[SESSION_COOKIE]),
+  publicUser,
+  broadcastUser: (id) => broadcastUser(id),
+});
 
 api.get('/invites/:token', (req, res) => {
   const inv = validInvite(req.params.token);
@@ -222,6 +276,7 @@ api.post('/invites/:token/accept', wrap((req, res) => {
 
 // Todo lo de abajo requiere sesión
 api.use(requireAuth);
+api.use(sec.auditMiddleware);
 
 // ---------- LiveKit (servidor de medios / SFU) ----------
 function livekitEnabled() {
@@ -251,6 +306,22 @@ api.get('/livekit/token', (req, res) => {
   if (!livekitEnabled()) return fail(res, 404, 'LiveKit no está configurado');
   res.setHeader('Cache-Control', 'no-store');
   res.json({ url: process.env.LIVEKIT_URL, token: livekitToken(req.user) });
+});
+
+// Errores del navegador: se registran y, si se repiten, avisan al webhook
+const clientErrRate = new Map();
+api.post('/client-errors', (req, res) => {
+  const now_ = Date.now();
+  const list = (clientErrRate.get(req.user.id) || []).filter((t) => now_ - t < 60e3);
+  if (list.length >= 5) return res.json({ ok: true });
+  list.push(now_);
+  clientErrRate.set(req.user.id, list);
+  const msg = String(req.body?.message || '').slice(0, 300);
+  const stack = String(req.body?.stack || '').slice(0, 1500);
+  const where = String(req.body?.url || '').slice(0, 200);
+  const ua = String(req.headers['user-agent'] || '').slice(0, 160);
+  if (msg) alert(`Error en el navegador: ${msg}`, `${req.user.display_name} · ${where}\n${ua}\n${stack}`, { level: 'warn', key: `client:${msg}` });
+  res.json({ ok: true });
 });
 
 api.get('/ice', wrap(async (req, res) => {
@@ -307,6 +378,7 @@ api.put('/me/shift', wrap((req, res) => {
   const shift = raw == null || raw === '' ? null : String(raw).trim().slice(0, 30);
   if (shift && !officeConfig().shifts.includes(shift)) return fail(res, 400, 'Ese turno no existe');
   db.prepare('UPDATE users SET shift = ?, shift_at = ? WHERE id = ?').run(shift, shift ? now() : null, req.user.id);
+  openShift(req.user.id, shift);
   broadcastUser(req.user.id);
   res.json({ user: publicUser(getUser(req.user.id)) });
 }));
@@ -341,6 +413,75 @@ api.post('/me/password', wrap((req, res) => {
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), req.user.id);
   db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, req.token);
   res.json({ ok: true });
+}));
+
+registerFileRoutes(api, { fail });
+
+// ---------- Comentarios del equipo (ideas y fallas) ----------
+const FEEDBACK_KINDS = { idea: '💡 Idea', bug: '🐞 Algo no funciona', other: '💬 Comentario' };
+const feedbackRow = (r) => ({
+  id: r.id, userId: r.user_id, kind: r.kind, text: r.text, status: r.status, createdAt: r.created_at,
+  meta: parseJSON(r.meta, {}), file: r.file_id ? { id: r.file_id, url: `/api/files/${r.file_id}/captura.jpg` } : null,
+});
+
+api.post('/feedback', wrap((req, res) => {
+  const text = String(req.body?.text || '').trim().slice(0, 3000);
+  if (!text) return fail(res, 400, 'Cuéntanos qué pasó o qué se te ocurre');
+  const kind = FEEDBACK_KINDS[req.body?.kind] ? req.body.kind : 'other';
+  const recent = db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE user_id = ? AND created_at > ?').get(req.user.id, now() - 3600e3).n;
+  if (recent >= 20) return fail(res, 429, 'Ya enviaste muchos comentarios en esta hora');
+  const file = req.body?.fileId ? getFiles([req.body.fileId], req.user.id)[0] : null;
+  const m = req.body?.meta && typeof req.body.meta === 'object' ? req.body.meta : {};
+  const meta = {
+    ua: String(req.headers['user-agent'] || '').slice(0, 300),
+    screen: String(m.screen || '').slice(0, 40), view: String(m.view || '').slice(0, 30),
+    where: String(m.where || '').slice(0, 80), media: String(m.media || '').slice(0, 20), url: String(m.url || '').slice(0, 200),
+  };
+  const id = Number(db.prepare('INSERT INTO feedback (user_id, kind, text, file_id, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(req.user.id, kind, text, file?.id || null, JSON.stringify(meta), now()).lastInsertRowid);
+  alert(`${FEEDBACK_KINDS[kind]} de ${req.user.display_name}`, `${text}\n\n${meta.view} · ${meta.where} · ${meta.screen}\n${meta.ua}`, { level: kind === 'bug' ? 'warn' : 'info', key: `feedback:${id}` });
+  emitAll('feedback', { id });
+  res.json({ ok: true, id });
+}));
+
+// ---------- Verificación en dos pasos ----------
+api.post('/me/2fa/setup', wrap((req, res) => {
+  if (req.user.totp_enabled) return fail(res, 400, 'Ya tienes activada la verificación en dos pasos');
+  const secret = sec.newTotpSecret();
+  db.prepare('UPDATE users SET totp_secret = ?, totp_last = -1 WHERE id = ?').run(secret, req.user.id);
+  res.json({ secret, otpauth: sec.otpauthUrl(secret, req.user.username, officeConfig().officeName) });
+}));
+
+api.post('/me/2fa/enable', wrap((req, res) => {
+  const u = getUser(req.user.id);
+  if (u.totp_enabled) return fail(res, 400, 'Ya está activada');
+  if (!u.totp_secret) return fail(res, 400, 'Primero genera el código QR');
+  const step = sec.checkTotp(u.totp_secret, req.body?.code, u.totp_last);
+  if (step == null) return fail(res, 400, 'El código no coincide. Revisa la hora de tu teléfono e inténtalo de nuevo.');
+  const { codes, hashes } = sec.newRecoveryCodes();
+  db.prepare('UPDATE users SET totp_enabled = 1, totp_last = ?, totp_recovery = ? WHERE id = ?').run(step, JSON.stringify(hashes), u.id);
+  broadcastUser(u.id);
+  res.json({ recoveryCodes: codes });
+}));
+
+api.post('/me/2fa/disable', wrap((req, res) => {
+  const u = getUser(req.user.id);
+  if (!u.totp_enabled) return fail(res, 400, 'No está activada');
+  if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) return fail(res, 400, 'La contraseña no es correcta');
+  if (u.role === 'admin' && sec.requireAdmin2fa()) return fail(res, 400, 'La oficina exige la verificación en dos pasos a los administradores');
+  db.prepare('UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_recovery = NULL, totp_last = -1 WHERE id = ?').run(u.id);
+  broadcastUser(u.id);
+  res.json({ ok: true });
+}));
+
+api.post('/me/2fa/recovery', wrap((req, res) => {
+  const u = getUser(req.user.id);
+  if (!u.totp_enabled) return fail(res, 400, 'No está activada');
+  if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) return fail(res, 400, 'La contraseña no es correcta');
+  const { codes, hashes } = sec.newRecoveryCodes();
+  db.prepare('UPDATE users SET totp_recovery = ? WHERE id = ?').run(JSON.stringify(hashes), u.id);
+  sec.audit({ actor: u.id, action: 'Generó códigos de respaldo nuevos', ip: req.ip });
+  res.json({ recoveryCodes: codes });
 }));
 
 // ---------- Personajes subidos (hojas de sprites PNG 96×192) ----------
@@ -427,6 +568,10 @@ admin.patch('/office', (req, res) => {
     if (b.accent !== null && !/^#[0-9a-fA-F]{6}$/.test(b.accent)) return fail(res, 400, 'Color inválido');
     setSetting('accent', b.accent);
   }
+  if (b.requireAdmin2fa !== undefined) {
+    if (b.requireAdmin2fa && !req.user.totp_enabled) return fail(res, 400, 'Activa primero tu propia verificación en dos pasos');
+    setSetting('require_admin_2fa', b.requireAdmin2fa ? '1' : '0');
+  }
   if (b.shifts !== undefined) {
     if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');
     const list = [...new Set(b.shifts.map((x) => String(x).trim().slice(0, 30)).filter(Boolean))].slice(0, 30);
@@ -506,6 +651,18 @@ admin.patch('/users/:id', wrap((req, res) => {
   res.json({ user: publicUser(getUser(id)) });
 }));
 
+admin.post('/users/:id/reset-2fa', wrap((req, res) => {
+  const id = Number(req.params.id);
+  if (!getUser(id)) return fail(res, 404, 'Usuario no encontrado');
+  db.prepare('UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_recovery = NULL, totp_last = -1 WHERE id = ?').run(id);
+  broadcastUser(id);
+  res.json({ ok: true });
+}));
+
+admin.get('/audit', (req, res) => {
+  res.json({ entries: sec.auditList({ limit: req.query.limit, before: req.query.before ? Number(req.query.before) : null, q: String(req.query.q || '').slice(0, 60) }) });
+});
+
 admin.post('/users/:id/reset-password', wrap((req, res) => {
   const id = Number(req.params.id);
   if (!getUser(id)) return fail(res, 404, 'Usuario no encontrado');
@@ -515,6 +672,30 @@ admin.post('/users/:id/reset-password', wrap((req, res) => {
   disconnectUser(id);
   res.json({ password });
 }));
+
+// Estado de los respaldos (último respaldo local y copia fuera del servidor)
+admin.get('/backups/status', (req, res) => res.json(backupStatus()));
+
+// Reporte de turnos: horas por persona y turno en un rango de fechas
+admin.get('/shifts/report', (req, res) => {
+  const to = Number(req.query.to) || now();
+  const from = Number(req.query.from) || to - 7 * 864e5;
+  if (to <= from || to - from > 400 * 864e5) return fail(res, 400, 'Rango de fechas inválido');
+  res.json({ from, to, rows: shiftReport(from, to) });
+});
+
+admin.get('/feedback', (req, res) => {
+  const st = String(req.query.status || '');
+  const rows = st ? db.prepare('SELECT * FROM feedback WHERE status = ? ORDER BY id DESC LIMIT 200').all(st) : db.prepare('SELECT * FROM feedback ORDER BY id DESC LIMIT 200').all();
+  res.json({ feedback: rows.map(feedbackRow), counts: Object.fromEntries(db.prepare('SELECT status, COUNT(*) AS n FROM feedback GROUP BY status').all().map((r) => [r.status, r.n])) });
+});
+
+admin.patch('/feedback/:id', (req, res) => {
+  const status = ['nuevo', 'visto', 'resuelto'].includes(req.body?.status) ? req.body.status : null;
+  if (!status) return fail(res, 400, 'Estado inválido');
+  db.prepare('UPDATE feedback SET status = ? WHERE id = ?').run(status, Number(req.params.id));
+  res.json({ ok: true });
+});
 
 api.use('/admin', admin);
 
@@ -530,9 +711,20 @@ function parseConv(conv, userId) {
   return { dm: dmKey(userId, id), otherId: id, key: `d:${dmKey(userId, id)}` };
 }
 
+function reactionsOf(messageId) {
+  const map = new Map();
+  for (const x of db.prepare('SELECT emoji, user_id FROM message_reactions WHERE message_id = ? ORDER BY rowid').all(messageId)) {
+    if (!map.has(x.emoji)) map.set(x.emoji, []);
+    map.get(x.emoji).push(x.user_id);
+  }
+  return [...map].map(([emoji, users]) => ({ emoji, users }));
+}
+
 const messageRow = (r) => ({
   id: r.id, userId: r.user_id, kind: r.kind, body: r.body, createdAt: r.created_at,
   conv: r.channel_id ? `c:${r.channel_id}` : null, dm: r.dm_key,
+  attachments: r.attachments ? parseJSON(r.attachments, []) : [],
+  reactions: reactionsOf(r.id),
 });
 
 function lastRead(userId, key) {
@@ -569,9 +761,9 @@ api.get('/messages', (req, res) => {
   res.json({ messages: rows.reverse().map(messageRow), hasMore: rows.length === 60 });
 });
 
-function postMessage(user, c, body, kind = 'text') {
-  const id = Number(db.prepare('INSERT INTO messages (channel_id, dm_key, user_id, kind, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(c.channelId ?? null, c.dm ?? null, user.id, kind, body, now()).lastInsertRowid);
+function postMessage(user, c, body, kind = 'text', attachments = []) {
+  const id = Number(db.prepare('INSERT INTO messages (channel_id, dm_key, user_id, kind, body, created_at, attachments) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(c.channelId ?? null, c.dm ?? null, user.id, kind, body, now(), attachments.length ? JSON.stringify(attachments) : null).lastInsertRowid);
   const msg = messageRow(db.prepare('SELECT * FROM messages WHERE id = ?').get(id));
   if (c.channelId) {
     emitAll('message', msg);
@@ -585,6 +777,7 @@ function postMessage(user, c, body, kind = 'text') {
     emitToUser(user.id, 'message', msg);
     emitToUser(c.otherId, 'message', msg);
   }
+  pushMessage(user, msg, { channelId: c.channelId, otherId: c.otherId });
   db.prepare('INSERT INTO reads (user_id, conv, last_read_id) VALUES (?, ?, ?) ON CONFLICT(user_id, conv) DO UPDATE SET last_read_id = excluded.last_read_id')
     .run(user.id, c.key, id);
   return msg;
@@ -594,9 +787,30 @@ api.post('/messages', wrap((req, res) => {
   const c = parseConv(req.body?.conv, req.user.id);
   if (!c) return fail(res, 400, 'Conversación inválida');
   const body = String(req.body?.body || '').trim();
-  if (!body) return fail(res, 400, 'Mensaje vacío');
+  const attachments = Array.isArray(req.body?.files) ? getFiles(req.body.files, req.user.id) : [];
+  if (!body && !attachments.length) return fail(res, 400, 'Mensaje vacío');
   if (body.length > 4000) return fail(res, 400, 'Mensaje demasiado largo');
-  res.json({ message: postMessage(req.user, c, body) });
+  res.json({ message: postMessage(req.user, c, body, 'text', attachments) });
+}));
+
+// Reacciones con emoji: tocar la misma quita la tuya
+api.post('/messages/:id/react', wrap((req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(Number(req.params.id));
+  if (!m) return fail(res, 404, 'Mensaje no encontrado');
+  const uid = req.user.id;
+  if (m.dm_key && !m.dm_key.split(':').map(Number).includes(uid)) return fail(res, 403, 'No puedes ver ese mensaje');
+  const emoji = String(req.body?.emoji || '').trim();
+  if (!emoji || emoji.length > 16 || /[\s<>]/.test(emoji)) return fail(res, 400, 'Emoji inválido');
+  const had = db.prepare('SELECT 1 FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').get(m.id, uid, emoji);
+  if (had) db.prepare('DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(m.id, uid, emoji);
+  else {
+    if (db.prepare('SELECT COUNT(DISTINCT emoji) AS n FROM message_reactions WHERE message_id = ?').get(m.id).n >= 20) return fail(res, 400, 'Demasiadas reacciones');
+    db.prepare('INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(m.id, uid, emoji);
+  }
+  const payload = { id: m.id, reactions: reactionsOf(m.id) };
+  if (m.channel_id) emitAll('reaction', payload);
+  else for (const id of m.dm_key.split(':').map(Number)) emitToUser(id, 'reaction', payload);
+  res.json(payload);
 }));
 
 api.post('/reads', (req, res) => {
@@ -630,6 +844,8 @@ api.post('/wave/:userId', wrap((req, res) => {
 }));
 
 // ---------- Notificaciones ----------
+registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push/test
+
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);
   res.json({ notifications: rows.map(notificationRow) });
@@ -865,6 +1081,6 @@ api.post('/desks/:id/release', wrap((req, res) => {
 api.use((err, req, res, next) => {
   if (err instanceof world.WorldError) return fail(res, err.status, err.message);
   if (err?.type === 'entity.too.large') return fail(res, 413, 'El contenido es demasiado grande');
-  console.error(err);
+  alert(`Error 500 en ${req.method} ${req.path}`, err?.stack || String(err), { key: `500:${req.path}:${err?.message}` });
   fail(res, 500, 'Error interno del servidor');
 });
