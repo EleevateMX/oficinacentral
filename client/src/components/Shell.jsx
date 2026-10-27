@@ -4,6 +4,7 @@ import Birthdays, { checkBirthdays } from './Birthdays.jsx';
 import Notices from './Notices.jsx';
 import Feedback from './Feedback.jsx';
 import Achievements from './Achievements.jsx';
+import JukeboxModal from './Jukebox.jsx';
 import React, { useEffect, useState } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
@@ -90,6 +91,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'game' && <GameModal key={modal.objectId} objectId={modal.objectId} game={modal.game} />}
       {modal?.type === 'feedback' && <Feedback />}
       {modal?.type === 'achievements' && <Achievements userId={modal.userId} tab={modal.tab} />}
+      {modal?.type === 'jukebox' && <JukeboxModal objectId={modal.objectId} />}
       {onboarding && !modal && <Onboarding />}
       {!modal && <AppBanner mobile={mobile} />}
       <IncomingCall />

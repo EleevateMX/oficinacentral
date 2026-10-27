@@ -35,10 +35,12 @@ import { Avatar } from './ui.jsx';
 import { stageAt } from '@shared/stage.js';
 import { drawStageSpots } from '../lib/stageFx.js';
 import StagePanel from './StagePanel.jsx';
+import { JukeboxLayer } from './Jukebox.jsx';
+import { jukeboxActive } from '../lib/jukebox.js';
 
 const T = TILE;
 const STEP_MS = 135;
-const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar' };
+const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar', jukebox: 'Abrir rocola' };
 // Objetos con brillo o dibujo fino que se pintan nítidos en cada cuadro (además de los de marca)
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
 const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
@@ -63,6 +65,7 @@ export function interact(o) {
   if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
   else if (kind === 'game') office.set({ modal: { type: 'game', objectId: o.id, game: GAME_OF[o.type] } });
+  else if (kind === 'jukebox') office.set({ modal: { type: 'jukebox', objectId: o.id } });
   else if (kind === 'screen') {
     const st = office.state;
     const sc = st.talkingWith.find((id) => st.users[id]?.online && st.users[id]?.screen);
@@ -367,7 +370,7 @@ export default function MapView({ active }) {
       if (t - (ambRef.current.check || 0) > 1000) {
         ambRef.current.check = t;
         const ar = areaAt(f, mine.x, mine.y);
-        setMusic(!!amb.music && !!ar && MUSIC_AREAS.test(ar.name), amb.musicVolume);
+        setMusic(!!amb.music && !!ar && MUSIC_AREAS.test(ar.name) && !jukeboxActive(), amb.musicVolume);
         ambRef.current.light = amb.dayNight ? daylight() : null;
       }
 
@@ -1243,6 +1246,7 @@ export default function MapView({ active }) {
       )}
       <MeetingNotes room={roomHere} hidden={!!editMode} />
       {!myAway && !editMode && <StagePanel />}
+      <JukeboxLayer hidden={!!editMode} below={!!roomHere} />
       {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>

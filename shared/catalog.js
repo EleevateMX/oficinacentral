@@ -52,6 +52,7 @@ export const CATALOG = {
   coffee: f('Cafetera', 'comida', 2, 1),
   watercooler: f('Garrafón', 'comida', 1, 1),
   arcade: f('Arcade', 'deco', 1, 1, { colorable: true, color: '#2bb673', interactive: 'game' }),
+  jukebox: f('Rocola', 'deco', 2, 1, { colorable: true, color: '#FE3377', interactive: 'jukebox', animated: true }),
   foosball: f('Futbolito', 'deco', 3, 2, { interactive: 'game' }),
   drum: f('Tambor', 'deco', 1, 1),
   plant: f('Planta', 'plantas', 1, 1),

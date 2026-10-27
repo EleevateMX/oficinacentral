@@ -436,6 +436,7 @@ function templateHQ() {
   room(65, 47, 13, 11, 'wood2');
   for (let x = 68; x <= 74; x++) b.door(x, 46, 'wood2');
   b.o('tv', 69, 47); b.o('bookshelf', 74, 47); b.o('plant', 65, 47);
+  b.o('jukebox', 66, 47); // rocola: música compartida en la zona
   b.o('sofa', 67, 50, { color: '#3a86ff' });
   b.o('roundTable', 68, 52, { w: 3 });
   for (const [x, y, c] of [[66, 55, '#FE3377'], [68, 56, '#FFCC00'], [71, 55, '#9b5de5'], [74, 54, '#06d6a0']]) b.o('beanBag', x, y, { color: c });

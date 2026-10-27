@@ -3,6 +3,7 @@ import { TILE } from '@shared/map.js';
 import { CATALOG, objSize } from '@shared/catalog.js';
 import { getSheet, drawSprite, FRAME_W, FRAME_H } from './sprites.js';
 import { FULL_SHEET_W, SIT_POSE } from '@shared/sprite.js';
+import { drawJukebox, jukeboxPlaying } from './jukeboxDraw.js';
 
 const T = TILE;
 
@@ -868,6 +869,9 @@ D.wavingFlag = (ctx, x, y, w, h, o) => {
   }
   if (!im) { ctx.fillStyle = '#fff'; hexPath(ctx, px + 1.5 + FW / 2, top + 2 + FH / 2 - 2 + wave(N / 2), 6); ctx.fill(); }
 };
+
+// Rocola (ver jukeboxDraw.js): brilla y se anima mientras suena
+D.jukebox = (ctx, x, y, w, h, o, c) => drawJukebox(ctx, x, y, w, h, o.color || c.color, ANIM_T, jukeboxPlaying.has(o.id));
 
 // Roll-up de pie: lona con degradado, logo grande, líneas de texto y base de aluminio
 D.rollupBanner = (ctx, x, y, w, h, o) => {
