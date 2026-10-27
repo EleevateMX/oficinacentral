@@ -99,7 +99,7 @@ function officeConfig() {
     theme: getSetting('theme') || process.env.OFFICE_THEME || 'nuvora',
     accent: getSetting('accent') || null,
     logoUrl: getSetting('logo') ? `/api/office/logo?v=${logoV}` : null,
-    shifts: parseJSON(getSetting('shifts'), DEFAULT_SHIFTS),
+    shifts: parseJSON(getSetting('shifts') || 'null', null) || DEFAULT_SHIFTS,
   };
 }
 
