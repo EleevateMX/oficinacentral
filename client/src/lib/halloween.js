@@ -282,13 +282,9 @@ export function drawHalloweenWalkers(ctx, npcs, t, view) {
     const x = (n.rx + 0.5) * T, y = (n.ry + 1) * T - 2;
     if (x < view.x0 - 64 || x > view.x1 + 64 || y < view.y0 - 64 || y > view.y1 + 96) continue;
     if (n.kind === 'zombie') {
-      const step = n.moving ? (Math.floor(t / 260) % 2) + 1 : 0;
+      const step = n.moving ? (Math.floor(t / 200) % 4) + 1 : 0;
       const sway = Math.sin(t / 300 + n.speed) * 1.5;
       drawAvatar(ctx, x + sway, y, n.look, n.dir, step, false, false, 'armsOut');
-      ctx.fillStyle = '#7fae63';
-      // bracitos estirados hacia enfrente (se notan aunque el sprite no tenga la pose)
-      if (n.dir === 'down') { ctx.fillRect(x + sway - 9, y - 24, 3, 7); ctx.fillRect(x + sway + 6, y - 24, 3, 7); }
-      if (n.dir === 'left' || n.dir === 'right') { const d = n.dir === 'right' ? 1 : -1; ctx.fillRect(x + sway + d * 4 - (d < 0 ? 9 : 0), y - 25, 9, 3); }
       if (n.say) bubble(ctx, n.say.text, x, y - 50);
     } else if (n.kind === 'dog') {
       drawPet(ctx, n.look.pet, n.look.color, x, y - 1, n.face || 1, t / 1000, n.moving || n.near);
