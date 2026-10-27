@@ -1,5 +1,5 @@
 // Caché de hojas de sprites (generadas desde la ficha del avatar o subidas como PNG).
-import { renderSheet, normalizeSpec, SPEC_KEYS, SHEET_W, SHEET_H, FRAME_W, FRAME_H, DIRS } from '@shared/sprite.js';
+import { renderFullSheet, normalizeSpec, frameCol, SPEC_KEYS, FRAME_W, FRAME_H, DIRS } from '@shared/sprite.js';
 
 const cache = new Map();
 const listeners = new Set();
@@ -11,11 +11,13 @@ export function onSpritesLoaded(fn) {
 
 export const characterUrl = (id) => `/api/characters/${encodeURIComponent(id)}.png`;
 
+// Hoja completa (caminar de 4 cuadros + posturas); se genera una sola vez por ficha
 function fromSpec(spec) {
+  const { data, width, height } = renderFullSheet(spec);
   const c = document.createElement('canvas');
-  c.width = SHEET_W;
-  c.height = SHEET_H;
-  c.getContext('2d').putImageData(new ImageData(renderSheet(spec), SHEET_W, SHEET_H), 0, 0);
+  c.width = width;
+  c.height = height;
+  c.getContext('2d').putImageData(new ImageData(data, width, height), 0, 0);
   return c;
 }
 
@@ -41,10 +43,14 @@ export function getSheet(avatar = {}) {
   return cache.get(key);
 }
 
-export function drawSprite(ctx, sheet, dx, dy, dir = 'down', step = 0, scale = 1) {
+// step: 0 = quieto, 1-4 = ciclo de caminar. pose: nombre de una postura (POSES);
+// las hojas subidas de 3 columnas no la tienen y usan el cuadro normal.
+export function drawSprite(ctx, sheet, dx, dy, dir = 'down', step = 0, scale = 1, pose = null) {
   if (!sheet) return;
   const row = Math.max(0, DIRS.indexOf(dir));
-  ctx.drawImage(sheet, (step % 3) * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H, dx, dy, FRAME_W * scale, FRAME_H * scale);
+  const cols = Math.max(1, Math.floor((sheet.width || FRAME_W * 3) / FRAME_W));
+  const col = Math.min(cols - 1, frameCol(step, pose, cols));
+  ctx.drawImage(sheet, col * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H, dx, dy, FRAME_W * scale, FRAME_H * scale);
 }
 
 export { FRAME_W, FRAME_H };

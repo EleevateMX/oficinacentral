@@ -606,7 +606,8 @@ export default function MapView({ active }) {
             continue;
           }
         }
-        const step = p.moving ? (Math.floor((p.anim || 0) * 8) % 2) + 1 : 0;
+        // Ciclo de caminar de 4 cuadros (contacto, en el aire, contacto, en el aire)
+        const step = p.moving ? (Math.floor((p.anim || 0) * 14) % 4) + 1 : 0;
         ctx.globalAlpha = p.status === 'away' ? 0.6 : 1;
         const seat = !p.moving && seatAt(f, Math.round(p.rx), Math.round(p.ry));
         // Mascota: sigue al personaje con un poco de retraso
@@ -638,7 +639,7 @@ export default function MapView({ active }) {
         const emOther = em && em.target != null ? office.players[em.target] : null;
         const emPose = em ? emotePose(em, t, p, emOther) : null;
         const ax = (p.rx + 0.5) * T + sitDX + (emPose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (emPose?.dy || 0);
-        drawAvatar(ctx, ax, ay, u?.avatar, emPose?.dir || seat?.dir || p.dir, emPose?.step || step, !!seat, blink || !!emPose?.blink);
+        drawAvatar(ctx, ax, ay, u?.avatar, emPose?.dir || seat?.dir || p.dir, emPose?.step || step, !!seat, blink || !!emPose?.blink, emPose?.pose || null);
         if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (seat ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
         if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!seat);
         // Sentado de lado: el brazo de enfrente del sillón (o la base de la silla) queda delante de las piernas

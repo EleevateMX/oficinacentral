@@ -152,12 +152,12 @@ function Chips({ options, names, value, onChange }) {
 function WalkingPreview({ avatar }) {
   const [t, setT] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setT((x) => x + 1), 180);
+    const id = setInterval(() => setT((x) => x + 1), 150);
     return () => clearInterval(id);
   }, []);
   const dirs = ['down', 'left', 'up', 'right'];
   const dir = dirs[Math.floor(t / 12) % 4];
-  const step = [1, 0, 2, 0][t % 4];
+  const step = 1 + (t % 4); // ciclo de caminar de 4 cuadros
   return <AvatarCanvas avatar={avatar} width={128} height={192} dir={dir} step={step} />;
 }
 
