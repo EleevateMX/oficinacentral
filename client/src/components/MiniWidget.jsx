@@ -5,7 +5,7 @@ import { TILE } from '@shared/map.js';
 import ControlBar from './ControlBar.jsx';
 
 // Vista mini del mapa cuando estás en otra sección (chat, calendario…)
-export default function MiniWidget() {
+export default function MiniWidget({ pip = false, win = window }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(true);
   const floor = useOffice((s) => s.floor);
@@ -15,9 +15,10 @@ export default function MiniWidget() {
 
   useEffect(() => {
     if (!open) return;
+    // En la mini ventana se dibuja con su propio reloj (la pestaña puede estar oculta)
     let raf;
     const draw = () => {
-      raf = requestAnimationFrame(draw);
+      raf = pip ? win.setTimeout(draw, 120) : requestAnimationFrame(draw);
       const c = ref.current;
       const me = office.myPlayer;
       if (!c || !floor || !me) return;
@@ -48,20 +49,20 @@ export default function MiniWidget() {
         ctx.beginPath(); ctx.arc(x, y, Number(id) === office.state.me.id ? 4 : 6, 0, Math.PI * 2); ctx.fill();
       }
     };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [open, floor, users]);
+    draw();
+    return () => (pip ? win.clearTimeout(raf) : cancelAnimationFrame(raf));
+  }, [open, floor, users, pip, win]);
 
   return (
-    <div className="mini">
+    <div className={`mini ${pip ? 'mini-pip' : ''}`}>
       <div className="mini-head">
         <span><MapPin size={13} /> {label}</span>
         <div className="row gap4">
-          <button className="icon-btn" onClick={() => setOpen(!open)} title={open ? 'Minimizar' : 'Mostrar'}>{open ? <ChevronDown size={14} /> : <ChevronUp size={14} />}</button>
-          <button className="icon-btn" onClick={() => office.set({ view: 'map' })} title="Volver al mapa"><Maximize2 size={13} /></button>
+          {!pip && <button className="icon-btn" onClick={() => setOpen(!open)} title={open ? 'Minimizar' : 'Mostrar'}>{open ? <ChevronDown size={14} /> : <ChevronUp size={14} />}</button>}
+          <button className="icon-btn" onClick={() => { office.set({ view: 'map' }); if (pip) { window.focus(); win.close(); } }} title="Volver a la oficina"><Maximize2 size={13} /></button>
         </div>
       </div>
-      {open && <canvas ref={ref} width={300} height={130} onClick={() => office.set({ view: 'map' })} />}
+      {open && <canvas ref={ref} width={pip ? 320 : 300} height={pip ? 150 : 130} onClick={() => { office.set({ view: 'map' }); if (pip) window.focus(); }} />}
       <ControlBar compact />
     </div>
   );

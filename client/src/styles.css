@@ -1023,3 +1023,9 @@ html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text
 .ab-text b { font-size: 13.5px; }
 .ab-text span { color: #c4c7cf; }
 .app-banner .icon-btn { color: #c4c7cf; }
+
+/* Mini ventana flotante (Picture-in-Picture) */
+body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
+.mini.mini-pip { margin: 0; border-radius: 0; min-height: 100vh; display: flex; flex-direction: column; }
+.mini.mini-pip canvas { flex: 1; height: auto; min-height: 120px; }
+.mini.mini-pip .control-bar { position: static; transform: none; margin: 6px auto; box-shadow: none; }

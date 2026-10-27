@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, MonitorCheck } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, MonitorCheck, PictureInPicture2 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS } from './ui.jsx';
+import { openPip, pipSupported } from '../lib/pip.js';
 
 const QUICK_STATUS = ['🎧 Concentrado', '📞 En llamada', '🍔 Comiendo', '☕ En pausa', '🚗 En camino', '🏠 Desde casa', '🤒 Enfermo', '🎮 Jugando'];
 const setStatusText = (statusText) => api.patch('/me', { statusText }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
@@ -104,6 +105,9 @@ export default function ControlBar({ compact = false }) {
       <div className="cb-sep" />
       {!compact && (
         <button className="cb-btn" onClick={() => office.set({ modal: { type: 'prefs', section: 'general' } })} title="Preferencias"><Settings size={18} /></button>
+      )}
+      {!compact && pipSupported() && (
+        <button className="cb-btn" onClick={() => openPip().catch((e) => office.toast({ title: e.message, kind: 'error' }))} title="Mini ventana: deja la oficina flotando encima de tus otros programas"><PictureInPicture2 size={18} /></button>
       )}
       <button className="cb-btn" onClick={() => window.dispatchEvent(new Event('office:logout'))} title="Salir de la oficina"><LogOut size={18} /></button>
     </div>
