@@ -556,6 +556,15 @@ export default function MapView({ active }) {
         const re = office.reactions[id];
         const hopY = re && re.until - performance.now() > 3000 ? -Math.abs(Math.sin((re.until - performance.now()) / 60)) * 4 : 0;
         drawAvatar(ctx, (p.rx + 0.5) * T, (p.ry + 1) * T - 2 + hopY, u?.avatar, seat?.dir || p.dir, step, !!seat, blink);
+        // Sentado mirando hacia arriba: el respaldo de la silla tapa la parte de abajo (como en Gather)
+        if (seat?.obj && seat.dir === 'up' && CATALOG[seat.obj.type]?.rotatable) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(seat.obj.x * T - 4, (seat.obj.y + 0.62) * T, T + 8, T * 0.6);
+          ctx.clip();
+          drawObject(ctx, seat.obj);
+          ctx.restore();
+        }
         ctx.globalAlpha = 1;
       }
 

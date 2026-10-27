@@ -193,7 +193,7 @@ export function seatAt(f, x, y) {
       if (kind === undefined) continue;
       const dir = kind === 'rot' ? ROT_FACE[(o.rot || 0) % 4] : kind === 'sofa' ? ((o.rot || 0) === 2 ? 'up' : 'down') : kind;
       const { w, h } = objSize(o);
-      for (let j = o.y; j < o.y + h; j++) for (let i = o.x; i < o.x + w; i++) m.set(`${i},${j}`, { dir });
+      for (let j = o.y; j < o.y + h; j++) for (let i = o.x; i < o.x + w; i++) m.set(`${i},${j}`, { dir, obj: o });
     }
     seatCache.set(f.objects, m);
   }
