@@ -84,7 +84,8 @@ export default function MapView({ active }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const staticRef = useRef(null);
-  const view = useRef({ zoom: 1.5, camX: 0, camY: 0, w: 0, h: 0, dpr: 1 });
+  // En el celular el mapa empieza más lejos para ver más de la oficina
+  const view = useRef({ zoom: typeof window !== 'undefined' && window.innerWidth < 720 ? 0.9 : 1.5, camX: 0, camY: 0, w: 0, h: 0, dpr: 1 });
   const input = useRef({ held: [], lastStep: 0, path: [], hover: null, pointer: null, drag: null, areaDrag: null });
 
   const floor = useOffice((s) => s.floor);
@@ -114,7 +115,7 @@ export default function MapView({ active }) {
   };
   const [toolbar, setToolbar] = useState(null);
   const [colorOpen, setColorOpen] = useState(false);
-  const [zoomPct, setZoomPct] = useState(150);
+  const [zoomPct, setZoomPct] = useState(typeof window !== 'undefined' && window.innerWidth < 720 ? 90 : 150);
 
   const stateRef = useRef({});
   const projRef = useRef([]);

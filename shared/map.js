@@ -421,9 +421,10 @@ function templateHQ() {
   room(35, 46, 16, 12, 'hex');
   for (let x = 35; x <= 50; x++) b.door(x, 46, 'hex');
   for (const x of [41, 42, 43, 44]) b.door(x, 58, 'path');
-  b.o('reception', 40, 49);
-  b.o('officeChair', 42, 48, { rot: 2 });
-  b.o('cubeLogo', 42.25, 49.1); b.o('hexLamp', 40.2, 48.9); b.o('monitor', 43.5, 48.9);
+  // Recepción centrada en la sala (35..50 → centro en x 43)
+  b.o('reception', 40.5, 49);
+  b.o('officeChair', 42.5, 48, { rot: 2 });
+  b.o('cubeLogo', 42.75, 49.1); b.o('hexLamp', 40.7, 48.9); b.o('monitor', 44, 48.9);
   b.o('sofaSmall', 36, 51, { rot: 1, color: '#FE3377' }); b.o('sofaSmall', 49, 51, { rot: 3, color: '#FE3377' });
   b.o('tallPlant', 35, 47); b.o('tallPlant', 50, 47); b.o('plant', 36, 56); b.o('plant', 49, 56);
   b.area('recepcion', 'Recepción', 35, 47, 16, 11, { color: 'none' });
@@ -460,7 +461,7 @@ function templateHQ() {
   for (const x0 of [43, 57]) { b.o('wallBanner', x0 + 1.5, 10.1); b.o('poster', x0 + 9.5, 10.1); }
   b.o('neonLogo', 75, 9.15); b.o('noticeBoard', 88, 10);
   b.o('fairyLights', 29.25, 10); b.o('fairyLights', 34.5, 10);
-  b.o('floorLogo', 41, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
+  b.o('floorLogo', 41.5, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
   for (const [type, x, y, extra] of RECEPTION_EXTRAS) b.o(type, x, y, extra);
   b.o('flagPole', 39, 59); b.o('flagPole', 46, 59);
   b.o('floorLogo', 74, 41.5, { h: 2.5 });
@@ -555,7 +556,7 @@ export function deskZone(o) {
 // Recepción renovada: letrero con el logo detrás del mostrador, alfombra de bienvenida
 // y sillones de espera. También se agregan una vez a las oficinas ya creadas (server/world.js).
 export const RECEPTION_EXTRAS = [
-  ['neonLogo', 41, 47.1, {}],
+  ['neonLogo', 41.5, 47.1, {}],
   ['carpetRunner', 42, 54, { h: 4 }],
   ['armchair', 40, 55, { rot: 1, color: '#2a2a30' }],
   ['armchair', 45, 55, { rot: 3, color: '#2a2a30' }],
