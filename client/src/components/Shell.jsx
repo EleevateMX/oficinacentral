@@ -18,6 +18,7 @@ import Toasts from './Toasts.jsx';
 import SearchPalette from './SearchPalette.jsx';
 import { handleLaunchUrl, syncPush } from '../lib/push.js';
 import Onboarding, { Loader } from './Onboarding.jsx';
+import AppBanner from './AppBanner.jsx';
 
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
@@ -80,6 +81,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'notices' && <Notices />}
       {modal?.type === 'feedback' && <Feedback />}
       {onboarding && !modal && <Onboarding />}
+      {!modal && <AppBanner mobile={mobile} />}
       <Toasts />
     </div>
   );

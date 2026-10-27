@@ -996,3 +996,30 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 .onb-dots span.on { background: var(--accent); width: 18px; border-radius: 4px; }
 .onb-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line, rgba(127,127,127,.2)); flex-wrap: wrap; }
 .onb-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted, #888); cursor: pointer; }
+
+/* Sin zoom del navegador ni rebote; el mapa tiene su propio zoom */
+html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+.map-wrap, .map-wrap canvas { touch-action: none; }
+@media (max-width: 720px) {
+  /* iPhone hace zoom al escribir en campos con letra chica */
+  input, select, textarea { font-size: 16px !important; }
+}
+/* Muesca y barra del iPhone en la app instalada */
+.shell.mobile { padding-top: env(safe-area-inset-top); }
+.shell.mobile .rail { height: calc(58px + env(safe-area-inset-bottom)); }
+.shell.mobile.pane-map .sidebar { bottom: calc(58px + env(safe-area-inset-bottom)); }
+.shell.mobile .control-bar { bottom: 10px; }
+.shell.mobile .room-chat-btn { bottom: 64px; left: 8px; }
+.shell.mobile .desk-ind { font-size: 11px; padding: 6px 10px 6px 8px; }
+.shell.mobile .away-bar { margin: 0 8px; }
+.shell.mobile .onb { padding: 22px 18px 16px; }
+
+/* Avisos de instalar / notificaciones */
+.app-banner { position: fixed; z-index: 55; left: 50%; transform: translateX(-50%); top: calc(10px + env(safe-area-inset-top)); width: min(520px, calc(100vw - 20px));
+  display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 12px; border-radius: 16px; background: var(--ink, #1d1d22); color: #fff;
+  box-shadow: 0 12px 36px rgba(0,0,0,.35); animation: deskTipIn .2s ease-out; }
+.ab-icon { width: 36px; height: 36px; border-radius: 10px; flex: none; display: grid; place-items: center; background: var(--accent); color: #fff; }
+.ab-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35; }
+.ab-text b { font-size: 13.5px; }
+.ab-text span { color: #c4c7cf; }
+.app-banner .icon-btn { color: #c4c7cf; }
