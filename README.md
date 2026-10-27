@@ -27,6 +27,11 @@ La firma “by nuvora” se mantiene en el inicio de sesión.
 - **Calendario** semanal con línea de “ahora”, reuniones con invitados y sala (botón para ir a la sala), recordatorios.
 - **Actividad**: saludos, menciones e invitaciones, con filtro de no leídas.
 - **Perfil**: foto, avatar personalizable, nombre, zona horaria (muestra la hora local), estado personalizado.
+- **App instalable (PWA) y notificaciones push**: se instala en Android, iPhone/iPad (iOS 16.4+, desde Safari:
+  Compartir → Agregar a inicio) y escritorio. En **Preferencias → Notificaciones** cada dispositivo activa avisos que llegan
+  aunque la app esté cerrada: mensajes directos, @menciones (o todos los mensajes si así lo eliges), saludos, invitaciones
+  y recordatorios del calendario (5 min antes y al empezar). Si tienes la app abierta y a la vista, no se manda push.
+  El service worker solo se registra en la versión compilada y requiere HTTPS (o `localhost`).
 - **Preferencias**: general (modo claro/oscuro), calendario, audio, video, reuniones, notificaciones, privacidad,
   rendimiento, cuenta (cambiar contraseña) y, para admins, **Miembros** (roles, desactivar acceso, restablecer contraseña)
   e **Invitaciones**.
@@ -77,6 +82,7 @@ Variables de entorno:
 | `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Servidor de medios LiveKit (propio o LiveKit Cloud). Vacío = conexión directa P2P |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Notificaciones push (Web Push). Si faltan las llaves, se generan solas la primera vez y se guardan en la base de datos. `VAPID_SUBJECT` es un contacto `mailto:` o `https://` (por omisión `mailto:` + `ADMIN_EMAIL`) |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |

@@ -6,6 +6,7 @@ import Login from './components/Login.jsx';
 import InviteAccept from './components/InviteAccept.jsx';
 import Shell from './components/Shell.jsx';
 import { Boot } from './components/brand.jsx';
+import { unsubscribePush } from './lib/push.js';
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = cargando, null = sin sesión
@@ -25,6 +26,7 @@ export default function App() {
   };
 
   const onLogout = async () => {
+    await unsubscribePush().catch(() => {}); // este dispositivo deja de recibir avisos de esta cuenta
     await api.post('/auth/logout').catch(() => {});
     office.stop();
     setSession(null);

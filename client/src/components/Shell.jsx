@@ -15,6 +15,7 @@ import EditProfile from './EditProfile.jsx';
 import Preferences from './settings/Preferences.jsx';
 import Toasts from './Toasts.jsx';
 import SearchPalette from './SearchPalette.jsx';
+import { handleLaunchUrl, syncPush } from '../lib/push.js';
 
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
@@ -27,7 +28,7 @@ export default function Shell({ session, onLogout }) {
   const mobile = useIsMobile();
 
   useEffect(() => {
-    office.start(session.user, session.prefs).catch((e) => console.error(e));
+    office.start(session.user, session.prefs).then(() => { handleLaunchUrl(); syncPush(); }).catch((e) => console.error(e));
     const out = () => onLogout();
     window.addEventListener('office:logout', out);
     return () => {

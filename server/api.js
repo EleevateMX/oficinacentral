@@ -9,6 +9,7 @@ import {
 import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
 import * as world from './world.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
+import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -79,6 +80,7 @@ function notify(userId, type, actorId, data = {}) {
   const id = Number(db.prepare('INSERT INTO notifications (user_id, type, actor_id, data, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(userId, type, actorId, JSON.stringify(data), now()).lastInsertRowid);
   emitToUser(userId, 'notification', notificationRow(db.prepare('SELECT * FROM notifications WHERE id = ?').get(id)));
+  pushNotification(userId, type, actorId, data);
 }
 
 const notificationRow = (r) => ({ id: r.id, type: r.type, actorId: r.actor_id, data: parseJSON(r.data, {}), read: !!r.read, createdAt: r.created_at });
@@ -585,6 +587,7 @@ function postMessage(user, c, body, kind = 'text') {
     emitToUser(user.id, 'message', msg);
     emitToUser(c.otherId, 'message', msg);
   }
+  pushMessage(user, msg, { channelId: c.channelId, otherId: c.otherId });
   db.prepare('INSERT INTO reads (user_id, conv, last_read_id) VALUES (?, ?, ?) ON CONFLICT(user_id, conv) DO UPDATE SET last_read_id = excluded.last_read_id')
     .run(user.id, c.key, id);
   return msg;
@@ -630,6 +633,8 @@ api.post('/wave/:userId', wrap((req, res) => {
 }));
 
 // ---------- Notificaciones ----------
+registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push/test
+
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);
   res.json({ notifications: rows.map(notificationRow) });
