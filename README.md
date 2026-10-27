@@ -103,10 +103,12 @@ client/src/      interfaz (React + Vite)
   components/    pantallas: mapa, chat, calendario, actividad, perfil, preferencias, decorador
 ```
 
-## Personajes
+## Personajes y decoración
 
-- Estilo chibi en pixel-art: cuadros de **32×48 px**, hoja PNG de **96×192** (3 cuadros × 4 direcciones: abajo, izquierda, derecha, arriba).
-- 10 personajes prediseñados y un personalizador (piel, peinado, ropa, colores, accesorio) en **Editar perfil → Avatar**.
-- Los admins suben personajes dibujados a mano en **Preferencias → Personajes** (se valida el tamaño).
-- `node tools/characters/generate.mjs` exporta las hojas, la galería y la plantilla a `docs/personajes/`.
+- Avatares chibi en pixel-art armados **por piezas**: 13 peinados, 5 ojos, 4 bocas, vello facial, 11 prendas, pantalón/short/falda,
+  gorra o sombrero, lentes, audífonos y extras. **Cualquier color** en cada pieza (más de 15 millones de combinaciones de piezas).
+- Paquetes de inicio: 12 personajes de **Oficina** y 12 de **GTAHUB**, más los PNG que suban los admins (Preferencias → Personajes).
+- Hojas de 96×192 (3 cuadros × 4 direcciones, 32×48 cada uno); `node tools/characters/generate.mjs` exporta galerías y hojas a `docs/personajes/`.
   Para agregar un prediseñado, añade su ficha a `PRESETS` en `shared/sprite.js`.
+- **Decorador**: más de 70 objetos de escritorio y de piso (tecnología, gamer y stream, mascotas, comida, plantas, GTAHUB…).
+  En **Mi lugar** cada quien elige el modelo y color de su escritorio y su silla. Límite de 30 objetos por escritorio.
