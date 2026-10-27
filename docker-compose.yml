@@ -1,0 +1,75 @@
+# Oficina + HTTPS (Caddy) + servidor TURN (coturn) en un solo VPS.
+# Uso: copia .env.example a .env, rellénalo y ejecuta: docker compose up -d --build
+services:
+  app:
+    build: .
+    image: oficinacentral:latest
+    restart: unless-stopped
+    environment:
+      OFFICE_NAME: ${OFFICE_NAME:-GTAHUB}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      TRUST_PROXY: "1"
+      TURN_SECRET: ${TURN_SECRET:?Define TURN_SECRET en .env}
+      TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+    volumes:
+      - office-data:/data
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      DOMAIN: ${DOMAIN:?Define DOMAIN en .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # TURN: retransmite audio/video cuando la conexión directa entre personas está bloqueada.
+  # Usa la red del host para poder abrir el rango de puertos UDP sin mapearlos uno a uno.
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --fingerprint
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
+      - --realm=${DOMAIN}
+      - --external-ip=${PUBLIC_IP:?Define PUBLIC_IP en .env}
+      - --min-port=49160
+      - --max-port=49200
+      - --no-tls
+      - --no-dtls
+      - --no-cli
+      - --no-multicast-peers
+      - --total-quota=200
+      - --stale-nonce=600
+      # No permitir que TURN se use para entrar a redes internas
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+volumes:
+  office-data:
+  caddy-data:
+  caddy-config:

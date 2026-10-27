@@ -7,6 +7,7 @@ import { hashPassword, defaultAvatar, randomToken } from './auth.js';
 import { loadWorld } from './world.js';
 import { api } from './api.js';
 import { initRealtime } from './realtime.js';
+import { scheduleBackups } from './backup.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -45,4 +46,15 @@ if (fs.existsSync(dist)) {
 
 const server = http.createServer(app);
 initRealtime(server);
+scheduleBackups();
+
+// Cierre ordenado (docker stop)
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    server.close();
+    try { db.close(); } catch { /* ya cerrada */ }
+    process.exit(0);
+  });
+}
+
 server.listen(PORT, () => console.log(`Oficina lista en http://localhost:${PORT}`));

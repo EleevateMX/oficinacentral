@@ -10,7 +10,8 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "NODE_ENV=production node server/index.js",
-    "create-admin": "node server/cli/create-admin.js"
+    "create-admin": "node server/cli/create-admin.js",
+    "backup": "node server/cli/backup.js"
   },
   "engines": {
     "node": ">=22.5"

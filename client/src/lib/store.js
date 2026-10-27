@@ -78,11 +78,11 @@ class Office {
   async start(me, prefs) {
     this.set({ me, prefs: mergePrefs(prefs) });
     applyTheme(this.state.prefs.colorMode);
-    const [config, users, floors, chat, notifications] = await Promise.all([
-      api.get('/config'), api.get('/users'), api.get('/floors'), api.get('/chat'), api.get('/notifications'),
+    const [config, ice, users, floors, chat, notifications] = await Promise.all([
+      api.get('/config'), api.get('/ice'), api.get('/users'), api.get('/floors'), api.get('/chat'), api.get('/notifications'),
     ]);
     const byId = Object.fromEntries(users.users.map((u) => [u.id, u]));
-    this.set({ config, users: byId, floors: floors.floors, chat, notifications: notifications.notifications });
+    this.set({ config: { ...config, iceServers: ice.iceServers }, users: byId, floors: floors.floors, chat, notifications: notifications.notifications });
     this.connect();
     this.timers = [
       setInterval(() => this.updateProximity(), 400),

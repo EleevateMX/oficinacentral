@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import { db, now, tx } from './db.js';
 import {
@@ -80,11 +81,29 @@ function notify(userId, type, actorId, data = {}) {
 const notificationRow = (r) => ({ id: r.id, type: r.type, actorId: r.actor_id, data: parseJSON(r.data, {}), read: !!r.read, createdAt: r.created_at });
 
 // ---------- Configuración pública ----------
-api.get('/config', (req, res) => {
-  let iceServers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
-  if (process.env.ICE_SERVERS) iceServers = parseJSON(process.env.ICE_SERVERS, iceServers);
-  res.json({ officeName: process.env.OFFICE_NAME || 'GTAHUB', iceServers });
+api.get('/health', (req, res) => {
+  db.prepare('SELECT 1').get();
+  res.json({ ok: true });
 });
+
+api.get('/config', (req, res) => {
+  res.json({ officeName: process.env.OFFICE_NAME || 'GTAHUB' });
+});
+
+// Servidores ICE para WebRTC. Con TURN_SECRET se generan credenciales temporales
+// (formato "TURN REST API" que entiende coturn con use-auth-secret).
+function iceServersFor(userId) {
+  if (process.env.ICE_SERVERS) return parseJSON(process.env.ICE_SERVERS, []);
+  const servers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  const secret = process.env.TURN_SECRET;
+  const urls = (process.env.TURN_URLS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (secret && urls.length) {
+    const username = `${Math.floor(Date.now() / 1000) + 24 * 3600}:${userId}`;
+    const credential = crypto.createHmac('sha1', secret).update(username).digest('base64');
+    servers.push({ urls, username, credential });
+  }
+  return servers;
+}
 
 // ---------- Autenticación ----------
 api.post('/auth/login', wrap((req, res) => {
@@ -148,6 +167,11 @@ api.post('/invites/:token/accept', wrap((req, res) => {
 
 // Todo lo de abajo requiere sesión
 api.use(requireAuth);
+
+api.get('/ice', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ iceServers: iceServersFor(req.user.id) });
+});
 
 // ---------- Usuarios y perfil ----------
 api.get('/users', (req, res) => {

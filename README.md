@@ -49,6 +49,10 @@ npm run create-admin -- usuario 'contraseña-segura' "Nombre visible"
 
 ## Producción
 
+> **Para montarlo en un VPS con Docker (HTTPS + TURN incluidos) sigue [`DEPLOY.md`](DEPLOY.md).**
+
+Sin Docker:
+
 ```bash
 npm install
 npm run build
@@ -63,7 +67,9 @@ Variables de entorno:
 | `DATA_DIR` | Carpeta de la base de datos (por defecto `./data`) |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NAME`, `ADMIN_EMAIL` | Primer administrador (solo si no hay usuarios) |
 | `OFFICE_NAME` | Nombre que aparece en el panel (por defecto GTAHUB) |
-| `ICE_SERVERS` | JSON con servidores STUN/TURN para WebRTC |
+| `TURN_SECRET`, `TURN_URLS` | Servidor TURN propio (coturn) con credenciales temporales |
+| `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
+| `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |
 | `INSECURE_COOKIES=1` | Solo para pruebas en producción sin HTTPS |
 
