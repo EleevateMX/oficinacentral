@@ -9,7 +9,7 @@
     "dev:server": "node --watch-path=server --watch-path=shared server/index.js",
     "dev:client": "vite",
     "build": "vite build",
-    "start": "NODE_ENV=production node server/index.js",
+    "start": "NODE_ENV=production node server/launch.js",
     "create-admin": "node server/cli/create-admin.js",
     "backup": "node server/cli/backup.js",
     "restore": "node server/cli/restore.js",

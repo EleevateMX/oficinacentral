@@ -9,7 +9,7 @@ Todo corre en un solo servidor:
 
 Tiempo estimado: 30–45 minutos la primera vez.
 
-> ¿Solo quieres una versión de pruebas (dev) rápida? Ve a **[Versión de pruebas en Railway](#versión-de-pruebas-en-railway)** al final.
+> ¿Sin servidor propio? Usa **[Render](#render-producción-sin-servidor-propio)** (recomendado) o **[Railway](#versión-de-pruebas-en-railway)**.
 
 ---
 
@@ -367,3 +367,23 @@ Para volver al modo directo, deja `LIVEKIT_URL` vacío y quita `--profile liveki
    gratuito como **UptimeRobot** o **Better Stack**:
    - Monitor HTTP(s) a `https://tu-dominio/api/health` cada 1–5 minutos (responde `{"ok":true,…}`).
    - Notificación al mismo canal de Discord (ambos servicios aceptan webhooks de Discord) o por correo/SMS.
+
+
+---
+
+## Render (producción sin servidor propio)
+
+El repositorio trae `render.yaml` (Blueprint): servicio Docker, disco de 5 GB en `/data`, HTTPS, revisión de salud y publicación
+solo cuando pasan las pruebas de GitHub. El audio y video van por **LiveKit Cloud** y los respaldos a **Cloudflare R2**.
+
+1. En render.com inicia sesión con GitHub → **New → Blueprint** → elige `EleevateMX/oficinacentral` (rama `main`).
+2. Render te pide las variables marcadas como `sync: false`: pega LiveKit, R2, el webhook de Discord y la app de Discord.
+   `PUBLIC_URL` es tu dominio con `https://` (o el `onrender.com` mientras no tengas dominio).
+3. **Apply**. La primera construcción tarda unos minutos. La contraseña inicial de `admin` está en
+   *Environment → ADMIN_PASSWORD* (se generó sola).
+4. Dominio propio: *Settings → Custom Domains → Add* `oficina.gtahub.gg` y crea en tu DNS el CNAME que te indique.
+5. Si usas Entrar con Discord, agrega en Discord Developer Portal → OAuth2 → Redirects:
+   `https://TU-DOMINIO/api/auth/discord/callback`.
+
+Notas: el plan con disco no puede tener varias instancias y cada actualización tiene unos segundos sin servicio (normal con SQLite).
+El contenedor arranca como root solo para darle el disco al usuario `node` (`server/launch.js`) y luego baja privilegios.
