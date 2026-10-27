@@ -164,3 +164,17 @@ test('acciones del personaje: solo y entre dos (cerca)', async () => {
     a.close(); d.close();
   }
 });
+
+test('temporada: Halloween en su fecha y el admin puede cambiarla', async () => {
+  const { activeSeason } = await import('../shared/seasons.js');
+  assert.equal(activeSeason('auto', new Date(2026, 9, 27)), 'halloween');
+  assert.equal(activeSeason('auto', new Date(2026, 10, 2)), 'halloween');
+  assert.equal(activeSeason('auto', new Date(2026, 6, 1)), null);
+  assert.equal(activeSeason('none', new Date(2026, 9, 31)), null);
+  assert.equal(activeSeason('halloween', new Date(2026, 6, 1)), 'halloween');
+  const admin = await adminClient(srv.url);
+  assert.equal((await admin.patch('/admin/office', { season: 'none' })).data.season, null);
+  assert.equal((await admin.patch('/admin/office', { season: 'halloween' })).data.season, 'halloween');
+  assert.equal((await admin.patch('/admin/office', { season: 'navidad-falsa' })).status, 400);
+  await admin.patch('/admin/office', { season: 'auto' });
+});

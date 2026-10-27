@@ -17,6 +17,7 @@ import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
 import { addScore, topScores, SCORE_GAMES } from './games.js';
+import { activeSeason, SEASON_SETTINGS } from '../shared/seasons.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
 export const api = express.Router();
@@ -120,6 +121,9 @@ export function officeConfig() {
     livekitUrl: livekitEnabled() ? process.env.LIVEKIT_URL : null,
     requireAdmin2fa: sec.requireAdmin2fa(),
     discordLogin: discordEnabled(),
+    // Decoración de temporada (Halloween…): lo que eligió el admin y la que toca hoy
+    seasonSetting: getSetting('season') || 'auto',
+    season: activeSeason(getSetting('season') || 'auto'),
   };
 }
 
@@ -674,6 +678,10 @@ admin.patch('/office', (req, res) => {
   if (b.requireAdmin2fa !== undefined) {
     if (b.requireAdmin2fa && !req.user.totp_enabled) return fail(res, 400, 'Activa primero tu propia verificación en dos pasos');
     setSetting('require_admin_2fa', b.requireAdmin2fa ? '1' : '0');
+  }
+  if (b.season !== undefined) {
+    if (!SEASON_SETTINGS.includes(b.season)) return fail(res, 400, 'Temporada inválida');
+    setSetting('season', b.season);
   }
   if (b.shifts !== undefined) {
     if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');

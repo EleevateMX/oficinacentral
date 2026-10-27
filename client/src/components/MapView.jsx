@@ -8,6 +8,7 @@ import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
+import { buildHalloween, createNpcs, stepNpcs, drawHalloweenDecor, drawHalloweenWalkers, drawHalloweenSky } from '../lib/halloween.js';
 import { EMOTE_BY_KEY } from '@shared/emotes.js';
 
 // Fecha de hoy ('MM-DD') para el gorrito de cumpleaños; se recalcula cada minuto
@@ -97,6 +98,7 @@ export default function MapView({ active }) {
   const wrapRef = useRef(null);
   const staticRef = useRef(null);
   const animRef = useRef({ under: [], top: [] });
+  const hwRef = useRef(null);
   // En el celular el mapa empieza más lejos para ver más de la oficina
   const view = useRef({ zoom: typeof window !== 'undefined' && window.innerWidth < 720 ? 0.9 : 1.5, camX: 0, camY: 0, w: 0, h: 0, dpr: 1 });
   const input = useRef({ held: [], lastStep: 0, path: [], hover: null, pointer: null, drag: null, areaDrag: null });
@@ -172,6 +174,13 @@ export default function MapView({ active }) {
     animRef.current = live;
     staticRef.current = { base: base.c, top: top.c };
   }, [floor, config?.theme, config?.accent, config?.officeName, config?.logoUrl, logoReady]);
+
+  // Decoración de temporada: se arma al cambiar de piso o de temporada
+  useEffect(() => {
+    if (!floor || config?.season !== 'halloween') { hwRef.current = null; return; }
+    const hw = buildHalloween(floor);
+    hwRef.current = { ...hw, npcs: perf === 'efficient' ? null : createNpcs(hw) };
+  }, [floor, config?.season, perf]);
 
   // Tamaño del canvas
   useEffect(() => {
@@ -415,6 +424,10 @@ export default function MapView({ active }) {
         drawLive(animRef.current.top);
         setAnimTime(0);
       }
+      // Temporada (Halloween): adornos en el piso
+      const hw = hwRef.current;
+      const viewRect = { x0: v.camX - v.w / 2 / v.zoom, x1: v.camX + v.w / 2 / v.zoom, y0: v.camY - v.h / 2 / v.zoom, y1: v.camY + v.h / 2 / v.zoom };
+      if (hw) drawHalloweenDecor(ctx, hw, t, viewRect);
 
       // Proyección en vivo: la pantalla compartida aparece sobre las TV de tu sala
       projRef.current = [];
@@ -565,6 +578,11 @@ export default function MapView({ active }) {
       // Avatares
       const players = office.players;
       const list = Object.entries(players).filter(([, p]) => p.floorId === f.id).sort((a, b) => a[1].ry - b[1].ry);
+      // Zombies y perritos de temporada (no en modo ahorro)
+      if (hw?.npcs) {
+        stepNpcs(hw.npcs, f, t, list.map(([, p]) => p));
+        drawHalloweenWalkers(ctx, hw.npcs, t, viewRect);
+      }
       for (const [id, p] of list) {
         const u = us[id];
         // Efecto de regresar al escritorio (Ctrl+D): el efecto dibuja al personaje
@@ -581,7 +599,7 @@ export default function MapView({ active }) {
               ctx.save();
               ctx.globalAlpha = Math.max(0, Math.min(1, pz.alpha ?? 1));
               if (pz.sink) { ctx.beginPath(); ctx.rect(ax - T, ay - 3 * T, 2 * T, 3 * T); ctx.clip(); }
-              drawAvatar(ctx, ax, ay - (pz.lift || 0) + (pz.sink || 0) * 50, u?.avatar, 'down', 0);
+              drawAvatar(ctx, ax, ay - (pz.lift || 0) + (pz.sink || 0) * 50, u?.avatar, pz.broom ? (pz.flip ? 'left' : 'right') : 'down', 0);
               ctx.restore();
             }
             drawFxOver(ctx, fxe, pr, t, pz);
@@ -618,9 +636,9 @@ export default function MapView({ active }) {
         let em = !p.moving && office.emotes[id];
         if (em && em.until < t) { delete office.emotes[id]; em = null; }
         const emOther = em && em.target != null ? office.players[em.target] : null;
-        const pose = em ? emotePose(em, t, p, emOther) : null;
-        const ax = (p.rx + 0.5) * T + sitDX + (pose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (pose?.dy || 0);
-        drawAvatar(ctx, ax, ay, u?.avatar, pose?.dir || seat?.dir || p.dir, pose?.step || step, !!seat, blink || !!pose?.blink);
+        const emPose = em ? emotePose(em, t, p, emOther) : null;
+        const ax = (p.rx + 0.5) * T + sitDX + (emPose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (emPose?.dy || 0);
+        drawAvatar(ctx, ax, ay, u?.avatar, emPose?.dir || seat?.dir || p.dir, emPose?.step || step, !!seat, blink || !!emPose?.blink);
         if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (seat ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
         if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!seat);
         // Sentado de lado: el brazo de enfrente del sillón (o la base de la silla) queda delante de las piernas
@@ -642,6 +660,13 @@ export default function MapView({ active }) {
           ctx.restore();
         }
         ctx.globalAlpha = 1;
+      }
+
+      // Fantasmas, murciélagos y un tinte morado de temporada
+      if (hw) {
+        if (hw.npcs) drawHalloweenSky(ctx, hw.npcs, t, viewRect);
+        ctx.fillStyle = 'rgba(70, 20, 110, 0.07)';
+        ctx.fillRect(0, 0, f.W * T, f.H * T);
       }
 
       // Luz según la hora: tinte y brillos de lámparas, neón y pantallas
