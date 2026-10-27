@@ -18,7 +18,7 @@ export function getIO() {
 export function publicPresence(userId) {
   const p = presence.get(userId);
   if (!p) return { online: false };
-  return { online: true, floorId: p.floorId, x: p.x, y: p.y, dir: p.dir, status: p.status, mic: p.mic, cam: p.cam, screen: p.screen };
+  return { online: true, floorId: p.floorId, x: p.x, y: p.y, dir: p.dir, status: p.status, mic: p.mic, cam: p.cam, screen: p.screen, watching: p.watching };
 }
 
 export function emitToUser(userId, event, payload) {
@@ -78,7 +78,7 @@ export function initRealtime(httpServer) {
 
     let p = presence.get(userId);
     if (!p) {
-      p = { sockets: new Set(), ...spawnFor(user), dir: 'down', status: 'active', mic: false, cam: false, screen: false, connectedAt: now() };
+      p = { sockets: new Set(), ...spawnFor(user), dir: 'down', status: 'active', mic: false, cam: false, screen: false, watching: [], connectedAt: now() };
       presence.set(userId, p);
     }
     p.sockets.add(socket);
@@ -113,6 +113,8 @@ export function initRealtime(httpServer) {
       if (!s || typeof s !== 'object') return;
       if (STATUSES.has(s.status)) p.status = s.status;
       for (const k of ['mic', 'cam', 'screen']) if (typeof s[k] === 'boolean') p[k] = s[k];
+      // Pantallas que esta persona está viendo (para que solo se le envíen esas)
+      if (Array.isArray(s.watching)) p.watching = [...new Set(s.watching.map(Number).filter((id) => Number.isInteger(id) && id !== userId))].slice(0, 4);
       io.emit('player', { id: userId, ...publicPresence(userId) });
     });
 
@@ -122,6 +124,17 @@ export function initRealtime(httpServer) {
     });
 
     initBoards(io, socket, userId);
+
+    // Anotaciones sobre una pantalla compartida: se reenvían a quienes la ven
+    socket.on('annot:join', (sharer) => socket.join(`annot:${Number(sharer)}`));
+    socket.on('annot:leave', (sharer) => socket.leave(`annot:${Number(sharer)}`));
+    socket.on('annot', (m) => {
+      const sharer = Number(m?.sharer);
+      if (!socket.rooms.has(`annot:${sharer}`) || !Array.isArray(m?.p)) return;
+      const pts = m.p.slice(0, 300).map((pt) => [Math.max(0, Math.min(1, Number(pt?.[0]) || 0)), Math.max(0, Math.min(1, Number(pt?.[1]) || 0))]);
+      const color = /^#[0-9a-fA-F]{6}$/.test(m.c) ? m.c : '#FE3377';
+      socket.to(`annot:${sharer}`).emit('annot', { sharer, from: userId, c: color, p: pts, id: String(m.id || '').slice(0, 20) });
+    });
 
     // Señalización WebRTC: solo se reenvía a usuarios conectados
     socket.on('rtc', (msg) => {

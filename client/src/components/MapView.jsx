@@ -10,7 +10,8 @@ import { mapBrand } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
 import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
-import VideoStrip, { ScreenStage } from './VideoStrip.jsx';
+import VideoStrip from './VideoStrip.jsx';
+import { ScreenStage } from './Streams.jsx';
 import Decorator from './Decorator.jsx';
 
 const T = TILE;
@@ -38,9 +39,9 @@ export function interact(o) {
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
   else if (kind === 'screen') {
     const st = office.state;
-    const sc = st.peers.find((p) => p.screen && st.talkingWith.includes(p.id));
-    if (sc) office.set({ stage: sc.id });
-    else if (st.media.screen) office.set({ stage: st.me.id });
+    const sc = st.talkingWith.find((id) => st.users[id]?.online && st.users[id]?.screen);
+    if (sc) office.watch(sc);
+    else if (st.media.screen) office.watch(st.me.id);
     else office.toast({ title: 'Nadie está compartiendo aquí. Usa el botón de compartir pantalla para proyectar la tuya.' });
   }
 }
@@ -317,8 +318,8 @@ export default function MapView({ active }) {
       const scr = activeScreens(office.state, office.media);
       if (scr.length) {
         const area = areaAt(f, mine.x, mine.y);
-        const shown = scr.find((sc) => sc.id === office.state.stage) || scr[0];
-        const vid = videoFor(shown.stream);
+        const shown = scr.find((sc) => sc.id === office.state.stage && sc.stream) || scr.find((sc) => sc.stream) || scr[0];
+        const vid = shown.stream ? videoFor(shown.stream) : null;
         const tvs = f.objects.filter((o) => (o.type === 'bigScreen' || o.type === 'tv') && (area ? inRect(area, o.x, o.y) : Math.hypot(o.x - mine.x, o.y - mine.y) < 8));
         for (const o of tvs) {
           const { w: ow } = objSize(o);
@@ -331,10 +332,19 @@ export default function MapView({ active }) {
           ctx.fillStyle = '#050506';
           ctx.beginPath(); ctx.roundRect(px - 3, py - 3, pw + 6, ph + 6, 6); ctx.fill();
           ctx.restore();
-          if (vid.videoWidth) {
+          if (vid?.videoWidth) {
             const k = Math.min(pw / vid.videoWidth, ph / vid.videoHeight);
             const vw = vid.videoWidth * k, vh = vid.videoHeight * k;
             ctx.drawImage(vid, px + (pw - vw) / 2, py + (ph - vh) / 2, vw, vh);
+          } else {
+            // Aún no la ves: invitación a verla
+            const nm = office.state.users[shown.id]?.displayName || '';
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = '700 9px "Public Sans", sans-serif';
+            ctx.fillText(`${nm} está transmitiendo`, px + pw / 2, py + ph / 2 - 6);
+            ctx.font = '600 8px "Public Sans", sans-serif'; ctx.fillStyle = themeColors().accent;
+            ctx.fillText('Clic para ver ▶', px + pw / 2, py + ph / 2 + 8);
+            ctx.textAlign = 'left';
           }
           ctx.fillStyle = '#e63946';
           ctx.beginPath(); ctx.roundRect(px + 4, py + 4, 34, 11, 3); ctx.fill();
@@ -539,6 +549,16 @@ export default function MapView({ active }) {
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
+        // Etiqueta EN VIVO de quien transmite su pantalla
+        if (p.screen) {
+          ctx.font = '800 9px "Public Sans", system-ui, sans-serif';
+          const lw = ctx.measureText('EN VIVO').width + 10;
+          ctx.fillStyle = '#e63946';
+          ctx.beginPath(); ctx.roundRect(sp.x - lw / 2, y - 27, lw, 14, 4); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText('EN VIVO', sp.x - lw / 2 + 5, y - 19.5);
+          ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        }
         if (p.mic) {
           ctx.fillStyle = '#2fd36b';
           ctx.beginPath(); ctx.arc(sp.x + w / 2 + 6, y, 3, 0, Math.PI * 2); ctx.fill();
@@ -623,7 +643,7 @@ export default function MapView({ active }) {
     const tx = Math.floor(w.x), ty = Math.floor(w.y);
     if (!editMode) {
       const pj = projRef.current.find((r) => inRect(r, w.x, w.y));
-      if (pj) { office.set({ stage: pj.id }); return; }
+      if (pj) { office.watch(pj.id); return; }
     }
 
     if (editMode) {
@@ -653,7 +673,9 @@ export default function MapView({ active }) {
     for (const [id, p] of Object.entries(office.players)) {
       if (p.floorId !== floor.id) continue;
       if (w.x >= p.rx && w.x < p.rx + 1 && w.y >= p.ry - 0.2 && w.y < p.ry + 1) {
-        office.set({ profileCard: Number(id) });
+        // Si transmite y está en tu sala, abre su pantalla
+        if (p.screen && office.state.talkingWith.includes(Number(id))) office.watch(Number(id));
+        else office.set({ profileCard: Number(id) });
         return;
       }
     }

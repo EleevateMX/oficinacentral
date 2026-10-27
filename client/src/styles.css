@@ -721,11 +721,10 @@ input[type='color'] { width: 48px; height: 36px; padding: 2px; cursor: pointer; 
 
 /* Escenario de pantalla compartida */
 .screen-stage { position: absolute; inset: 12px 12px 84px; z-index: 30; background: #050506; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.45); display: flex; flex-direction: column; }
-.screen-stage video { flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #000; }
 .screen-stage:fullscreen { inset: 0; border-radius: 0; }
 .stage-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(20,20,24,.92); color: #fff; }
 .stage-bar .icon-btn { color: #fff; }
-.stage-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-title { font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-switch { display: flex; gap: 4px; }
 .stage-switch button { padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,.1); color: #fff; font-size: 12.5px; }
 .stage-switch button.on { background: var(--accent); }
@@ -791,3 +790,38 @@ input[type='color'] { width: 48px; height: 36px; padding: 2px; cursor: pointer; 
   .notice-grid { grid-template-columns: 1fr 1fr; }
   .board-tools { gap: 6px; }
 }
+
+/* Transmisiones */
+.live-bar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; width: 100%; }
+.live-card { display: flex; align-items: center; gap: 6px; background: rgba(16,16,18,.9); color: #fff; padding: 5px 6px 5px 8px; border-radius: 12px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.live-card.on { outline: 2px solid var(--accent); }
+.live-name { font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-dot { background: #e63946; color: #fff; font: 800 9.5px/1 var(--font-ui, sans-serif); letter-spacing: .04em; padding: 3px 5px; border-radius: 4px; }
+.live-viewers { display: inline-flex; align-items: center; gap: 3px; color: #ddd; font-size: 12px; }
+.btn.tiny.danger { background: #e63946; color: #fff; border-color: #e63946; }
+.live-ico { color: #e63946; }
+.stage-focus { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 8px; }
+.stage-side { width: 220px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.stage-grid { flex: 1; min-height: 0; display: grid; gap: 8px; padding: 8px; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(0, 1fr); }
+.stage-grid.n2 { grid-template-rows: 1fr; }
+.stage-grid.n3 > :first-child { grid-row: span 2; }
+.stream-tile { position: relative; flex: 1; min-width: 0; min-height: 0; background: #000; border-radius: 10px; overflow: hidden; }
+.stream-tile.compact { flex: none; aspect-ratio: 16 / 9; cursor: pointer; }
+.stream-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.stream-tile:fullscreen { border-radius: 0; }
+.stream-wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 13px; padding: 12px; text-align: center; }
+.stream-top { position: absolute; left: 8px; top: 8px; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.55); color: #fff; padding: 4px 8px; border-radius: 8px; font-size: 12.5px; pointer-events: none; }
+.stream-name { font-weight: 600; }
+.stream-tools { position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,.6); border-radius: 10px; padding: 3px 6px; opacity: 0; transition: opacity .15s; }
+.stream-tile:hover .stream-tools, .stream-tile:focus-within .stream-tools, .stream-tile.focused .stream-tools { opacity: 1; }
+.stream-tools .icon-btn { color: #fff; width: 30px; height: 30px; }
+.stream-tools .icon-btn.active { background: var(--accent); }
+.pen-sw { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; }
+.pen-sw.on { border-color: #fff; }
+canvas.annot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.seg.dark { background: rgba(255,255,255,.08); }
+.seg.dark button { color: #ddd; }
+.shell.mobile .stage-focus { flex-direction: column; }
+.shell.mobile .stage-side { width: auto; flex-direction: row; height: 80px; }
+.shell.mobile .stage-grid { grid-template-columns: 1fr; }

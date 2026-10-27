@@ -1,6 +1,6 @@
 import { since } from '../lib/time.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase } from 'lucide-react';
+import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase, MonitorUp } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
 import { fmtTime, sameDay } from '../lib/time.js';
@@ -48,7 +48,11 @@ export default function ProfileCard({ userId }) {
           <button className="btn primary flex1" onClick={() => office.set({ modal: { type: 'profile' }, profileCard: null })}><User size={15} /> Editar perfil</button>
         ) : (
           <>
-            <button className="btn primary flex1" disabled={!u.online} onClick={() => office.goTo(u.id)}><Navigation size={15} /> Ir a</button>
+            {u.online && u.screen && u.id !== me.id ? (
+              <button className="btn primary flex1" onClick={() => { office.watchUser(u.id); close(); }}><MonitorUp size={15} /> Ver transmisión</button>
+            ) : (
+              <button className="btn primary flex1" disabled={!u.online} onClick={() => office.goTo(u.id)}><Navigation size={15} /> Ir a</button>
+            )}
             <button className="btn icon" title="Saludar" onClick={() => office.wave(u.id).then(() => office.toast({ title: `Saludaste a ${u.displayName} 👋` })).catch((e) => office.toast({ title: e.message, kind: 'error' }))}><Hand size={16} /></button>
             <button className="btn icon" title="Mensaje" onClick={() => { office.openConv(`d:${u.id}`); close(); }}><MessageCircle size={16} /></button>
           </>

@@ -30,6 +30,8 @@ export class MediaManager extends EventTarget {
       screenQuality: 'balanced', screenAudio: true, screenVolume: 1,
     };
     this.closeTimers = new Map();
+    this.watchers = new Set(); // quiénes están viendo mi pantalla
+    this.streamVolumes = new Map(); // volumen por pantalla que veo
     this.onSignal = ({ from, data }) => this.handleSignal(from, data);
     socket.on('rtc', this.onSignal);
   }
@@ -39,14 +41,14 @@ export class MediaManager extends EventTarget {
   }
 
   get state() {
-    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack };
+    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack, viewers: [...this.watchers] };
   }
 
   updateSettings(s) {
     Object.assign(this.settings, s);
     for (const p of this.peers.values()) {
       for (const el of [p.audio, p.screenAudio]) if (this.settings.speakerId && el.setSinkId) el.setSinkId(this.settings.speakerId).catch(() => {});
-      p.screenAudio.volume = this.settings.screenVolume;
+      p.screenAudio.volume = (this.streamVolumes.get(p.id) ?? 1) * this.settings.screenVolume;
     }
     this.applyBitrates();
   }
@@ -121,6 +123,20 @@ export class MediaManager extends EventTarget {
     this.emit('local', this.state);
   }
 
+  setWatchers(ids) {
+    const next = new Set(ids);
+    if (next.size === this.watchers.size && [...next].every((id) => this.watchers.has(id))) return;
+    this.watchers = next;
+    this.syncSenders();
+    this.emit('local', this.state);
+  }
+
+  setStreamVolume(id, v) {
+    this.streamVolumes.set(id, v);
+    const p = this.peers.get(id);
+    if (p) p.screenAudio.volume = v * this.settings.screenVolume;
+  }
+
   // Reparte la subida entre quienes ven tu pantalla para que no se trabe
   applyBitrates() {
     const preset = SCREEN_PRESETS[this.settings.screenQuality] || SCREEN_PRESETS.balanced;
@@ -152,7 +168,12 @@ export class MediaManager extends EventTarget {
   }
 
   attachTracks(p) {
-    const wanted = { audio: this.audioTrack, video: this.videoTrack, screen: this.screenTrack, screenAudio: this.screenAudioTrack };
+    // La pantalla solo se envía a quien eligió verla (como en Discord)
+    const watching = this.watchers.has(p.id);
+    const wanted = {
+      audio: this.audioTrack, video: this.videoTrack,
+      screen: watching ? this.screenTrack : null, screenAudio: watching ? this.screenAudioTrack : null,
+    };
     for (const kind of ['audio', 'video', 'screen', 'screenAudio']) {
       const track = wanted[kind];
       const sender = p.senders[kind];

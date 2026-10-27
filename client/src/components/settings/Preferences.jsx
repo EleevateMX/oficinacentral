@@ -215,7 +215,7 @@ function ScreenPrefs() {
       <Row title="Compartir el audio de la PC" desc="Música, juegos o videos que suenan en tu equipo. En Chrome o Edge marca “Compartir audio” al elegir qué compartir.">
         <Toggle checked={sc.audio} onChange={(v) => set('audio', v)} />
       </Row>
-      <Row title="Abrir en grande cuando alguien comparte" desc="Si estás en su sala o junto a su escritorio">
+      <Row title="Ver automáticamente las transmisiones" desc="Si está apagado, aparece un aviso con el botón Ver (ahorra internet cuando varias personas transmiten)">
         <Toggle checked={sc.autoOpen} onChange={(v) => set('autoOpen', v)} />
       </Row>
       <Row title="Volumen de las pantallas de otros">

@@ -51,6 +51,7 @@ export default function PeoplePanel() {
   }, [users, q]);
 
   const sub = (u) => {
+    if (u.online && u.screen) return `🔴 En vivo${u.shift ? ` · ${u.shift}` : ''}`;
     if (u.shift) return `🖥️ En turno ${u.shift} · ${since(u.shiftAt)}`;
     const status = STATUS[u.status || 'active'].label;
     const where = u.floorId && floors.length > 1 && u.floorId !== floor?.id ? ` · ${floors.find((f) => f.id === u.floorId)?.name || ''}` : '';

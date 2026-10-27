@@ -12,7 +12,7 @@ export const DEFAULT_PREFS = {
   calendar: { weekDays: 7, firstDay: 0 },
   audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true, notifVolume: 0.6, muteOnHidden: false },
   video: { hd: false, hideSelf: false },
-  screen: { quality: 'balanced', audio: true, volume: 1, autoOpen: true },
+  screen: { quality: 'balanced', audio: true, volume: 1, autoOpen: false },
   meetings: { maxTiles: 9 },
   notifications: { remind5: true, remindStart: true, remindSound: true, chat: 'dms', chatSound: 'dms', desktop: false },
   performance: { mode: 'balanced' },
@@ -56,7 +56,10 @@ class Office {
       eventsVersion: 0,
       media: { mic: false, cam: false, screen: false },
       peers: [],
-      stage: null, // id de la persona cuya pantalla se ve en grande
+      stage: null, // pantalla enfocada (id de quien comparte)
+      watching: [], // pantallas que estoy viendo (máx. 4), como "Ver transmisión" en Discord
+      stageOpen: false,
+      stageLayout: 'focus', // 'focus' | 'grid'
       talkingWith: [],
       space: null,
       modal: null, // { type: 'prefs', section } | { type: 'profile' } | { type: 'invite' } ...
@@ -144,14 +147,17 @@ class Office {
       if (e.message === 'unauthorized') window.location.reload();
     });
     s.on('hello', async ({ you, players }) => {
+      this.lastWatchKey = null;
       this.players = {};
       for (const [id, p] of Object.entries(players)) this.players[id] = { ...p, rx: p.x, ry: p.y };
       if (!this.media) {
         this.media = new MediaManager({ socket: s, myId: you, iceServers: this.state.config.iceServers });
         this.applyMediaPrefs();
         this.media.addEventListener('local', (e) => {
+          const { viewers, ...state } = e.detail;
           this.set({ media: e.detail });
-          s.emit('state', e.detail);
+          s.emit('state', state);
+          this.syncStreams();
         });
         this.media.addEventListener('peers', (e) => this.set({ peers: e.detail }));
       } else {
@@ -173,8 +179,11 @@ class Office {
       if (!p.online) delete this.players[p.id];
       else this.players[p.id] = { ...prev, ...p, rx: prev && prev.floorId === p.floorId ? prev.rx : p.x, ry: prev && prev.floorId === p.floorId ? prev.ry : p.y };
       if (this.state.users[p.id]) {
+        const wasLive = this.state.users[p.id].online && this.state.users[p.id].screen;
         this.set((st) => ({ users: { ...st.users, [p.id]: { ...st.users[p.id], ...p } }, presenceVersion: st.presenceVersion + 1 }));
+        if (!wasLive && p.screen && p.online && p.id !== this.state.me.id) this.onGoLive(p.id);
       }
+      this.syncStreams();
       if (p.id === this.state.me.id && p.online && p.floorId !== this.state.floor?.id) this.showFloor(p.floorId);
     });
     s.on('move', (m) => {
@@ -306,10 +315,65 @@ class Office {
     }
     ids.sort((a, b) => a - b);
     this.media.setPeers(ids);
+    this.syncStreams(ids);
+    if (this.pendingWatch && ids.includes(this.pendingWatch)) { const w = this.pendingWatch; this.pendingWatch = null; this.watch(w); }
     const prev = this.state.talkingWith;
     if (prev.length !== ids.length || prev.some((v, i) => v !== ids[i]) || space !== this.state.space) {
       this.set({ talkingWith: ids, space });
     }
+  }
+
+  // ---------- Transmisiones (pantallas compartidas) ----------
+  watch(id) {
+    this.set((st) => {
+      const watching = st.watching.includes(id) ? st.watching : [...st.watching, id].slice(-4);
+      return { watching, stage: id, stageOpen: true };
+    });
+    this.syncStreams();
+  }
+
+  unwatch(id) {
+    this.set((st) => {
+      const watching = st.watching.filter((x) => x !== id);
+      return { watching, stage: st.stage === id ? watching[watching.length - 1] ?? null : st.stage, stageOpen: st.stageOpen && watching.length > 0 };
+    });
+    this.syncStreams();
+  }
+
+  // Ver la transmisión de alguien: si no está en tu sala, caminas hasta allá y se abre al llegar
+  watchUser(id) {
+    if (this.state.talkingWith.includes(id)) return this.watch(id);
+    this.pendingWatch = id;
+    this.goTo(id);
+  }
+
+  // Alguien de tu sala empezó a transmitir
+  onGoLive(id) {
+    if (!this.state.talkingWith.includes(id)) return;
+    const name = this.state.users[id]?.displayName || 'Alguien';
+    if (this.state.prefs.screen.autoOpen && this.state.watching.length < 4) this.watch(id);
+    else this.toast({ title: `🔴 ${name} está transmitiendo su pantalla`, action: { label: 'Ver', run: () => this.watch(id) } });
+  }
+
+  // Mantiene la lista de pantallas que veo y avisa quién ve la mía
+  syncStreams(talking = this.state.talkingWith) {
+    const st = this.state;
+    if (!st.me) return;
+    const meId = st.me.id;
+    const live = (id) => (id === meId ? st.media.screen : talking.includes(id) && st.users[id]?.online && st.users[id]?.screen);
+    const watching = st.watching.filter(live);
+    if (watching.length !== st.watching.length) {
+      this.set({ watching, stage: watching.includes(st.stage) ? st.stage : watching[watching.length - 1] ?? null, stageOpen: st.stageOpen && watching.length > 0 });
+    }
+    const remote = watching.filter((id) => id !== meId);
+    const key = remote.join(',');
+    if (key !== this.lastWatchKey) {
+      this.lastWatchKey = key;
+      this.socket?.emit('state', { watching: remote });
+    }
+    // Quién me está viendo (y está en mi sala): solo a ellos se les envía mi pantalla
+    const watchers = talking.filter((id) => st.users[id]?.online && (st.users[id]?.watching || []).includes(meId));
+    this.media?.setWatchers(watchers);
   }
 
   spaceLabel() {
