@@ -457,6 +457,7 @@ function templateHQ() {
   b.o('neonLogo', 75, 9.15); b.o('noticeBoard', 88, 10);
   b.o('fairyLights', 29.25, 10); b.o('fairyLights', 34.5, 10);
   b.o('floorLogo', 41, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
+  for (const [type, x, y, extra] of RECEPTION_EXTRAS) b.o(type, x, y, extra);
   b.o('flagPole', 39, 59); b.o('flagPole', 46, 59);
   b.o('floorLogo', 73, 39);
   for (const x0 of [5, 52]) b.o('poster', x0 + 8.6, 47);
@@ -547,6 +548,23 @@ export function deskZone(o) {
   return { x: Math.floor(o.x), y: Math.floor(o.y) - 1, w: Math.ceil(w), h: Math.ceil(h) + 2 };
 }
 
+// Recepción renovada: letrero con el logo detrás del mostrador, alfombra de bienvenida
+// y sillones de espera. También se agregan una vez a las oficinas ya creadas (server/world.js).
+export const RECEPTION_EXTRAS = [
+  ['neonLogo', 41, 47.1, {}],
+  ['carpetRunner', 42, 54, { h: 4 }],
+  ['armchair', 40, 55, { rot: 1, color: '#2a2a30' }],
+  ['armchair', 45, 55, { rot: 3, color: '#2a2a30' }],
+  ['hexLamp', 39.1, 55.1, {}],
+  ['hexLamp', 46.15, 55.1, {}],
+];
+
+// Donde va la decoración de un escritorio: encima del mueble y la fila de atrás (no donde va la silla)
+export function deskDecorZone(o) {
+  const { w, h } = objSize(o);
+  return { x: Math.floor(o.x), y: Math.floor(o.y) - 1, w: Math.ceil(w), h: Math.ceil(h) + 1.5 };
+}
+
 // Combina plantilla + áreas + objetos en el estado jugable de un piso.
 export function composeFloor({ template, areas = [], objects = [] }) {
   const t = getTemplate(template);
@@ -567,7 +585,7 @@ export function composeFloor({ template, areas = [], objects = [] }) {
         if (j >= 0 && i >= 0 && j < H && i < W) solid[j][i] = true;
       }
     }
-    if (c.claimable) desks.push({ id: o.id, object: o, zone: deskZone(o) });
+    if (c.claimable) desks.push({ id: o.id, object: o, zone: deskZone(o), decorZone: deskDecorZone(o) });
   }
 
   return { template, W, H, spawn: t.spawn, floor, walls, solid, areas, objects, desks, decals: t.decals || [] };

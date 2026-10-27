@@ -805,6 +805,35 @@ D.tacos = (ctx, x, y, w, h) => { for (let k = 0; k < 3; k++) { ctx.fillStyle = '
 D.cake = (ctx, x, y, w, h, o, c) => { R(ctx, '#7a4a2b', x + 2, y + 7, w - 4, 7); R(ctx, o.color || c.color, x + 2, y + 6, w - 4, 3); R(ctx, '#fff', x + 2, y + 6, w - 4, 1); R(ctx, '#ffd23f', x + w / 2 - 1, y + 1, 2, 5); R(ctx, '#FF8A3D', x + w / 2 - 1, y, 2, 2); };
 
 // ----- GTAHUB -----
+// Logo de la oficina como imagen (el de GTAHUB o el que suba el admin)
+const logoCache = new Map();
+function brandLogo() {
+  const url = BRAND.logo;
+  if (!url) return null;
+  let im = logoCache.get(url);
+  if (!im) { im = new Image(); im.src = url; logoCache.set(url, im); }
+  return im.complete && im.naturalWidth ? im : null;
+}
+// Carga el logo antes de pintar la capa fija del mapa
+export function preloadBrandLogo(url) {
+  if (!url) return Promise.resolve(false);
+  let im = logoCache.get(url);
+  if (!im) { im = new Image(); im.src = url; logoCache.set(url, im); }
+  if (im.complete && im.naturalWidth) return Promise.resolve(true);
+  return new Promise((res) => { im.addEventListener('load', () => res(true), { once: true }); im.addEventListener('error', () => res(false), { once: true }); });
+}
+function drawLogo(ctx, cx, cy, size) {
+  const im = brandLogo();
+  if (!im) return false;
+  const k = size / Math.max(im.naturalWidth, im.naturalHeight);
+  const w = im.naturalWidth * k;
+  const h = im.naturalHeight * k;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(im, cx - w / 2, cy - h / 2, w, h);
+  ctx.restore();
+  return true;
+}
 function hexPath(ctx, cx, cy, r) {
   ctx.beginPath();
   for (let k = 0; k < 6; k++) { const a = Math.PI / 3 * k - Math.PI / 2; ctx[k ? 'lineTo' : 'moveTo'](cx + r * Math.cos(a), cy + r * Math.sin(a)); }
@@ -824,6 +853,7 @@ D.hexBadge = (ctx, x, y, w, h, o, c) => {
 };
 D.cubeLogo = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color; const cx = x + w / 2; const cy = y + h / 2; const r = 7;
+  if (drawLogo(ctx, cx, cy, 16)) return;
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy - r / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx - r, cy - r / 2); ctx.closePath(); ctx.fill();
   ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(cx - r, cy - r / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy + r / 2); ctx.closePath(); ctx.fill();
   ctx.fillStyle = shade(col, -0.35); ctx.beginPath(); ctx.moveTo(cx + r, cy - r / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx + r, cy + r / 2); ctx.closePath(); ctx.fill();
@@ -865,10 +895,20 @@ D.pingPong = (ctx, x, y, w, h, o, c) => {
 };
 D.reception = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color;
-  R(ctx, 'rgba(0,0,0,.18)', x + 2, y + h - 1, w - 2, 5);
-  RR(ctx, col, x, y - 4, w, h + 4, 4);
-  R(ctx, shade(col, 0.2), x + 2, y - 2, w - 4, 3);
-  R(ctx, '#FE3377', x + 4, y + h - 6, w - 8, 2);
+  const p = BRAND.primary || '#FE3377';
+  R(ctx, 'rgba(0,0,0,.22)', x + 2, y + h - 1, w - 2, 6);
+  // cubierta
+  RR(ctx, shade(col, 0.28), x - 2, y - 7, w + 4, 8, 3);
+  R(ctx, 'rgba(255,255,255,.18)', x + 2, y - 6, w - 4, 1.5);
+  // frente
+  RR(ctx, col, x, y - 1, w, h + 1, 3);
+  R(ctx, shade(col, 0.12), x + 3, y + 1, w - 6, 2);
+  // tira de luz
+  ctx.save(); ctx.shadowColor = p; ctx.shadowBlur = 8;
+  R(ctx, p, x + 4, y + h - 5, w - 8, 2);
+  ctx.restore();
+  // logo al frente
+  if (!drawLogo(ctx, x + w / 2, y + h / 2 - 2, 18)) { ctx.fillStyle = p; hexPath(ctx, x + w / 2, y + h / 2 - 2, 6); ctx.fill(); }
 };
 D.vending = (ctx, x, y, w, h, o, c) => {
   const col = o.color || c.color;
@@ -936,6 +976,7 @@ D.wallBanner = (ctx, x, y, w, h, o) => {
   ctx.beginPath(); ctx.moveTo(x + 5, y + 4); ctx.lineTo(x + w - 5, y + 4); ctx.lineTo(x + w - 5, y + h - 4); ctx.lineTo(x + w / 2, y + h - 11); ctx.lineTo(x + 5, y + h - 4); ctx.closePath(); ctx.fill();
   R(ctx, shade(p, -0.18), x + w - 9, y + 4, 4, h - 12);
   R(ctx, d, x + 5, y + 7, w - 10, 2);
+  if (drawLogo(ctx, x + w / 2, y + h / 2 - 3, 15)) return;
   ctx.fillStyle = l; hexPath(ctx, x + w / 2, y + h / 2 - 3, 7); ctx.fill();
   ctx.fillStyle = p; hexPath(ctx, x + w / 2, y + h / 2 - 3, 4.5); ctx.fill();
   ctx.fillStyle = s; hexPath(ctx, x + w / 2, y + h / 2 - 3, 2); ctx.fill();
@@ -946,7 +987,7 @@ D.neonLogo = (ctx, x, y, w, h, o) => {
   ctx.save();
   ctx.shadowColor = p; ctx.shadowBlur = 8;
   ctx.strokeStyle = p; ctx.lineWidth = 1.6;
-  hexPath(ctx, x + 11, y + h / 2, 6); ctx.stroke();
+  if (!drawLogo(ctx, x + 11, y + h / 2, 14)) { hexPath(ctx, x + 11, y + h / 2, 6); ctx.stroke(); }
   const name = BRAND.name.slice(0, 18);
   let size = 13;
   ctx.font = `${size}px "Archivo Black", "Arial Black", sans-serif`;
@@ -966,6 +1007,7 @@ D.floorLogo = (ctx, x, y, w, h, o) => {
   ctx.fillStyle = d; hexPath(ctx, cx, cy, r); ctx.fill();
   ctx.strokeStyle = p; ctx.lineWidth = 3; hexPath(ctx, cx, cy, r - 2); ctx.stroke();
   ctx.strokeStyle = s; ctx.lineWidth = 1.5; hexPath(ctx, cx, cy, r - 9); ctx.stroke();
+  if (drawLogo(ctx, cx, cy, r * 1.15)) { ctx.restore(); return; }
   // cubo isométrico
   const c = r * 0.32;
   ctx.fillStyle = l; ctx.beginPath(); ctx.moveTo(cx, cy - c); ctx.lineTo(cx + c, cy - c / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx - c, cy - c / 2); ctx.closePath(); ctx.fill();
@@ -980,7 +1022,7 @@ D.poster = (ctx, x, y, w, h, o) => {
   const g = ctx.createLinearGradient(x, y, x, y + h);
   g.addColorStop(0, p); g.addColorStop(1, s);
   ctx.fillStyle = g; ctx.fillRect(x + 4, y + 3, w - 8, h - 14);
-  ctx.strokeStyle = l; ctx.lineWidth = 1.5; hexPath(ctx, x + w / 2, y + 3 + (h - 14) / 2, 6); ctx.stroke();
+  if (!drawLogo(ctx, x + w / 2, y + 3 + (h - 14) / 2, 14)) { ctx.strokeStyle = l; ctx.lineWidth = 1.5; hexPath(ctx, x + w / 2, y + 3 + (h - 14) / 2, 6); ctx.stroke(); }
   R(ctx, l, x + 6, y + h - 9, w - 12, 2); R(ctx, shade(l, -0.4), x + 6, y + h - 6, (w - 12) * 0.6, 1);
 };
 D.fairyLights = (ctx, x, y, w, h, o) => {
@@ -1031,8 +1073,17 @@ D.flagPole = (ctx, x, y, w, h, o) => {
   ctx.lineTo(x + w / 2 + 28, y - 27);
   ctx.quadraticCurveTo(x + w / 2 + 14, y - 33, x + w / 2 + 1, y - 28);
   ctx.closePath(); ctx.fill();
+  if (drawLogo(ctx, x + w / 2 + 14, y - 36.5, 12)) return;
   ctx.fillStyle = l; hexPath(ctx, x + w / 2 + 14, y - 36.5, 4.5); ctx.fill();
   ctx.fillStyle = s; hexPath(ctx, x + w / 2 + 14, y - 36.5, 2); ctx.fill();
+};
+
+D.carpetRunner = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, shade(col, -0.25), x + 2, y, w - 4, h);
+  R(ctx, col, x + 4, y, w - 8, h);
+  const s = BRAND.secondary || '#FFCC00';
+  R(ctx, s, x + 6, y, 1.5, h); R(ctx, s, x + w - 7.5, y, 1.5, h);
 };
 
 const fallback = (ctx, x, y, w, h) => RR(ctx, '#c9ced6', x + 2, y + 2, w - 4, h - 4, 4);

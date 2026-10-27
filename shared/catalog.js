@@ -71,6 +71,7 @@ export const CATALOG = {
   clock: f('Reloj', 'deco', 1, 1, { solid: false }),
   window: f('Ventana', 'deco', 4, 1, { solid: false }),
   rug: f('Tapete', 'deco', 3, 2, { solid: false, colorable: true, color: '#8ecae6', under: true }),
+  carpetRunner: f('Alfombra de bienvenida', 'deco', 2, 4, { solid: false, colorable: true, color: '#FE3377', under: true }),
   poolTable: f('Mesa de billar', 'deco', 4, 2, { colorable: true, color: '#1f8a5b' }),
   pingPong: f('Ping pong', 'deco', 4, 2, { colorable: true, color: '#2f6fd6' }),
   reception: f('Recepción', 'muebles', 5, 1, { colorable: true, color: '#101010' }),
