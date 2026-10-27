@@ -76,6 +76,7 @@ Variables de entorno:
 | `TURN_SECRET`, `TURN_URLS` | Servidor TURN propio (coturn) con credenciales temporales |
 | `ICE_SERVERS` | JSON con servidores STUN/TURN fijos (alternativa a lo anterior) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Servidor de medios LiveKit (propio o LiveKit Cloud). Vacío = conexión directa P2P |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |
@@ -135,6 +136,9 @@ client/src/      interfaz (React + Vite)
 - **Pantalla compartida** como uso principal: calidad *Texto nítido*, *Equilibrada* o *Juegos y video* (hasta 60 fps), audio de la PC,
   ancho de banda repartido entre quienes ven, vista en grande con pantalla completa y ventana flotante, y proyección en vivo sobre la TV o
   la pantalla gigante de la sala.
+- **Transmisiones al estilo Discord**: varias personas pueden transmitir a la vez; cada quien elige qué ver (botón *Ver*),
+  en grande o en mosaico de hasta 4, con contador de espectadores, volumen por transmisión y dibujo encima.
+  Con LiveKit configurado, el servidor reparte las pantallas y solo te llegan las que ves.
 - **En turno**: cada quien marca en qué turno o servidor está (los define el admin en Marca de la oficina → Turnos).
 - **Salas apartadas**: una reunión del calendario con sala muestra "Ocupada" o la próxima hora en el mapa.
 - **Pizarrón** compartido en vivo y **tablero de anuncios** (tecla **X** junto al objeto, o clic).

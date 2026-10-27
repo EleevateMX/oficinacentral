@@ -123,6 +123,9 @@ export class MediaManager extends EventTarget {
     this.emit('local', this.state);
   }
 
+  // En P2P la pantalla llega solo si quien comparte me la envía (ver setWatchers)
+  setWatching() {}
+
   setWatchers(ids) {
     const next = new Set(ids);
     if (next.size === this.watchers.size && [...next].every((id) => this.watchers.has(id))) return;

@@ -100,6 +100,8 @@ function officeConfig() {
     accent: getSetting('accent') || null,
     logoUrl: getSetting('logo') ? `/api/office/logo?v=${logoV}` : null,
     shifts: parseJSON(getSetting('shifts') || 'null', null) || DEFAULT_SHIFTS,
+    // Servidor de medios: LiveKit si está configurado; si no, conexión directa (P2P)
+    livekitUrl: livekitEnabled() ? process.env.LIVEKIT_URL : null,
   };
 }
 
@@ -220,6 +222,36 @@ api.post('/invites/:token/accept', wrap((req, res) => {
 
 // Todo lo de abajo requiere sesión
 api.use(requireAuth);
+
+// ---------- LiveKit (servidor de medios / SFU) ----------
+function livekitEnabled() {
+  return !!(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET);
+}
+
+const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+// Token de acceso (JWT HS256) para la sala única de la oficina
+function livekitToken(user) {
+  const nowS = Math.floor(Date.now() / 1000);
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const claims = {
+    iss: process.env.LIVEKIT_API_KEY,
+    sub: String(user.id),
+    name: user.display_name,
+    nbf: nowS - 10,
+    exp: nowS + 6 * 3600,
+    video: { room: process.env.LIVEKIT_ROOM || 'oficina', roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false },
+  };
+  const data = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
+  const sig = crypto.createHmac('sha256', process.env.LIVEKIT_API_SECRET).update(data).digest();
+  return `${data}.${b64url(sig)}`;
+}
+
+api.get('/livekit/token', (req, res) => {
+  if (!livekitEnabled()) return fail(res, 404, 'LiveKit no está configurado');
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ url: process.env.LIVEKIT_URL, token: livekitToken(req.user) });
+});
 
 api.get('/ice', wrap(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');

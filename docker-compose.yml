@@ -1,5 +1,7 @@
 # Nuvora: oficina + HTTPS (Caddy) + servidor TURN (coturn) en un solo VPS.
 # Uso: copia .env.example a .env, rellénalo y ejecuta: docker compose up -d --build
+# Con servidor de medios LiveKit (recomendado para varias transmisiones a la vez):
+#   docker compose --profile livekit up -d --build
 services:
   app:
     build: .
@@ -16,6 +18,10 @@ services:
       TURN_SECRET: ${TURN_SECRET:?Define TURN_SECRET en .env}
       TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      # Vacío = audio y pantallas directo entre personas (P2P)
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
     volumes:
       - office-data:/data
     expose:
@@ -32,6 +38,8 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -69,6 +77,27 @@ services:
       - --denied-peer-ip=172.16.0.0-172.31.255.255
       - --denied-peer-ip=192.168.0.0-192.168.255.255
       - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+  # LiveKit (SFU): cada quien sube su pantalla una vez y el servidor la reparte.
+  # Se enciende con --profile livekit. Caddy le pasa las conexiones de /rtc.
+  livekit:
+    image: livekit/livekit-server:v1.9.1
+    profiles: ["livekit"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        bind_addresses: ["0.0.0.0"]
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 50200
+          use_external_ip: false
+          node_ip: ${PUBLIC_IP:-}
+        logging:
+          level: info
 
 volumes:
   office-data:

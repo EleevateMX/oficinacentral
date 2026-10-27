@@ -108,3 +108,8 @@ test('pizarrón: los trazos llegan en vivo y se guardan', async () => {
     a.close(); b.close();
   }
 });
+
+test('sin LiveKit configurado no se entregan tokens', async () => {
+  assert.equal((await admin.get('/livekit/token')).status, 404);
+  assert.equal((await admin.get('/config')).data.livekitUrl, null);
+});

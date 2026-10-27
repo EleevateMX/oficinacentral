@@ -151,7 +151,11 @@ class Office {
       this.players = {};
       for (const [id, p] of Object.entries(players)) this.players[id] = { ...p, rx: p.x, ry: p.y };
       if (!this.media) {
-        this.media = new MediaManager({ socket: s, myId: you, iceServers: this.state.config.iceServers });
+        // LiveKit se carga solo si la oficina lo tiene configurado
+        const LiveKitManager = this.state.config.livekitUrl ? (await import('./livekit.js')).LiveKitManager : null;
+        this.media = LiveKitManager
+          ? new LiveKitManager({ myId: you, getToken: () => api.get('/livekit/token') })
+          : new MediaManager({ socket: s, myId: you, iceServers: this.state.config.iceServers });
         this.applyMediaPrefs();
         this.media.addEventListener('local', (e) => {
           const { viewers, ...state } = e.detail;
@@ -374,6 +378,7 @@ class Office {
     // Quién me está viendo (y está en mi sala): solo a ellos se les envía mi pantalla
     const watchers = talking.filter((id) => st.users[id]?.online && (st.users[id]?.watching || []).includes(meId));
     this.media?.setWatchers(watchers);
+    this.media?.setWatching(remote);
   }
 
   spaceLabel() {

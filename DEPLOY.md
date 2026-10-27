@@ -205,9 +205,36 @@ Sirve para que el equipo pruebe antes de producción. El repositorio ya trae `ra
    - Alternativa: cualquier TURN con usuario fijo (p. ej. Metered) en `ICE_SERVERS` como JSON.
 6. Entra con `admin` y la contraseña del paso 3. Invita al equipo desde **Preferencias → Miembros → Invitar a varias personas a la vez**.
 
-**Límites a tener en cuenta en dev:** el audio, el video y las pantallas van directo entre personas (malla P2P).
-Quien comparte pantalla envía una copia a cada persona que la ve; la app reparte unos 14 Mbps de subida entre todos.
-Con más de ~6 personas viendo la misma pantalla conviene, en producción, agregar un servidor de medios (SFU) como LiveKit.
+**Varias transmisiones a la vez:** sin servidor de medios, cada pantalla viaja directo de persona a persona y quien comparte
+envía una copia a cada espectador (funciona bien hasta ~6 personas viendo). Para más, usa **LiveKit Cloud** (tiene plan gratis):
+
+1. Crea un proyecto en LiveKit Cloud y copia *URL* (`wss://…livekit.cloud`), *API Key* y *API Secret* (Settings → Keys).
+2. En Railway agrega `LIVEKIT_URL`, `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET` y vuelve a desplegar.
+3. Listo: la app usa LiveKit en automático. Con LiveKit ya no hace falta el TURN de Cloudflare (LiveKit trae el suyo).
 
 **Respaldos:** el respaldo diario se guarda dentro del volumen (`/data/backups`). Para bajarlo, usa *Volume → Backups* de Railway
 o el comando `npm run backup` desde una consola del servicio.
+
+
+---
+
+## Servidor de medios LiveKit en el VPS (producción)
+
+Recomendado cuando varias personas transmiten su pantalla a la vez. Cada quien sube su pantalla **una sola vez** y LiveKit la reparte;
+además manda una versión ligera a quien tenga mala conexión.
+
+1. En `.env`:
+   ```bash
+   LIVEKIT_URL=wss://oficina.tudominio.com     # tu mismo DOMAIN, con wss://
+   LIVEKIT_API_KEY=$(openssl rand -hex 8)
+   LIVEKIT_API_SECRET=$(openssl rand -hex 32)  # mínimo 32 caracteres
+   ```
+2. Abre los puertos: `sudo bash deploy/firewall.sh` (ya incluye `7881/tcp` y `50000-50200/udp`).
+3. Enciende todo con el perfil de LiveKit:
+   ```bash
+   docker compose --profile livekit up -d --build
+   ```
+   Caddy pasa `/rtc` a LiveKit, así que no necesitas otro dominio ni otro certificado.
+4. Comprueba en la app: al compartir pantalla, en `docker compose logs livekit` aparece `participant active`.
+
+Para volver al modo directo, deja `LIVEKIT_URL` vacío y quita `--profile livekit`.

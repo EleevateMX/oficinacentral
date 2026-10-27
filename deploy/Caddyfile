@@ -4,5 +4,9 @@
 		Strict-Transport-Security "max-age=31536000"
 		Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
 	}
+	# Señalización de LiveKit (solo si se usa --profile livekit)
+	handle /rtc* {
+		reverse_proxy host.docker.internal:7880
+	}
 	reverse_proxy app:3000
 }
