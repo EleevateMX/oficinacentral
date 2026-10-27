@@ -5,9 +5,15 @@ import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
-import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo } from '../lib/render.js';
+import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
+import { todayMD } from '../lib/birthdays.js';
+
+// Fecha de hoy ('MM-DD') para el gorrito de cumpleaños; se recalcula cada minuto
+let bdayToday = { at: 0, md: '' };
+const todayCached = () => { const t = Date.now(); if (t - bdayToday.at > 60e3) bdayToday = { at: t, md: todayMD() }; return bdayToday.md; };
 import { mapBrand, officeLogo } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
+import { GAME_OF } from '../games/index.js';
 import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
 import VideoStrip from './VideoStrip.jsx';
@@ -21,7 +27,10 @@ import { Avatar } from './ui.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
-const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla' };
+const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar' };
+// Objetos con brillo o dibujo fino que se pintan nítidos en cada cuadro (además de los de marca)
+const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
+const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
 
 // Objeto interactivo más cercano (pizarrón, tablero, pantalla) a menos de 2 casillas
 function nearInteractive(f, me) {
@@ -42,6 +51,7 @@ export function interact(o) {
   const kind = CATALOG[o.type]?.interactive;
   if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
+  else if (kind === 'game') office.set({ modal: { type: 'game', objectId: o.id, game: GAME_OF[o.type] } });
   else if (kind === 'screen') {
     const st = office.state;
     const sc = st.talkingWith.find((id) => st.users[id]?.online && st.users[id]?.screen);
@@ -84,6 +94,7 @@ export default function MapView({ active }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const staticRef = useRef(null);
+  const animRef = useRef({ under: [], top: [] });
   // En el celular el mapa empieza más lejos para ver más de la oficina
   const view = useRef({ zoom: typeof window !== 'undefined' && window.innerWidth < 720 ? 0.9 : 1.5, camX: 0, camY: 0, w: 0, h: 0, dpr: 1 });
   const input = useRef({ held: [], lastStep: 0, path: [], hover: null, pointer: null, drag: null, areaDrag: null });
@@ -136,14 +147,28 @@ export default function MapView({ active }) {
   useEffect(() => {
     if (!floor) return;
     setRenderBrand(mapBrand(config));
-    const c = document.createElement('canvas');
-    c.width = floor.W * T;
-    c.height = floor.H * T;
-    const ctx = c.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    drawFloorLayer(ctx, floor);
-    for (const o of sortObjects(floor.objects)) drawObject(ctx, o);
-    staticRef.current = c;
+    const layer = () => {
+      const c = document.createElement('canvas');
+      c.width = floor.W * T;
+      c.height = floor.H * T;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      return { c, ctx };
+    };
+    // Dos capas fijas: suelo (con lo que va debajo) y muebles. Lo que lleva logo, texto o neón,
+    // y lo animado (bandera, tótem), se pinta en cada cuadro a la resolución de la pantalla
+    // para que se vea nítido con cualquier zoom; son pocos y solo se pintan los que se ven.
+    const base = layer(), top = layer();
+    drawFloorLayer(base.ctx, floor);
+    const live = { under: [], top: [] };
+    for (const o of sortObjects(floor.objects)) {
+      const cat = CATALOG[o.type];
+      const isLive = cat?.animated || cat?.brand || CRISP.has(o.type);
+      if (isLive) live[cat.under ? 'under' : 'top'].push(o);
+      else drawObject(cat?.under ? base.ctx : top.ctx, o);
+    }
+    animRef.current = live;
+    staticRef.current = { base: base.c, top: top.c };
   }, [floor, config?.theme, config?.accent, config?.officeName, config?.logoUrl, logoReady]);
 
   // Tamaño del canvas
@@ -177,7 +202,7 @@ export default function MapView({ active }) {
   useEffect(() => {
     const down = (e) => {
       const { active: on, editMode: em } = stateRef.current;
-      if (!on || isTyping()) return;
+      if (!on || isTyping() || office.state.modal) return;
       if (e.code === 'KeyX' && !em) {
         const f = stateRef.current.floor;
         const mine = office.players[stateRef.current.me.id];
@@ -366,7 +391,23 @@ export default function MapView({ active }) {
       ctx.imageSmoothingEnabled = false;
       const s = v.zoom * v.dpr;
       ctx.setTransform(s, 0, 0, s, Math.round((v.w / 2 - v.camX * v.zoom) * v.dpr), Math.round((v.h / 2 - v.camY * v.zoom) * v.dpr));
-      if (staticRef.current) ctx.drawImage(staticRef.current, 0, 0);
+      if (staticRef.current) {
+        // Solo los objetos "vivos" que se ven en pantalla
+        const vx0 = v.camX - v.w / 2 / v.zoom - 160, vx1 = v.camX + v.w / 2 / v.zoom + 64;
+        const vy0 = v.camY - v.h / 2 / v.zoom - 160, vy1 = v.camY + v.h / 2 / v.zoom + 96;
+        const drawLive = (list) => {
+          for (const o of list) {
+            const px = o.x * T, py = o.y * T;
+            if (px > vx0 && px < vx1 && py > vy0 && py < vy1) drawObject(ctx, o);
+          }
+        };
+        setAnimTime(performance.now());
+        ctx.drawImage(staticRef.current.base, 0, 0);
+        drawLive(animRef.current.under);
+        ctx.drawImage(staticRef.current.top, 0, 0);
+        drawLive(animRef.current.top);
+        setAnimTime(0);
+      }
 
       // Proyección en vivo: la pantalla compartida aparece sobre las TV de tu sala
       projRef.current = [];
@@ -562,7 +603,22 @@ export default function MapView({ active }) {
         const blink = !p.moving && (t + Number(id) * 1337) % 4200 < 140;
         const re = office.reactions[id];
         const hopY = re && re.until - performance.now() > 3000 ? -Math.abs(Math.sin((re.until - performance.now()) / 60)) * 4 : 0;
-        drawAvatar(ctx, (p.rx + 0.5) * T, (p.ry + 1) * T - 2 + hopY, u?.avatar, seat?.dir || p.dir, step, !!seat, blink);
+        // Sentado de lado: se recorre hacia el cojín (lejos del respaldo) y baja un poco
+        const side = seat?.obj && (seat.dir === 'left' || seat.dir === 'right');
+        const sitDX = side ? (seat.dir === 'right' ? 4 : -4) : 0;
+        const sitDY = 0;
+        const ax = (p.rx + 0.5) * T + sitDX, ay = (p.ry + 1) * T - 2 + hopY + sitDY;
+        drawAvatar(ctx, ax, ay, u?.avatar, seat?.dir || p.dir, step, !!seat, blink);
+        if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!seat);
+        // Sentado de lado: el brazo de enfrente del sillón (o la base de la silla) queda delante de las piernas
+        if (side) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(seat.obj.x * T - 4, (seat.obj.y + objSize(seat.obj).h) * T - 9, objSize(seat.obj).w * T + 8, 12);
+          ctx.clip();
+          drawObject(ctx, seat.obj);
+          ctx.restore();
+        }
         // Sentado mirando hacia arriba: el respaldo de la silla tapa la parte de abajo (como en Gather)
         if (seat?.obj && seat.dir === 'up' && CATALOG[seat.obj.type]?.rotatable) {
           ctx.save();
@@ -695,7 +751,7 @@ export default function MapView({ active }) {
         if (office.pendingInteract === near.o.id) { office.pendingInteract = null; interact(near.o); }
         const { w: ow } = objSize(near.o);
         const hp = worldToScreen(near.o.x + ow / 2, near.o.y - 0.6);
-        const txt = INTERACT_LABELS[near.kind];
+        const txt = GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         const tw = ctx.measureText(txt).width + 34;
         ctx.fillStyle = 'rgba(16,16,16,.88)';
@@ -713,7 +769,7 @@ export default function MapView({ active }) {
         const u = us[id];
         if (!u) continue;
         const sp = worldToScreen(p.rx + 0.5, p.ry);
-        const name = u.shift ? `🖥️ ${u.displayName}` : u.displayName;
+        const name = `${u.birthday && u.birthday === todayCached() ? '🎂 ' : ''}${u.shift ? `🖥️ ${u.displayName}` : u.displayName}`;
         const w = ctx.measureText(name).width + 24;
         const y = sp.y - 34 * v.zoom / 1.5 + 4;
         const isMe = Number(id) === meU.id;

@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { isBirthday } from '../lib/birthdays.js';
 import { ChevronDown, PanelLeftClose, Layers, UserPlus, Lock } from 'lucide-react';
 import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
@@ -9,7 +10,7 @@ export function PersonRow({ u, sub, onClick }) {
     <button className="person" onClick={onClick}>
       <Avatar user={u} size={36} />
       <div className="person-text">
-        <div className="person-name">{u.displayName}</div>
+        <div className="person-name">{u.displayName}{isBirthday(u) && <span title="¡Hoy es su cumpleaños!"> 🎂</span>}</div>
         <div className="person-sub">{sub}</div>
       </div>
     </button>

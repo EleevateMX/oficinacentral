@@ -141,6 +141,10 @@ export function pushNotification(userId, type, actorId, data = {}) {
       pushLater(userId, { title: `📞 ${who} te está llamando`, body: 'Toca para ir con esa persona', tag: `call-${actorId}`, url: `/?conv=d:${actorId}` });
       return;
     }
+    if (type === 'birthday') {
+      pushLater(userId, { title: `🎂 ${who} te felicitó por tu cumpleaños`, body: clip(data.text || '¡Feliz cumpleaños!'), tag: `bday-${actorId}`, url: '/?view=birthdays' });
+      return;
+    }
     if (type === 'wave') {
       pushLater(userId, { title: `${who} te saludó 👋`, body: 'Toca para responder', tag: `wave-${actorId}`, url: `/?conv=d:${actorId}` });
     } else if (type === 'event') {

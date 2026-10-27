@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { upcoming, fmtBirthday, whenLabel } from '../lib/birthdays.js';
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, MapPin, Trash2, Users, Navigation } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -10,6 +11,24 @@ const HOUR_PX = 64;
 function useMyEvents() {
   const events = useOffice((s) => s.events);
   return events;
+}
+
+// Próximos cumpleaños (los 3 que vienen) arriba del calendario
+function BirthdaysSoon() {
+  const users = useOffice((s) => s.users);
+  const list = upcoming(users).slice(0, 3);
+  if (!list.length) return null;
+  return (
+    <button className="bday-soon" onClick={() => office.set({ modal: { type: 'birthdays' } })}>
+      <div className="group-label">🎂 Próximos cumpleaños</div>
+      {list.map(({ user, days }) => (
+        <div key={user.id} className="bday-soon-row">
+          <span className="flex1">{user.displayName}</span>
+          <span className={`bday-when ${days === 0 ? 'today' : days <= 7 ? 'near' : ''}`}>{days === 0 ? '¡Hoy! 🎉' : `${fmtBirthday(user.birthday)} · ${whenLabel(days)}`}</span>
+        </div>
+      ))}
+    </button>
+  );
 }
 
 export function CalendarPanel() {
@@ -34,6 +53,7 @@ export function CalendarPanel() {
       <div className="panel-head"><h2>Calendario</h2></div>
       <div className="search"><input placeholder="Buscar eventos" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <div className="panel-scroll">
+        <BirthdaysSoon />
         {!groups.length && <Empty mascota={{ nombre: 'rumi', size: 84 }} title="Sin eventos próximos">Crea una reunión con “Nueva reunión”.</Empty>}
         {groups.map((g) => (
           <div key={g.label}>

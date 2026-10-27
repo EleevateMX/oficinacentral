@@ -1064,3 +1064,65 @@ body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
 @media (max-width: 640px) { .incoming-call { top: calc(10px + env(safe-area-inset-top)); justify-content: center; } .ic-actions { width: 100%; } .ic-actions .btn { flex: 1; } }
 .pc-door { font-size: 12.5px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; background: var(--chip, rgba(127,127,127,.12)); }
 .pc-tzdiff { opacity: .7; }
+
+/* Juegos */
+.game-backdrop { z-index: 80; }
+.game-modal { width: min(960px, calc(100vw - 24px)); max-height: calc(100vh - 24px); display: flex; flex-direction: column; background: #12111a; color: #f3f1ff; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.08); }
+.game-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.game-head .icon-btn { color: inherit; }
+.game-vs { font-size: 13px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,.12); }
+.game-watch { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: .8; }
+.game-stage { position: relative; display: flex; justify-content: center; align-items: center; background: #0b0a10; min-height: 0; flex: 1; }
+.game-stage canvas { display: block; width: 100%; height: auto; max-height: calc(100vh - 140px); object-fit: contain; outline: none; touch-action: none; }
+.game-loading { position: absolute; inset: 0; display: grid; place-items: center; opacity: .7; }
+.game-banner { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 99px; background: #FFCC00; color: #1a1300; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.4); animation: ic-in .25s ease-out; white-space: nowrap; }
+.game-top { position: absolute; top: 12px; right: 12px; width: 260px; max-width: calc(100% - 24px); background: rgba(18,17,26,.96); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.game-top-head { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.game-top-head .icon-btn { margin-left: auto; color: inherit; }
+.game-top-row { display: flex; gap: 8px; font-size: 13px; padding: 3px 4px; border-radius: 6px; }
+.game-top-row.me { background: rgba(254, 51, 119, .18); }
+.game-foot { display: flex; gap: 12px; align-items: center; padding: 8px 16px; font-size: 12.5px; border-top: 1px solid rgba(255,255,255,.08); flex-wrap: wrap; }
+.game-status { font-weight: 600; }
+.game-help { opacity: .65; margin-left: auto; }
+@media (max-width: 640px) { .game-modal { border-radius: 12px; } .game-help { display: none; } }
+.confetti-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 200; }
+
+/* Cumpleaños */
+.bday-title { display: inline-flex; align-items: center; gap: 8px; }
+.bday-modal .modal-body { display: flex; flex-direction: column; gap: 16px; max-height: min(70vh, 720px); overflow: auto; }
+.bday-mine { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; background: var(--chip, rgba(127,127,127,.1)); font-size: 14px; }
+.bday-mine > span { flex: 1; min-width: 180px; }
+.bday-picker { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bday-picker .select { min-width: 92px; }
+.bday-section h3 { display: flex; align-items: center; gap: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; margin: 0 0 8px; }
+.bday-card { border-radius: 14px; padding: 12px; border: 1px solid var(--border, rgba(127,127,127,.2)); display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.bday-card.big { background: linear-gradient(135deg, rgba(254,51,119,.12), rgba(255,204,0,.12)); border-color: rgba(254,51,119,.35); }
+.bday-card-head { display: flex; align-items: center; gap: 12px; }
+.bday-hat-wrap { position: relative; }
+.bday-hat { position: absolute; top: -10px; right: -8px; font-size: 20px; transform: rotate(15deg); }
+.bday-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.bday-chips .chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border, rgba(127,127,127,.25)); background: transparent; color: inherit; cursor: pointer; }
+.bday-chips .chip.on { background: var(--accent, #FE3377); border-color: transparent; color: #fff; }
+.bday-input { display: flex; gap: 6px; margin-top: 8px; }
+.bday-input input { flex: 1; min-width: 0; }
+.bday-wall { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; }
+.bday-wish { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.35; }
+.bday-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; font-size: 14px; }
+.bday-when { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--chip, rgba(127,127,127,.12)); white-space: nowrap; }
+.bday-when.near { background: rgba(255,204,0,.25); }
+.bday-when.today { background: rgba(254,51,119,.2); font-weight: 700; }
+.bday-months { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.bday-month { border-radius: 10px; padding: 8px; background: var(--chip, rgba(127,127,127,.08)); min-height: 64px; }
+.bday-month-name { font-size: 12px; font-weight: 700; text-transform: capitalize; margin-bottom: 4px; }
+.bday-month-item { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bday-missing { margin-top: 8px; }
+.bday-admin { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bday-admin > .select { min-width: 220px; }
+.bday-soon { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; padding: 0 0 8px; cursor: pointer; }
+.bday-soon-row { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 4px 12px; }
+.pc-bday { font-size: 13px; padding: 6px 10px; border-radius: 10px; background: var(--chip, rgba(127,127,127,.1)); text-align: left; border: 0; color: inherit; }
+.pc-bday.today { background: linear-gradient(135deg, rgba(254,51,119,.18), rgba(255,204,0,.2)); cursor: pointer; font-weight: 600; }
+.rail-btn.bday-on { color: var(--accent, #FE3377); }
+.rail-btn .badge:not(:empty) { }
+@media (max-width: 640px) { .bday-months { grid-template-columns: repeat(2, 1fr); } }

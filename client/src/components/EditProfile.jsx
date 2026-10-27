@@ -6,6 +6,7 @@ import { Modal, AvatarCanvas, initials, Select } from './ui.jsx';
 import { SPRITE_OPTIONS, STYLE_NAMES, PARTS, PACKS, PRESETS, normalizeSpec, randomSpec } from '@shared/sprite.js';
 import { Shuffle, Plus } from 'lucide-react';
 import { timezones, tzOffsetLabel } from '../lib/time.js';
+import { BirthdayPicker } from './Birthdays.jsx';
 import { PETS, PET_COLORS, petDef } from '@shared/pets.js';
 import { drawPet } from '../lib/pets.js';
 
@@ -30,7 +31,7 @@ function resizeImage(file) {
 
 export default function EditProfile() {
   const me = useOffice((s) => s.users[s.me.id] || s.me);
-  const [form, setForm] = useState({ displayName: me.displayName, timezone: me.timezone || 'America/Mexico_City', statusText: me.statusText || '', email: me.email || '' });
+  const [form, setForm] = useState({ displayName: me.displayName, timezone: me.timezone || 'America/Mexico_City', statusText: me.statusText || '', email: me.email || '', birthday: me.birthday || '' });
   const [avatar, setAvatar] = useState(me.avatar || {});
   const modalReq = useOffice((s) => s.modal);
   const [step, setStep] = useState(modalReq?.step || 'main');
@@ -108,6 +109,8 @@ export default function EditProfile() {
         <input placeholder="🎧 Concentrado, 🍔 Comiendo…" value={form.statusText} onChange={(e) => setForm({ ...form, statusText: e.target.value })} maxLength={80} />
         <label className="field-label">Correo</label>
         <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} maxLength={120} />
+        <label className="field-label">Cumpleaños <span className="muted small">(solo día y mes, para que te feliciten)</span></label>
+        <BirthdayPicker value={form.birthday} onChange={(v) => setForm({ ...form, birthday: v })} />
         <label className="field-label">Zona horaria</label>
         <Select value={form.timezone} onChange={(v) => setForm({ ...form, timezone: v })} options={tzOptions} />
         {error && <div className="form-error">{error}</div>}

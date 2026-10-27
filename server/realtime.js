@@ -3,6 +3,7 @@ import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId, setAreaClosed, isAreaClosed, closedAreaIds, floorPayload, floorOfArea } from './world.js';
 import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../shared/map.js';
+import { initGames } from './games.js';
 import { initBoards } from './boards.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
@@ -204,6 +205,7 @@ export function initRealtime(httpServer) {
     });
 
     initBoards(io, socket, userId);
+    initGames(io, socket, userId);
 
     // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
     let roomMsgTimes = [];

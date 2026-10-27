@@ -3,6 +3,7 @@ import { since } from '../lib/time.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase, MonitorUp, Phone, DoorClosed, Volume2, MapPin } from 'lucide-react';
 import { areaAt } from '@shared/map.js';
+import { fmtBirthday, isBirthday, daysUntil, whenLabel } from '../lib/birthdays.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
 import { fmtTime, sameDay, tzDiffLabel } from '../lib/time.js';
@@ -47,6 +48,11 @@ export default function ProfileCard({ userId }) {
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={16} /></button>
       </div>
       {u.statusText && <div className="pc-status">{u.statusText}</div>}
+      {u.birthday && (isBirthday(u) ? (
+        <button className="pc-bday today" onClick={() => office.set({ modal: { type: 'birthdays' }, profileCard: null })}>🎂 ¡Hoy es su cumpleaños!{!isMe && <b> Felicitar</b>}</button>
+      ) : (
+        <div className="pc-bday">🎂 Cumple el {fmtBirthday(u.birthday)} <span className="muted">· {whenLabel(daysUntil(u.birthday))}</span></div>
+      ))}
       {u.online && u.shift && <div className="pc-status">🖥️ En turno {u.shift} · {since(u.shiftAt)}</div>}
       {(() => {
         const pd = u.avatar?.pet && u.avatar.pet !== 'none' ? petDef(u.avatar.pet) : null;

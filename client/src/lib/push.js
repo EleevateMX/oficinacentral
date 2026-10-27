@@ -91,6 +91,7 @@ export function openFromUrl(href) {
   const view = url.searchParams.get('view');
   if (conv && /^[cd]:\d+$/.test(conv)) office.openConv(conv);
   else if (view === 'calendar') office.set({ view: 'calendar' });
+  else if (view === 'birthdays') office.set({ modal: { type: 'birthdays' } });
 }
 
 // Se llama cuando la oficina ya cargó
