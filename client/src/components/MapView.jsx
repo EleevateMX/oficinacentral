@@ -17,6 +17,26 @@ const KEYS = {
 };
 const DIRV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
+// Colores del tema activo (se leen de las variables CSS, con caché corto)
+let themeCache = { t: 0, accent: '#157A6E', ink: '#0A2B2C' };
+function themeColors() {
+  const now = performance.now();
+  if (now - themeCache.t > 1000) {
+    const cs = getComputedStyle(document.documentElement);
+    const read = (n, d) => {
+      const v = cs.getPropertyValue(n).trim();
+      if (/^#[0-9a-f]{6}$/i.test(v)) return v;
+      return d;
+    };
+    themeCache = { t: now, accent: read('--accent', themeCache.accent), ink: read('--ink', themeCache.ink), brand: document.documentElement.dataset.brand };
+  }
+  return themeCache;
+}
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 function isTyping() {
   const el = document.activeElement;
   return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
@@ -238,9 +258,9 @@ export default function MapView({ active }) {
       const space = talkSpace(f, mine.x, mine.y);
       if (space?.startsWith('desk:')) {
         const d = f.desks.find((x) => `desk:${x.id}` === space);
-        if (d) { ctx.fillStyle = 'rgba(21,122,110,.12)'; ctx.fillRect(d.zone.x * T, d.zone.y * T, d.zone.w * T, d.zone.h * T); }
+        if (d) { ctx.fillStyle = rgba(themeColors().accent, .12); ctx.fillRect(d.zone.x * T, d.zone.y * T, d.zone.w * T, d.zone.h * T); }
       } else if (!space && office.state.talkingWith.length) {
-        ctx.strokeStyle = 'rgba(21,122,110,.45)';
+        ctx.strokeStyle = rgba(themeColors().accent, .45);
         ctx.setLineDash([4, 4]);
         ctx.lineWidth = 1.5;
         ctx.strokeRect((mine.rx - PROXIMITY_RADIUS) * T, (mine.ry - PROXIMITY_RADIUS) * T, (PROXIMITY_RADIUS * 2 + 1) * T, (PROXIMITY_RADIUS * 2 + 1) * T);
@@ -253,7 +273,7 @@ export default function MapView({ active }) {
           const sel = edS.areaTarget === a.id;
           ctx.fillStyle = a.private ? 'rgba(91,63,184,.10)' : 'rgba(46,160,90,.08)';
           ctx.fillRect(a.x * T, a.y * T, a.w * T, a.h * T);
-          ctx.strokeStyle = sel ? '#157A6E' : a.private ? 'rgba(91,63,184,.7)' : 'rgba(46,160,90,.6)';
+          ctx.strokeStyle = sel ? themeColors().accent : a.private ? 'rgba(91,63,184,.7)' : 'rgba(46,160,90,.6)';
           ctx.lineWidth = sel ? 3 : 1.5;
           ctx.setLineDash(sel ? [] : [6, 4]);
           ctx.strokeRect(a.x * T + 1, a.y * T + 1, a.w * T - 2, a.h * T - 2);
@@ -286,7 +306,7 @@ export default function MapView({ active }) {
         drawObject(ctx, { ...edS.placing, ...pos });
         ctx.globalAlpha = 1;
         const { w: ow, h: oh } = objSize({ ...edS.placing });
-        ctx.strokeStyle = '#157A6E';
+        ctx.strokeStyle = themeColors().accent;
         ctx.lineWidth = 1.5;
         ctx.strokeRect(pos.x * T, pos.y * T, ow * T, oh * T);
       }
@@ -297,7 +317,7 @@ export default function MapView({ active }) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2.5;
         ctx.strokeRect(selObj.x * T - 2, selObj.y * T - 2, w * T + 4, h * T + 4);
-        ctx.strokeStyle = '#157A6E';
+        ctx.strokeStyle = themeColors().accent;
         ctx.lineWidth = 1;
         ctx.strokeRect(selObj.x * T - 2, selObj.y * T - 2, w * T + 4, h * T + 4);
       }
@@ -305,7 +325,7 @@ export default function MapView({ active }) {
       const hov = input.current.hover;
       if (em && hov && hov.id !== edS.selected && !edS.placing) {
         const { w, h } = objSize(hov);
-        ctx.strokeStyle = 'rgba(21,122,110,.85)';
+        ctx.strokeStyle = rgba(themeColors().accent, .85);
         ctx.lineWidth = 1.5;
         ctx.strokeRect(hov.x * T - 1, hov.y * T - 1, w * T + 2, h * T + 2);
       }
@@ -313,9 +333,9 @@ export default function MapView({ active }) {
       const ad = input.current.areaDrag;
       if (ad) {
         const r = normRect(ad);
-        ctx.fillStyle = 'rgba(21,122,110,.15)';
+        ctx.fillStyle = rgba(themeColors().accent, .15);
         ctx.fillRect(r.x * T, r.y * T, r.w * T, r.h * T);
-        ctx.strokeStyle = '#157A6E';
+        ctx.strokeStyle = themeColors().accent;
         ctx.lineWidth = 2;
         ctx.strokeRect(r.x * T, r.y * T, r.w * T, r.h * T);
       }
@@ -343,7 +363,7 @@ export default function MapView({ active }) {
           const w = ctx.measureText(label).width + 14;
           ctx.fillStyle = 'rgba(255,255,255,.72)';
           ctx.beginPath(); ctx.roundRect(p.x, p.y - 10, w, 20, 10); ctx.fill();
-          ctx.fillStyle = 'rgba(10,43,44,.8)';
+          ctx.fillStyle = rgba(themeColors().ink, .82);
           ctx.fillText(label, p.x + 7, p.y + 1);
         }
       }
@@ -357,9 +377,9 @@ export default function MapView({ active }) {
         const w = ctx.measureText(name).width + 24;
         const y = sp.y - 34 * v.zoom / 1.5 + 4;
         const isMe = Number(id) === meU.id;
-        ctx.fillStyle = isMe ? 'rgba(21,122,110,.95)' : 'rgba(10,43,44,.85)';
+        ctx.fillStyle = isMe ? rgba(themeColors().accent, .95) : rgba(themeColors().ink, .86);
         ctx.beginPath(); ctx.roundRect(sp.x - w / 2, y - 11, w, 22, 6); ctx.fill();
-        ctx.fillStyle = p.status === 'busy' ? '#FF8A3D' : p.status === 'away' ? '#adb5bd' : '#2fd36b';
+        ctx.fillStyle = p.status === 'busy' ? (themeColors().brand === 'gtahub' ? '#FFCC00' : '#FF8A3D') : p.status === 'away' ? '#adb5bd' : (themeColors().brand === 'gtahub' ? '#3DDC84' : '#2fd36b');
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
@@ -406,7 +426,7 @@ export default function MapView({ active }) {
 
   const editableFilter = (o) => {
     if (stateRef.current.editMode === 'build') return true;
-    return editor.canEditObject(floor, o, me) && CATALOG[o.type]?.kind === 'decor';
+    return editor.canEditObject(floor, o, me) && (CATALOG[o.type]?.kind === 'decor' || CATALOG[o.type]?.rotatable);
   };
 
   const onPointerDown = (e) => {
@@ -598,9 +618,11 @@ export default function MapView({ active }) {
               <RotateCw size={16} />
             </button>
           )}
-          <button className="icon-btn danger" title="Borrar (Supr)" onClick={() => editor.deleteObject(floor.id, toolbar.obj).catch(() => {})}>
-            <Trash2 size={16} />
-          </button>
+          {(editMode === 'build' || CATALOG[toolbar.obj.type]?.kind === 'decor') && (
+            <button className="icon-btn danger" title="Borrar (Supr)" onClick={() => editor.deleteObject(floor.id, toolbar.obj).catch(() => {})}>
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       )}
 

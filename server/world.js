@@ -1,7 +1,7 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx } from './db.js';
 import { composeFloor, getTemplate, TEMPLATES, inRect } from '../shared/map.js';
-import { CATALOG, objSize, DESK_DECOR_LIMIT } from '../shared/catalog.js';
+import { CATALOG, objSize, DESK_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 
 const floors = new Map(); // id -> { id, name, template, sort, state, claims: Map(deskId -> userId) }
 
@@ -161,8 +161,16 @@ function validatePlacement(f, o, ignoreId) {
   }
 }
 
+// Cambio de modelo permitido solo dentro del mismo grupo (escritorios o sillas)
+function swapType(existing, wanted) {
+  if (!wanted || wanted === existing) return existing;
+  if (DESK_TYPES.includes(existing) && DESK_TYPES.includes(wanted)) return wanted;
+  if (CHAIR_TYPES.includes(existing) && CHAIR_TYPES.includes(wanted)) return wanted;
+  throw new WorldError('Ese objeto no se puede cambiar por ese modelo');
+}
+
 function normalize(input, existing) {
-  const type = existing?.type ?? input.type;
+  const type = existing ? swapType(existing.type, input.type) : input.type;
   const c = CATALOG[type];
   if (!c) throw new WorldError('Tipo de objeto inválido');
   const step = c.kind === 'furniture' ? 1 : 0.25;
@@ -222,31 +230,45 @@ function getObjectRow(id) {
   return r;
 }
 
-function assertCanEdit(user, f, row) {
-  if (user.role === 'admin') return;
+// Qué puede tocar alguien que no es admin: la decoración de su escritorio,
+// su propio escritorio (modelo y color) y la silla de su lugar.
+function editRole(user, f, row) {
+  if (user.role === 'admin') return 'admin';
   const mine = myDeskZone(user, f);
-  if (!mine || row.desk_id !== mine.desk.id) throw new WorldError('Solo puedes editar la decoración de tu escritorio', 403);
+  if (!mine) return null;
+  if (row.desk_id === mine.desk.id) return 'decor';
+  if (row.id === mine.desk.id) return 'desk';
+  if (CHAIR_TYPES.includes(row.type) && rectInside(bbox(rowToObject(row)), mine.zone)) return 'chair';
+  return null;
+}
+
+function assertCanEdit(user, f, row) {
+  const role = editRole(user, f, row);
+  if (!role) throw new WorldError('Solo puedes editar tu escritorio y su decoración', 403);
+  return role;
 }
 
 export function updateObject(user, id, patch) {
   const row = getObjectRow(id);
   const f = getFloor(row.floor_id);
-  assertCanEdit(user, f, row);
+  const role = assertCanEdit(user, f, row);
   const existing = rowToObject(row);
+  // Tu escritorio: solo modelo y color, sin moverlo ni girarlo
+  if (role === 'desk') patch = { type: patch.type, color: patch.color };
   const o = normalize(patch, existing);
   const c = CATALOG[o.type];
   let deskId = row.desk_id;
-  if (user.role !== 'admin') {
+  if (role === 'decor' || role === 'chair') {
     if (!rectInside(bbox(o), myDeskZone(user, f).zone)) throw new WorldError('Solo puedes decorar dentro de tu escritorio', 403);
-  } else if (c.kind === 'decor') {
+  } else if (role === 'admin' && c.kind === 'decor') {
     deskId = f.state.desks.find((x) => rectInside(bbox(o), x.zone))?.id ?? null;
   }
   validatePlacement(f, o, row.id);
   const dx = o.x - row.x;
   const dy = o.y - row.y;
   tx(() => {
-    db.prepare('UPDATE objects SET x = ?, y = ?, w = ?, h = ?, rot = ?, color = ?, desk_id = ? WHERE id = ?')
-      .run(o.x, o.y, o.w ?? null, o.h ?? null, o.rot, o.color, deskId, row.id);
+    db.prepare('UPDATE objects SET type = ?, x = ?, y = ?, w = ?, h = ?, rot = ?, color = ?, desk_id = ? WHERE id = ?')
+      .run(o.type, o.x, o.y, o.w ?? null, o.h ?? null, o.rot, o.color, deskId, row.id);
     // Si se mueve un escritorio, su decoración lo acompaña
     if (c.claimable && (dx || dy)) db.prepare('UPDATE objects SET x = x + ?, y = y + ? WHERE desk_id = ?').run(dx, dy, row.id);
   });
@@ -257,7 +279,8 @@ export function updateObject(user, id, patch) {
 export function deleteObject(user, id) {
   const row = getObjectRow(id);
   const f = getFloor(row.floor_id);
-  assertCanEdit(user, f, row);
+  const role = assertCanEdit(user, f, row);
+  if (role === 'desk' || role === 'chair') throw new WorldError('Tu escritorio y tu silla se pueden cambiar de modelo, pero no borrar', 403);
   db.prepare('DELETE FROM objects WHERE id = ?').run(row.id);
   rebuild(f.id);
   return f.id;

@@ -1,5 +1,5 @@
 // Caché de hojas de sprites (generadas desde la ficha del avatar o subidas como PNG).
-import { renderSheet, normalizeSpec, SHEET_W, SHEET_H, FRAME_W, FRAME_H, DIRS } from '@shared/sprite.js';
+import { renderSheet, normalizeSpec, SPEC_KEYS, SHEET_W, SHEET_H, FRAME_W, FRAME_H, DIRS } from '@shared/sprite.js';
 
 const cache = new Map();
 const listeners = new Set();
@@ -33,7 +33,7 @@ export function getSheet(avatar = {}) {
     return cache.get(key);
   }
   const spec = normalizeSpec(avatar);
-  const key = JSON.stringify([spec.skin, spec.hair, spec.hairStyle, spec.top, spec.shirt, spec.accent, spec.pants, spec.shoes, spec.accessory]);
+  const key = JSON.stringify(SPEC_KEYS.map((k) => spec[k]));
   if (!cache.has(key)) {
     if (cache.size > 300) cache.clear();
     cache.set(key, fromSpec(spec));

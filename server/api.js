@@ -8,6 +8,7 @@ import {
 } from './auth.js';
 import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
 import * as world from './world.js';
+import { SPEC_KEYS } from '../shared/sprite.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -210,7 +211,7 @@ api.get('/users/:id/photo', (req, res) => {
   res.send(Buffer.from(m[3], 'base64'));
 });
 
-const AVATAR_KEYS = ['skin', 'hair', 'hairStyle', 'shirt', 'pants', 'accessory', 'shoes', 'top', 'accent', 'preset', 'sprite'];
+const AVATAR_KEYS = SPEC_KEYS;
 
 api.patch('/me', wrap((req, res) => {
   const b = req.body || {};

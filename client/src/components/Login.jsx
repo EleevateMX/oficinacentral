@@ -35,7 +35,7 @@ export default function Login({ config, onLogin }) {
   };
 
   return (
-    <AuthLayout config={config} title={config.theme === 'gtahub' ? `${config.officeName} Office` : config.officeName} subtitle="Oficina virtual privada del equipo">
+    <AuthLayout config={config} title={config.officeName} subtitle="Oficina virtual privada del equipo">
       <form onSubmit={submit} className="auth-form">
         <label htmlFor="u">Usuario</label>
         <input id="u" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />

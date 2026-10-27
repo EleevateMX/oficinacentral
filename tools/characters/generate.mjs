@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { encodePNG } from './png.mjs';
-import { renderSheet, PRESETS, FRAME_W, FRAME_H, SHEET_W, SHEET_H } from '../../shared/sprite.js';
+import { renderSheet, randomSpec, PRESETS, PACKS, FRAME_W, FRAME_H, SHEET_W, SHEET_H } from '../../shared/sprite.js';
 
 const out = path.resolve(process.argv[2] || 'docs/personajes');
 fs.mkdirSync(out, { recursive: true });
@@ -32,16 +32,24 @@ for (const p of PRESETS) {
   fs.writeFileSync(path.join(out, `${p.id}-4x.png`), encodePNG(SHEET_W * 4, SHEET_H * 4, scale(sheets[p.id], SHEET_W, SHEET_H, 4)));
 }
 
-// Galería: cuadro de frente (fila 0, columna 0) de cada personaje
-const gw = FRAME_W * PRESETS.length;
-const gallery = new Uint8ClampedArray(gw * FRAME_H * 4);
-PRESETS.forEach((p, n) => {
-  for (let y = 0; y < FRAME_H; y++) {
-    const si = y * SHEET_W * 4;
-    gallery.set(sheets[p.id].subarray(si, si + FRAME_W * 4), (y * gw + n * FRAME_W) * 4);
-  }
-});
-fs.writeFileSync(path.join(out, 'galeria.png'), encodePNG(gw * 4, FRAME_H * 4, scale(gallery, gw, FRAME_H, 4)));
+// Galerías: cuadro de frente (fila 0, columna 0) de cada personaje, a 4×
+function gallery(name, specs) {
+  const gw = FRAME_W * specs.length;
+  const img = new Uint8ClampedArray(gw * FRAME_H * 4);
+  specs.forEach((spec, n) => {
+    const sheet = renderSheet(spec);
+    for (let y = 0; y < FRAME_H; y++) {
+      const si = y * SHEET_W * 4;
+      img.set(sheet.subarray(si, si + FRAME_W * 4), (y * gw + n * FRAME_W) * 4);
+    }
+  });
+  fs.writeFileSync(path.join(out, name), encodePNG(gw * 4, FRAME_H * 4, scale(img, gw, FRAME_H, 4)));
+}
+for (const pack of PACKS) gallery(pack.id === 'nuvora' ? 'galeria.png' : `galeria-${pack.id}.png`, PRESETS.filter((p) => p.pack === pack.id));
+// Muestras aleatorias (semilla fija para que salgan siempre iguales)
+let seed = 7;
+const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+gallery('galeria-aleatorios.png', Array.from({ length: 12 }, () => randomSpec(rand)));
 
 // Plantilla con guías
 const tpl = new Uint8ClampedArray(SHEET_W * SHEET_H * 4);

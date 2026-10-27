@@ -87,6 +87,7 @@ export function validateNewAccount({ username, password, displayName }) {
 export function defaultAvatar(seed = '') {
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const { id, name, ...spec } = PRESETS[h % PRESETS.length];
+  const pool = PRESETS.filter((p) => p.pack === 'nuvora');
+  const { id, name, pack, ...spec } = pool[h % pool.length];
   return { preset: id, ...spec };
 }

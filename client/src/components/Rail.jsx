@@ -7,6 +7,8 @@ import { OfficeMark, Simbolo } from './brand.jsx';
 export default function Rail() {
   const view = useOffice((s) => s.view);
   const config = useOffice((s) => s.config);
+  useOffice((s) => s.prefs.colorMode);
+  const dark = document.documentElement.dataset.theme === 'dark';
   const chat = useOffice((s) => s.chat);
   const notifications = useOffice((s) => s.notifications);
   const unreadChat = chat.channels.reduce((a, c) => a + c.unread, 0) + chat.dms.reduce((a, d) => a + d.unread, 0);
@@ -50,7 +52,7 @@ export default function Rail() {
       <div className="rail-spacer" />
       {(config.logoUrl || config.theme === 'gtahub') && (
         <a className="rail-btn rail-by" href="https://nuvora.mx" target="_blank" rel="noreferrer noopener" title="Hecho con Nuvora" aria-label="Hecho con Nuvora">
-          <Simbolo size={20} />
+          <Simbolo size={20} variante={dark ? 'negativo' : 'positivo'} />
         </a>
       )}
       <button className="rail-btn" onClick={() => office.set({ modal: { type: 'prefs', section: 'general' } })} title="Preferencias" aria-label="Preferencias">

@@ -2,7 +2,7 @@
 // el de GTAHUB o uno personalizado (color propio + logo).
 export const THEMES = [
   { id: 'nuvora', name: 'Nuvora', desc: 'Crema, profundo y mandarina. Albert Sans y Public Sans.', swatches: ['#0A2B2C', '#157A6E', '#FF8A3D', '#F3F4EE'] },
-  { id: 'gtahub', name: 'GTAHUB', desc: 'Azul índigo y login oscuro, con el logo de GTAHUB.', swatches: ['#13141c', '#3e4fe0', '#1d1e23', '#e9e9ee'] },
+  { id: 'gtahub', name: 'GTAHUB', desc: 'Rosa, amarillo y negro del Manual de Redes. Archivo Black e Inter.', swatches: ['#101010', '#FE3377', '#FFCC00', '#181818'] },
   { id: 'custom', name: 'Personalizado', desc: 'Tu color principal y tu logo sobre la base de Nuvora.', swatches: [] },
 ];
 
@@ -24,7 +24,7 @@ export function applyBrand(config = {}) {
     root.style.setProperty('--accent-soft', mix(config.accent, '#ffffff', 0.86));
   } else vars.forEach((v) => root.style.removeProperty(v));
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = theme === 'gtahub' ? '#13141c' : '#0A2B2C';
+  if (meta) meta.content = theme === 'gtahub' ? '#101010' : '#0A2B2C';
 }
 
 // Logo de la oficina: el subido por el admin, el del tema GTAHUB o el símbolo de Nuvora.

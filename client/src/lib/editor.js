@@ -1,7 +1,7 @@
 // Acciones del editor de mapa con deshacer/rehacer.
 import { api } from './api.js';
 import { office } from './store.js';
-import { CATALOG, objSize } from '@shared/catalog.js';
+import { CATALOG, objSize, CHAIR_TYPES } from '@shared/catalog.js';
 import { inRect } from '@shared/map.js';
 
 const undoStack = [];
@@ -100,7 +100,12 @@ export function myDesk(floor, meId) {
 export function canEditObject(floor, o, me) {
   if (me.role === 'admin') return true;
   const d = myDesk(floor, me.id);
-  return !!d && o.deskId === d.id;
+  return !!d && (o.deskId === d.id || (CHAIR_TYPES.includes(o.type) && insideZone(o, d.zone)));
+}
+
+// La silla que corresponde a un escritorio (la primera dentro de su zona)
+export function chairOf(floor, desk) {
+  return floor.objects.find((o) => CHAIR_TYPES.includes(o.type) && o.deskId == null && insideZone(o, desk.zone)) || null;
 }
 
 export function snapFor(type, wx, wy) {

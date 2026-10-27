@@ -516,6 +516,129 @@ D.flag = (ctx, x, y, w, h, o, c) => {
   ctx.beginPath(); ctx.moveTo(x + 4, y + 1); ctx.lineTo(x + w, y + 5); ctx.lineTo(x + 4, y + 9); ctx.fill();
 };
 
+// ----- Escritorios y sillas extra -----
+D.gamingDesk = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  D.desk(ctx, x, y, w, h, { color: col }, c);
+  R(ctx, '#FE3377', x + 2, y + h - 9, w - 4, 1);
+  R(ctx, '#8B7BFF', x + 2, y + h - 8, w - 4, 1);
+};
+D.woodDesk = (ctx, x, y, w, h, o, c) => {
+  D.desk(ctx, x, y, w, h, o, c);
+  const col = o.color || c.color;
+  for (let k = 6; k < w - 4; k += 9) R(ctx, shade(col, -0.1), x + k, y + 2, 4, 1);
+};
+D.glassDesk = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  ctx.globalAlpha = 0.75;
+  R(ctx, col, x, y, w, h - 8);
+  ctx.globalAlpha = 1;
+  R(ctx, shade(col, 0.4), x, y, w, 2);
+  R(ctx, '#9aa3ad', x + 3, y + h - 8, 2, 8); R(ctx, '#9aa3ad', x + w - 5, y + h - 8, 2, 8);
+};
+D.officeChair = (ctx, x, y, w, h, o, c) => {
+  D.chair(ctx, x, y, w, h, o, c);
+  R(ctx, '#555', x + 15, y + 24, 2, 4);
+  R(ctx, '#555', x + 9, y + 27, 14, 2);
+};
+D.stool = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, shade(col, -0.3), x + 11, y + 16, 2, 12); R(ctx, shade(col, -0.3), x + 19, y + 16, 2, 12);
+  circle(ctx, col, x + 16, y + 14, 8);
+  circle(ctx, shade(col, 0.15), x + 14, y + 12, 3);
+};
+
+// ----- Escritorio -----
+D.mousepad = (ctx, x, y, w, h, o, c) => { RR(ctx, o.color || c.color, x, y + 2, w, h - 2, 3); RR(ctx, '#e8e8ee', x + w - 9, y + 4, 6, 8, 3); };
+D.stickyNotes = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; R(ctx, shade(col, -0.15), x + 4, y + 4, 11, 11); R(ctx, col, x + 1, y + 1, 11, 11); R(ctx, shade(col, -0.35), x + 3, y + 4, 7, 1); R(ctx, shade(col, -0.35), x + 3, y + 7, 5, 1); };
+D.pencilCup = (ctx, x, y, w, h, o, c) => { R(ctx, '#e63946', x + 2, y, 1, 6); R(ctx, '#ffd23f', x + 4, y + 1, 1, 5); R(ctx, '#2bb673', x + 6, y, 1, 6); R(ctx, o.color || c.color, x + 1, y + 6, w - 2, h - 6); };
+D.deskCalendar = (ctx, x, y, w, h, o, c) => { R(ctx, '#fff', x + 1, y + 3, w - 2, h - 3); R(ctx, o.color || c.color, x + 1, y + 3, w - 2, 4); R(ctx, '#333', x + 5, y + 9, 6, 4); };
+D.tablet = (ctx, x, y, w, h, o, c) => { RR(ctx, o.color || c.color, x + 1, y + 1, w - 2, h - 2, 2); R(ctx, '#7ad3ff', x + 3, y + 3, w - 6, h - 6); R(ctx, '#FE3377', x + 5, y + 6, 4, 3); };
+D.phone = (ctx, x, y, w, h, o, c) => { RR(ctx, o.color || c.color, x, y + 1, w, h - 2, 2); R(ctx, '#5aa9e6', x + 1, y + 3, w - 2, h - 7); };
+D.globe = (ctx, x, y, w, h) => { R(ctx, '#7a4a2b', x + 3, y + h - 3, w - 6, 3); R(ctx, '#aaa', x + w / 2 - 1, y + 14, 2, h - 16); circle(ctx, '#3a86ff', x + w / 2, y + 8, 7); R(ctx, '#2bb673', x + w / 2 - 4, y + 5, 4, 3); R(ctx, '#2bb673', x + w / 2 + 1, y + 9, 3, 3); };
+D.rubik = (ctx, x, y) => { const cs = ['#e63946', '#ffd23f', '#2bb673', '#3a86ff', '#fff', '#f4a261']; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R(ctx, cs[(i * 3 + j) % 6], x + i * 2.6, y + j * 2.6, 2.4, 2.4); };
+D.plushie = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; circle(ctx, col, x + w / 2, y + 11, 6); circle(ctx, col, x + w / 2, y + 5, 5); circle(ctx, col, x + w / 2 - 4, y + 1, 2); circle(ctx, col, x + w / 2 + 4, y + 1, 2); R(ctx, '#222', x + w / 2 - 2, y + 4, 1, 1); R(ctx, '#222', x + w / 2 + 1, y + 4, 1, 1); };
+D.vase = (ctx, x, y, w, h, o, c) => { RR(ctx, o.color || c.color, x + 4, y + 12, w - 8, h - 12, 3); R(ctx, '#3f9447', x + w / 2 - 1, y + 4, 1, 9); circle(ctx, '#ffd23f', x + w / 2 - 3, y + 4, 2.5); circle(ctx, '#f15bb5', x + w / 2 + 3, y + 6, 2.5); circle(ctx, '#fff', x + w / 2, y + 2, 2.5); };
+D.succulent = (ctx, x, y, w, h) => { R(ctx, '#d0d4da', x + 3, y + 9, w - 6, h - 9); for (let k = 0; k < 5; k++) circle(ctx, k % 2 ? '#6fbf73' : '#4caf50', x + 4 + k * 2, y + 7 - (k % 2) * 2, 2.5); };
+
+// ----- Gamer y stream -----
+D.gamingPC = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; R(ctx, '#1d1d22', x, y, w, h); R(ctx, '#2f2f38', x + 2, y + 2, w - 4, h - 6); R(ctx, col, x + 3, y + 4, w - 6, 2); R(ctx, col, x + 3, y + 12, w - 6, 2); circle(ctx, col, x + w / 2, y + 22, 3); };
+D.mic = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; R(ctx, '#555', x + w / 2 - 1, y + 12, 2, h - 14); R(ctx, '#555', x + 2, y + h - 3, w - 4, 3); RR(ctx, col, x + w / 2 - 4, y, 8, 13, 4); R(ctx, shade(col, 0.3), x + w / 2 - 2, y + 3, 4, 1); R(ctx, shade(col, 0.3), x + w / 2 - 2, y + 6, 4, 1); };
+D.ringLight = (ctx, x, y, w, h) => { ctx.strokeStyle = '#fff8e0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + w / 2, y + 9, 8, 0, Math.PI * 2); ctx.stroke(); R(ctx, '#555', x + w / 2 - 1, y + 17, 2, h - 18); };
+D.streamDeck = (ctx, x, y, w, h) => { R(ctx, '#1d1d22', x, y, w, h); const cs = ['#FE3377', '#FFCC00', '#3DDC84', '#3a86ff']; for (let k = 0; k < 4; k++) R(ctx, cs[k], x + 2 + k * 3.5, y + 2, 2.5, 3); };
+D.handheld = (ctx, x, y, w, h, o, c) => { RR(ctx, o.color || c.color, x, y, w, h, 3); R(ctx, '#1d1d22', x + 5, y + 1, w - 10, h - 2); };
+D.ledStrip = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; ctx.fillStyle = col; ctx.globalAlpha = 0.35; ctx.fillRect(x, y - 2, w, h + 4); ctx.globalAlpha = 1; R(ctx, col, x, y + 2, w, 3); R(ctx, '#fff', x, y + 3, w, 1); };
+D.neonSign = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.strokeStyle = col; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x + w / 2, y + h - 3); ctx.bezierCurveTo(x + 2, y + 6, x + w / 2 - 6, y - 2, x + w / 2, y + 5); ctx.bezierCurveTo(x + w / 2 + 6, y - 2, x + w - 2, y + 6, x + w / 2, y + h - 3); ctx.stroke(); ctx.restore();
+};
+D.carModel = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; RR(ctx, col, x, y + 5, w, 7, 3); RR(ctx, shade(col, -0.2), x + 5, y + 1, w - 11, 6, 2); R(ctx, '#a6dcff', x + 7, y + 2, w - 15, 3); circle(ctx, '#111', x + 5, y + 13, 2.5); circle(ctx, '#111', x + w - 5, y + 13, 2.5); };
+
+// ----- Mascotas -----
+D.cat = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x + w / 2 + 1, y + 11, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+  circle(ctx, col, x + 4, y + 6, 4); R(ctx, col, x + 1, y + 1, 2, 3); R(ctx, col, x + 5, y + 1, 2, 3);
+  R(ctx, '#222', x + 2, y + 5, 1, 1); R(ctx, '#222', x + 5, y + 5, 1, 1);
+  R(ctx, col, x + w - 2, y + 4, 2, 7);
+};
+D.dog = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x + w / 2 + 2, y + 15, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+  circle(ctx, col, x + 7, y + 8, 6); R(ctx, shade(col, -0.3), x + 1, y + 5, 3, 7); R(ctx, shade(col, -0.3), x + 10, y + 5, 3, 7);
+  R(ctx, '#222', x + 5, y + 7, 1.5, 1.5); R(ctx, '#222', x + 8, y + 7, 1.5, 1.5); R(ctx, '#222', x + 6, y + 10, 2, 1.5);
+  R(ctx, '#e63946', x + 5, y + 13, 5, 1.5);
+};
+D.fishbowl = (ctx, x, y, w, h) => { circle(ctx, '#bfe7f7', x + w / 2, y + h / 2 + 1, 7); R(ctx, '#e8f7fd', x + 3, y + 2, w - 6, 2); R(ctx, '#f77f00', x + w / 2 - 2, y + h / 2, 4, 2); R(ctx, '#f77f00', x + w / 2 + 2, y + h / 2 - 1, 2, 4); R(ctx, '#3f9447', x + 4, y + h - 4, 2, 3); };
+D.bird = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; circle(ctx, col, x + 4, y + 10, 4); circle(ctx, col, x + 4, y + 5, 3); R(ctx, '#f77f00', x + 7, y + 5, 2, 1); R(ctx, '#222', x + 5, y + 4, 1, 1); R(ctx, '#7a4a2b', x, y + 14, 8, 1); };
+
+// ----- Comida -----
+D.donut = (ctx, x, y, w, h, o, c) => { circle(ctx, '#d9a066', x + w / 2, y + h / 2 + 1, 6); circle(ctx, o.color || c.color, x + w / 2, y + h / 2, 5); circle(ctx, '#7a4a2b', x + w / 2, y + h / 2, 1.5); };
+D.boba = (ctx, x, y, w, h, o, c) => { R(ctx, o.color || c.color, x + 1, y + 4, w - 2, h - 4); R(ctx, '#2b1d14', x + 2, y + h - 5, w - 4, 3); R(ctx, '#e63946', x + w / 2, y, 1, 6); R(ctx, '#fff', x + 1, y + 4, w - 2, 1); };
+D.tacos = (ctx, x, y, w, h) => { for (let k = 0; k < 3; k++) { ctx.fillStyle = '#f2c94c'; ctx.beginPath(); ctx.arc(x + 5 + k * 7, y + 12, 5, Math.PI, 0); ctx.fill(); R(ctx, '#3f9447', x + 1 + k * 7, y + 9, 8, 2); R(ctx, '#e63946', x + 3 + k * 7, y + 8, 3, 1); } };
+D.cake = (ctx, x, y, w, h, o, c) => { R(ctx, '#7a4a2b', x + 2, y + 7, w - 4, 7); R(ctx, o.color || c.color, x + 2, y + 6, w - 4, 3); R(ctx, '#fff', x + 2, y + 6, w - 4, 1); R(ctx, '#ffd23f', x + w / 2 - 1, y + 1, 2, 5); R(ctx, '#FF8A3D', x + w / 2 - 1, y, 2, 2); };
+
+// ----- GTAHUB -----
+function hexPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) { const a = Math.PI / 3 * k - Math.PI / 2; ctx[k ? 'lineTo' : 'moveTo'](cx + r * Math.cos(a), cy + r * Math.sin(a)); }
+  ctx.closePath();
+}
+D.hexLamp = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, '#1d1d22', x + w / 2 - 5, y + h - 3, 10, 3);
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 10;
+  ctx.strokeStyle = col; ctx.lineWidth = 2.5; hexPath(ctx, x + w / 2, y + 10, 9); ctx.stroke(); ctx.restore();
+};
+D.hexBadge = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  ctx.fillStyle = col; hexPath(ctx, x + w / 2, y + h / 2, 7.5); ctx.fill();
+  ctx.fillStyle = '#141414'; hexPath(ctx, x + w / 2, y + h / 2, 5.5); ctx.fill();
+  ctx.fillStyle = col; hexPath(ctx, x + w / 2, y + h / 2, 2.5); ctx.fill();
+};
+D.cubeLogo = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color; const cx = x + w / 2; const cy = y + h / 2; const r = 7;
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy - r / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx - r, cy - r / 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(cx - r, cy - r / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy + r / 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(col, -0.35); ctx.beginPath(); ctx.moveTo(cx + r, cy - r / 2); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx + r, cy + r / 2); ctx.closePath(); ctx.fill();
+};
+D.hexNeon = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 10; ctx.strokeStyle = col; ctx.lineWidth = 2;
+  hexPath(ctx, x + w / 2 - 6, y + h / 2, 7); ctx.stroke(); hexPath(ctx, x + w / 2 + 6, y + h / 2, 7); ctx.stroke(); ctx.restore();
+};
+
+// ----- Piso -----
+D.floorPlant = (ctx, x, y, w, h) => { R(ctx, '#3d2b1f', x + 9, y + 20, 14, 11); R(ctx, '#2b1d14', x + 8, y + 19, 16, 3); for (let k = 0; k < 7; k++) circle(ctx, k % 2 ? '#2e8540' : '#3a9d4a', x + 7 + hash(k, 4) * 18, y + 4 + hash(k, 9) * 14, 6); };
+D.floorLamp = (ctx, x, y, w, h, o, c) => { R(ctx, '#333', x + w / 2 - 1, y + 10, 2, h - 12); R(ctx, '#333', x + 2, y + h - 3, w - 4, 3); ctx.fillStyle = o.color || c.color; ctx.beginPath(); ctx.moveTo(x + 1, y + 11); ctx.lineTo(x + w - 1, y + 11); ctx.lineTo(x + w - 4, y); ctx.lineTo(x + 4, y); ctx.fill(); };
+D.miniFridge = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; RR(ctx, col, x + 1, y + 4, w - 2, h - 4, 2); R(ctx, shade(col, -0.15), x + 1, y + 14, w - 2, 1); R(ctx, '#888', x + w - 6, y + 8, 2, 4); R(ctx, '#888', x + w - 6, y + 17, 2, 6); };
+D.guitar = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; R(ctx, '#3d2b1f', x + w / 2 - 1, y, 2, 16); R(ctx, '#3d2b1f', x + w / 2 - 2, y, 4, 3); circle(ctx, col, x + w / 2, y + 20, 6); circle(ctx, col, x + w / 2, y + 26, 7); circle(ctx, '#2b1d14', x + w / 2, y + 22, 2); };
+D.roundRug = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2 - 1, h / 2 - 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = shade(col, -0.18); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2 - 6, h / 2 - 7, 0, 0, Math.PI * 2); ctx.stroke(); };
+D.petBed = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; ctx.fillStyle = shade(col, -0.2); ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2 + 1, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(col, 0.3); ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2 + 1, w / 2 - 4, h / 2 - 3, 0, 0, Math.PI * 2); ctx.fill(); };
+D.trashCan = (ctx, x, y, w, h, o, c) => { const col = o.color || c.color; R(ctx, col, x + 3, y + 3, w - 6, h - 3); R(ctx, shade(col, 0.2), x + 2, y + 2, w - 4, 2); R(ctx, shade(col, -0.2), x + 6, y + 6, 1, h - 8); R(ctx, shade(col, -0.2), x + 10, y + 6, 1, h - 8); };
+D.tallSpeaker = (ctx, x, y, w, h, o, c) => { R(ctx, o.color || c.color, x + 1, y, w - 2, h); circle(ctx, '#555', x + w / 2, y + 8, 4); circle(ctx, '#333', x + w / 2, y + 8, 2); circle(ctx, '#555', x + w / 2, y + 21, 5); circle(ctx, '#333', x + w / 2, y + 21, 2.5); };
+
 const fallback = (ctx, x, y, w, h) => RR(ctx, '#c9ced6', x + 2, y + 2, w - 4, h - 4, 4);
 
 export function drawObject(ctx, o, offX = 0, offY = 0) {

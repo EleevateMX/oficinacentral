@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Undo2, Redo2, Search, Plus, Trash2, Lock, Square, Pencil, MousePointer2 } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
-import { CATALOG, CATEGORIES, DESK_DECOR_LIMIT } from '@shared/catalog.js';
+import { CATALOG, CATEGORIES, DESK_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES, COLORS } from '@shared/catalog.js';
 import { AREA_COLORS, TEMPLATES } from '@shared/map.js';
 import { drawObjectPreview } from '../lib/render.js';
 import * as editor from '../lib/editor.js';
@@ -43,6 +43,13 @@ export default function Decorator() {
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={18} /></button>
       </div>
 
+      {mode === 'decor' && desk && (
+        <div className="seg small">
+          {[['objects', 'Objetos'], ['place', 'Mi lugar']].map(([k, l]) => (
+            <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+          ))}
+        </div>
+      )}
       {mode === 'build' && (
         <div className="seg small">
           {[['objects', 'Objetos'], ['areas', 'Áreas'], ['floors', 'Pisos']].map(([k, l]) => (
@@ -57,6 +64,8 @@ export default function Decorator() {
         <AreasTab floor={floor} ed={ed} />
       ) : mode === 'build' && tab === 'floors' ? (
         <FloorsTab floor={floor} />
+      ) : mode === 'decor' && tab === 'place' ? (
+        <MyPlace floor={floor} desk={desk} />
       ) : (
         <ObjectsTab mode={mode} ed={ed} floor={floor} desk={desk} />
       )}
@@ -262,6 +271,45 @@ function FloorsTab({ floor }) {
         <Select value={template} onChange={setTemplate} options={Object.entries(TEMPLATES).map(([k, t]) => ({ value: k, label: t.name }))} />
         <button className="btn primary" type="submit"><Plus size={15} /> Crear piso</button>
       </form>
+    </div>
+  );
+}
+
+// Mi lugar: modelo y color del escritorio y de la silla propios
+function ModelPicker({ title, types, obj }) {
+  if (!obj) return null;
+  return (
+    <div className="area-form">
+      <div className="area-form-title">{title}</div>
+      <div className="model-grid">
+        {types.map((t) => (
+          <button key={t} className={`dec-item ${obj.type === t ? 'on' : ''}`} onClick={() => obj.type !== t && editor.updateObject(obj, { type: t }).catch(() => {})} title={CATALOG[t].name}>
+            <Preview type={t} />
+            <span>{CATALOG[t].name}</span>
+          </button>
+        ))}
+      </div>
+      <div className="swatch-row">
+        {COLORS.map((c) => (
+          <button key={c} className={`sw ${(obj.color || CATALOG[obj.type].color) === c ? 'on' : ''}`} style={{ background: c }} onClick={() => editor.updateObject(obj, { color: c }).catch(() => {})} aria-label={c} />
+        ))}
+        <label className="sw sw-custom" title="Cualquier color">
+          +
+          <input type="color" value={obj.color || CATALOG[obj.type].color || '#888888'} onChange={(e) => editor.updateObject(obj, { color: e.target.value }).catch(() => {})} aria-label="Color personalizado" />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function MyPlace({ floor, desk }) {
+  const deskObj = floor.objects.find((o) => o.id === desk.id);
+  const chair = editor.chairOf(floor, desk);
+  return (
+    <div className="dec-scroll">
+      <p className="muted small">Así se ve tu lugar para todos. La decoración la colocas desde la pestaña Objetos.</p>
+      <ModelPicker title="Escritorio" types={DESK_TYPES} obj={deskObj} />
+      <ModelPicker title="Silla" types={CHAIR_TYPES} obj={chair} />
     </div>
   );
 }

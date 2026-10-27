@@ -3,7 +3,8 @@ import { Pencil, Trash2, ArrowLeft } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Modal, AvatarCanvas, initials, Select } from './ui.jsx';
-import { SPRITE_OPTIONS, STYLE_NAMES, PRESETS, normalizeSpec } from '@shared/sprite.js';
+import { SPRITE_OPTIONS, STYLE_NAMES, PARTS, PACKS, PRESETS, normalizeSpec, randomSpec } from '@shared/sprite.js';
+import { Shuffle, Plus } from 'lucide-react';
 import { timezones, tzOffsetLabel } from '../lib/time.js';
 
 // Reduce la imagen a 256×256 (recorte cuadrado centrado)
@@ -63,7 +64,7 @@ export default function EditProfile() {
 
   if (step === 'avatar') {
     return (
-      <Modal title={<span className="row gap8"><button className="icon-btn" onClick={() => setStep('main')} aria-label="Volver"><ArrowLeft size={18} /></button> Personaliza tu avatar</span>} onClose={close} width={620}>
+      <Modal title={<span className="row gap8"><button className="icon-btn" onClick={() => setStep('main')} aria-label="Volver"><ArrowLeft size={18} /></button> Personaliza tu avatar</span>} onClose={close} width={800}>
         <AvatarEditor avatar={avatar} onChange={setAvatar} />
         <div className="modal-actions">
           <button className="btn" onClick={() => setStep('main')}>Listo</button>
@@ -113,12 +114,18 @@ export default function EditProfile() {
   );
 }
 
-function Swatches({ options, value, onChange }) {
+// Paleta sugerida + selector libre (cualquier color)
+function Swatches({ options, value, onChange, label }) {
+  const custom = value && !options.some((c) => c.toLowerCase() === String(value).toLowerCase());
   return (
     <div className="swatch-row">
       {options.map((c) => (
-        <button type="button" key={c} className={`sw ${value === c ? 'on' : ''}`} style={{ background: c }} onClick={() => onChange(c)} aria-label={c} />
+        <button type="button" key={c} className={`sw ${String(value).toLowerCase() === c.toLowerCase() ? 'on' : ''}`} style={{ background: c }} onClick={() => onChange(c)} aria-label={`${label} ${c}`} />
       ))}
+      <label className={`sw sw-custom ${custom ? 'on' : ''}`} style={custom ? { background: value } : undefined} title="Elegir cualquier color">
+        {!custom && <Plus size={13} />}
+        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value || '') ? value : '#888888'} onChange={(e) => onChange(e.target.value)} aria-label={`${label}: color personalizado`} />
+      </label>
     </div>
   );
 }
@@ -146,69 +153,102 @@ function WalkingPreview({ avatar }) {
   return <AvatarCanvas avatar={avatar} width={128} height={192} dir={dir} step={step} />;
 }
 
+const TABS = [
+  ['chars', 'Personajes'],
+  ['face', 'Cara y cabello'],
+  ['clothes', 'Ropa'],
+  ['acc', 'Accesorios'],
+];
+
 export function AvatarEditor({ avatar, onChange }) {
   const characters = useOffice((s) => s.characters);
-  const [tab, setTab] = useState(avatar.sprite ? 'chars' : avatar.preset ? 'chars' : 'custom');
+  const theme = useOffice((s) => s.config.theme);
+  const [tab, setTab] = useState(avatar.sprite || avatar.preset ? 'chars' : 'face');
+  const [pack, setPack] = useState(theme === 'gtahub' ? 'gtahub' : 'all');
   const spec = normalizeSpec(avatar.sprite ? {} : avatar);
-  const set = (k) => (v) => onChange({ ...spec, preset: undefined, sprite: undefined, [k]: v });
+  const set = (k) => (v) => onChange({ ...spec, preset: undefined, sprite: undefined, id: undefined, name: undefined, pack: undefined, [k]: v });
   const pickPreset = (p) => {
-    const { id, name, ...rest } = p;
+    const { id, name, pack: _pack, ...rest } = p;
     onChange({ ...rest, preset: id });
   };
-  const random = () => {
-    const pick = (a) => a[Math.floor(Math.random() * a.length)];
-    onChange(Object.fromEntries(Object.entries(SPRITE_OPTIONS).map(([k, v]) => [k, pick(v)])));
-  };
+  const presets = PRESETS.filter((p) => pack === 'all' || p.pack === pack);
+  const row = (label, k, kind) => (
+    <>
+      <div className="ae-label">{label}</div>
+      {kind === 'color'
+        ? <Swatches label={label} options={SPRITE_OPTIONS[k]} value={spec[k]} onChange={set(k)} />
+        : <Chips options={PARTS[k]} names={STYLE_NAMES[k]} value={spec[k]} onChange={set(k)} />}
+    </>
+  );
 
   return (
     <div className="avatar-editor">
       <div className="ae-preview">
         <WalkingPreview avatar={avatar} />
-        {!avatar.sprite && <button type="button" className="btn tiny" onClick={random}>Aleatorio</button>}
+        <button type="button" className="btn tiny" onClick={() => onChange(randomSpec())}><Shuffle size={13} /> Aleatorio</button>
+        <span className="muted small ae-hint">Cualquier color sirve: usa el botón + de cada fila.</span>
       </div>
       <div className="ae-options">
         <div className="seg">
-          <button type="button" className={tab === 'chars' ? 'on' : ''} onClick={() => setTab('chars')}>Personajes</button>
-          <button type="button" className={tab === 'custom' ? 'on' : ''} onClick={() => setTab('custom')}>Personalizar</button>
+          {TABS.map(([k, l]) => <button type="button" key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
         </div>
-        {tab === 'chars' ? (
-          <div className="char-grid">
-            {PRESETS.map((p) => (
-              <button type="button" key={p.id} className={`char-card ${!avatar.sprite && avatar.preset === p.id ? 'on' : ''}`} onClick={() => pickPreset(p)}>
-                <AvatarCanvas avatar={p} width={48} height={72} />
-                <span>{p.name}</span>
-              </button>
-            ))}
-            {characters.map((c) => (
-              <button type="button" key={c.id} className={`char-card ${avatar.sprite === c.id ? 'on' : ''}`} onClick={() => onChange({ sprite: c.id })}>
-                <AvatarCanvas avatar={{ sprite: c.id }} width={48} height={72} />
-                <span>{c.name}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <>
-            {avatar.sprite && <p className="muted small">Estás usando un personaje dibujado a mano. Al cambiar algo aquí pasas a un personaje personalizado.</p>}
-            <div className="ae-label">Piel</div>
-            <Swatches options={SPRITE_OPTIONS.skin} value={spec.skin} onChange={set('skin')} />
-            <div className="ae-label">Peinado</div>
-            <Chips options={SPRITE_OPTIONS.hairStyle} names={STYLE_NAMES.hairStyle} value={spec.hairStyle} onChange={set('hairStyle')} />
-            <div className="ae-label">Color de cabello</div>
-            <Swatches options={SPRITE_OPTIONS.hair} value={spec.hair} onChange={set('hair')} />
-            <div className="ae-label">Ropa</div>
-            <Chips options={SPRITE_OPTIONS.top} names={STYLE_NAMES.top} value={spec.top} onChange={set('top')} />
-            <div className="ae-label">Color de la ropa</div>
-            <Swatches options={SPRITE_OPTIONS.shirt} value={spec.shirt} onChange={set('shirt')} />
-            <div className="ae-label">Color de detalle (estampado, corbata, gorra…)</div>
-            <Swatches options={SPRITE_OPTIONS.accent} value={spec.accent} onChange={set('accent')} />
-            <div className="ae-label">Pantalón</div>
-            <Swatches options={SPRITE_OPTIONS.pants} value={spec.pants} onChange={set('pants')} />
-            <div className="ae-label">Zapatos</div>
-            <Swatches options={SPRITE_OPTIONS.shoes} value={spec.shoes} onChange={set('shoes')} />
-            <div className="ae-label">Accesorio</div>
-            <Chips options={SPRITE_OPTIONS.accessory} names={STYLE_NAMES.accessory} value={spec.accessory} onChange={set('accessory')} />
-          </>
-        )}
+        {avatar.sprite && tab !== 'chars' && <p className="muted small">Estás usando un personaje dibujado a mano. Si cambias algo aquí pasas a un personaje armado por piezas.</p>}
+        <div className="ae-scroll">
+          {tab === 'chars' && (
+            <>
+              <div className="chip-row ae-packs">
+                {[['all', 'Todos'], ...PACKS.map((p) => [p.id, p.name]), ...(characters.length ? [['uploaded', 'Dibujados']] : [])].map(([k, l]) => (
+                  <button type="button" key={k} className={`chip-btn ${pack === k ? 'on' : ''}`} onClick={() => setPack(k)}>{l}</button>
+                ))}
+              </div>
+              <div className="char-grid">
+                {pack !== 'uploaded' && presets.map((p) => (
+                  <button type="button" key={p.id} className={`char-card ${!avatar.sprite && avatar.preset === p.id ? 'on' : ''}`} onClick={() => pickPreset(p)}>
+                    <AvatarCanvas avatar={p} width={48} height={72} />
+                    <span>{p.name}</span>
+                  </button>
+                ))}
+                {(pack === 'all' || pack === 'uploaded') && characters.map((c) => (
+                  <button type="button" key={c.id} className={`char-card ${avatar.sprite === c.id ? 'on' : ''}`} onClick={() => onChange({ sprite: c.id })}>
+                    <AvatarCanvas avatar={{ sprite: c.id }} width={48} height={72} />
+                    <span>{c.name}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="muted small">Elige uno como base y luego ajústalo en las otras pestañas.</p>
+            </>
+          )}
+          {tab === 'face' && (
+            <>
+              {row('Piel', 'skin', 'color')}
+              {row('Ojos', 'eyes')}
+              {row('Color de ojos', 'eyeColor', 'color')}
+              {row('Boca', 'mouth')}
+              {row('Peinado', 'hairStyle')}
+              {row('Color de cabello', 'hair', 'color')}
+              {row('Vello facial', 'facialHair')}
+            </>
+          )}
+          {tab === 'clothes' && (
+            <>
+              {row('Arriba', 'top')}
+              {row('Color principal', 'shirt', 'color')}
+              {row('Color de detalle (estampado, corbata, cuello…)', 'accent', 'color')}
+              {row('Abajo', 'bottom')}
+              {row(spec.bottom === 'skirt' ? 'Color de la falda' : spec.bottom === 'shorts' ? 'Color del short' : 'Color del pantalón', 'pants', 'color')}
+              {row('Zapatos', 'shoes', 'color')}
+            </>
+          )}
+          {tab === 'acc' && (
+            <>
+              {row('Gorra o sombrero', 'hat')}
+              {row('Lentes', 'eyewear')}
+              {row('Audífonos', 'audio')}
+              {row('Color de gorra y audífonos', 'hatColor', 'color')}
+              {row('Extra', 'extra')}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -10,7 +10,8 @@ export default function AuthLayout({ config = {}, title, subtitle, children, hos
         <div className="auth-brand">
           {hasOwnMark ? <OfficeMark config={config} size={44} /> : <Logo size={26} />}
           <div>
-            <h1>{title}</h1>
+            <span className="auth-kicker">Oficina virtual</span>
+            <h1>{config.theme === 'gtahub' && /^gtahub$/i.test(String(title)) ? <>{title}<span className="gg">.GG</span></> : title}</h1>
             {subtitle && <p>{subtitle}</p>}
           </div>
         </div>
