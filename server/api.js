@@ -402,6 +402,33 @@ api.post('/me/password', wrap((req, res) => {
 
 registerFileRoutes(api, { fail });
 
+// ---------- Comentarios del equipo (ideas y fallas) ----------
+const FEEDBACK_KINDS = { idea: '💡 Idea', bug: '🐞 Algo no funciona', other: '💬 Comentario' };
+const feedbackRow = (r) => ({
+  id: r.id, userId: r.user_id, kind: r.kind, text: r.text, status: r.status, createdAt: r.created_at,
+  meta: parseJSON(r.meta, {}), file: r.file_id ? { id: r.file_id, url: `/api/files/${r.file_id}/captura.jpg` } : null,
+});
+
+api.post('/feedback', wrap((req, res) => {
+  const text = String(req.body?.text || '').trim().slice(0, 3000);
+  if (!text) return fail(res, 400, 'Cuéntanos qué pasó o qué se te ocurre');
+  const kind = FEEDBACK_KINDS[req.body?.kind] ? req.body.kind : 'other';
+  const recent = db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE user_id = ? AND created_at > ?').get(req.user.id, now() - 3600e3).n;
+  if (recent >= 20) return fail(res, 429, 'Ya enviaste muchos comentarios en esta hora');
+  const file = req.body?.fileId ? getFiles([req.body.fileId], req.user.id)[0] : null;
+  const m = req.body?.meta && typeof req.body.meta === 'object' ? req.body.meta : {};
+  const meta = {
+    ua: String(req.headers['user-agent'] || '').slice(0, 300),
+    screen: String(m.screen || '').slice(0, 40), view: String(m.view || '').slice(0, 30),
+    where: String(m.where || '').slice(0, 80), media: String(m.media || '').slice(0, 20), url: String(m.url || '').slice(0, 200),
+  };
+  const id = Number(db.prepare('INSERT INTO feedback (user_id, kind, text, file_id, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(req.user.id, kind, text, file?.id || null, JSON.stringify(meta), now()).lastInsertRowid);
+  alert(`${FEEDBACK_KINDS[kind]} de ${req.user.display_name}`, `${text}\n\n${meta.view} · ${meta.where} · ${meta.screen}\n${meta.ua}`, { level: kind === 'bug' ? 'warn' : 'info', key: `feedback:${id}` });
+  emitAll('feedback', { id });
+  res.json({ ok: true, id });
+}));
+
 // ---------- Verificación en dos pasos ----------
 api.post('/me/2fa/setup', wrap((req, res) => {
   if (req.user.totp_enabled) return fail(res, 400, 'Ya tienes activada la verificación en dos pasos');
@@ -630,6 +657,19 @@ admin.post('/users/:id/reset-password', wrap((req, res) => {
   disconnectUser(id);
   res.json({ password });
 }));
+
+admin.get('/feedback', (req, res) => {
+  const st = String(req.query.status || '');
+  const rows = st ? db.prepare('SELECT * FROM feedback WHERE status = ? ORDER BY id DESC LIMIT 200').all(st) : db.prepare('SELECT * FROM feedback ORDER BY id DESC LIMIT 200').all();
+  res.json({ feedback: rows.map(feedbackRow), counts: Object.fromEntries(db.prepare('SELECT status, COUNT(*) AS n FROM feedback GROUP BY status').all().map((r) => [r.status, r.n])) });
+});
+
+admin.patch('/feedback/:id', (req, res) => {
+  const status = ['nuevo', 'visto', 'resuelto'].includes(req.body?.status) ? req.body.status : null;
+  if (!status) return fail(res, 400, 'Estado inválido');
+  db.prepare('UPDATE feedback SET status = ? WHERE id = ?').run(status, Number(req.params.id));
+  res.json({ ok: true });
+});
 
 api.use('/admin', admin);
 

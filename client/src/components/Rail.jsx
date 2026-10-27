@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Search, Map, MessageCircle, Calendar, Bell, Settings } from 'lucide-react';
+import { Search, Map, MessageCircle, Calendar, Bell, Settings, MessageSquareHeart } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { Kbd } from './ui.jsx';
 import { OfficeMark, Simbolo } from './brand.jsx';
@@ -55,6 +55,9 @@ export default function Rail() {
           <Simbolo size={20} variante={dark ? 'negativo' : 'positivo'} />
         </a>
       )}
+      <button className="rail-btn" onClick={() => office.set({ modal: { type: 'feedback' } })} title="Enviar comentario (ideas o fallas)" aria-label="Enviar comentario">
+        <MessageSquareHeart size={20} />
+      </button>
       <button className="rail-btn" onClick={() => office.set({ modal: { type: 'prefs', section: 'general' } })} title="Preferencias" aria-label="Preferencias">
         <Settings size={20} />
       </button>

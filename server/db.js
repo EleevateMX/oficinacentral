@@ -173,6 +173,16 @@ addColumn('users', 'shift_at', 'INTEGER');
 addColumn('events', 'area_id', 'INTEGER');
 addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(`
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL DEFAULT 'idea',
+  text TEXT NOT NULL,
+  file_id TEXT,
+  meta TEXT,
+  status TEXT NOT NULL DEFAULT 'nuevo',
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

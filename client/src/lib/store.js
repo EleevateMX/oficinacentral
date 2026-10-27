@@ -222,6 +222,7 @@ class Office {
     });
     s.on('message', (m) => this.onMessage(m));
     s.on('reaction', (r) => this.dispatch('reaction', r));
+    s.on('feedback', () => this.dispatch('feedback'));
     s.on('room-msg', (m) => this.onRoomMsg(m));
     s.on('channels', () => this.refreshChat());
     s.on('characters', () => this.loadCharacters());

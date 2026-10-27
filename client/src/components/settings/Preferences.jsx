@@ -1,7 +1,8 @@
 import { SCREEN_PRESETS } from '../../lib/media.js';
+import { FeedbackAdmin } from '../Feedback.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music,
+  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
@@ -30,6 +31,7 @@ const SECTIONS = [
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
   { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
+  { id: 'feedback', label: 'Comentarios', icon: MessageSquareHeart, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -77,6 +79,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'characters' && <CharactersAdmin />}
             {cur === 'brand' && <BrandAdmin />}
             {cur === 'security' && <SecurityAdmin />}
+            {cur === 'feedback' && <FeedbackAdmin api={api} />}
           </div>
         </section>
       </div>

@@ -89,3 +89,18 @@ test('chat de la sala: llega a quien está cerca y no a quien está lejos', asyn
     a.close(); b.close(); c.close();
   }
 });
+
+test('comentarios: cualquiera envía, solo admins los ven y cambian su estado', async () => {
+  const up = await upload(kev, PNG, 'captura.jpg', 'image/png');
+  const r = await kev.post('/feedback', { kind: 'bug', text: 'No veo la pantalla de Ana', fileId: up.data.file.id, meta: { view: 'map', where: 'Sala Sur', screen: '1500×940' } });
+  assert.equal(r.status, 200);
+  assert.equal((await kev.post('/feedback', { text: '  ' })).status, 400);
+  assert.equal((await kev.get('/admin/feedback')).status, 403);
+  const list = await admin.get('/admin/feedback?status=nuevo');
+  const f = list.data.feedback.find((x) => x.id === r.data.id);
+  assert.equal(f.kind, 'bug');
+  assert.equal(f.meta.where, 'Sala Sur');
+  assert.ok(f.file?.url);
+  assert.equal((await admin.patch(`/admin/feedback/${f.id}`, { status: 'resuelto' })).status, 200);
+  assert.equal((await admin.get('/admin/feedback?status=resuelto')).data.counts.resuelto, 1);
+});
