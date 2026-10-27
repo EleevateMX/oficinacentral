@@ -326,6 +326,9 @@ class Office {
         this.desktopNotify(`${actor?.displayName} te saludó 👋`);
       } else if (n.type === 'event') {
         this.toast({ title: `📅 ${actor?.displayName || 'Alguien'} te invitó a "${n.data.title}"` });
+      } else if (n.type === 'birthday') {
+        this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
+        playSound('wave', this.state.prefs.audio.notifVolume);
       }
     });
   }

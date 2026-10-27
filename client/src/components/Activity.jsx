@@ -9,8 +9,10 @@ const TEXT = {
   wave: (n, count) => `👋 ${n} te saludó${count > 1 ? ` ${count} veces` : ''}`,
   mention: (n) => `💬 ${n} te mencionó`,
   event: (n) => `📅 ${n} te invitó a una reunión`,
+  birthday: (n) => `🎂 ${n} te felicitó por tu cumpleaños`,
+  call: (n) => `📞 ${n} te llamó`,
 };
-const TITLE = { wave: 'Saludo de', mention: 'Mención de', event: 'Invitación de' };
+const TITLE = { wave: 'Saludo de', mention: 'Mención de', event: 'Invitación de', birthday: 'Felicitación de', call: 'Llamada de' };
 
 export default function ActivityPanel() {
   const notifications = useOffice((s) => s.notifications);
@@ -75,7 +77,7 @@ export default function ActivityPanel() {
               </div>
               <div className="activity-body">
                 <Avatar user={u} size={36} />
-                <span>{(TEXT[g.type] || (() => g.type))(name, g.count)}{g.type === 'event' && g.data.title ? `: ${g.data.title}` : ''}{g.type === 'mention' && g.data.preview ? `: “${g.data.preview}”` : ''}</span>
+                <span>{(TEXT[g.type] || (() => g.type))(name, g.count)}{g.type === 'event' && g.data.title ? `: ${g.data.title}` : ''}{g.type === 'mention' && g.data.preview ? `: “${g.data.preview}”` : ''}{g.type === 'birthday' && g.data.text ? `: “${g.data.text}”` : ''}</span>
               </div>
             </button>
           );

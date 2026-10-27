@@ -1,0 +1,127 @@
+// Cumpleaños (guardar fecha, felicitar, avisar) y mesas de juego (asientos, controles, victorias).
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { io } from 'socket.io-client';
+import { startServer, adminClient, createMember } from './helpers/server.js';
+
+let srv;
+before(async () => { srv = await startServer(); });
+after(async () => { await srv?.stop(); });
+
+const connect = (c) => new Promise((resolve, reject) => {
+  const s = io(srv.url, { extraHeaders: { cookie: [...c.cookies].map(([k, v]) => `${k}=${v}`).join('; ') }, transports: ['websocket'] });
+  s.on('hello', () => resolve(s));
+  s.on('connect_error', reject);
+});
+const once = (s, ev, pred = () => true) => new Promise((r) => { const f = (m) => { if (pred(m)) { s.off(ev, f); r(m); } }; s.on(ev, f); });
+
+test('cumpleaños: guardar, validar y felicitar', async () => {
+  const admin = await adminClient(srv.url);
+  const ana = await createMember(srv.url, admin, 'Ana');
+  assert.equal((await ana.patch('/me', { birthday: '02-30' })).status, 400);
+  assert.equal((await ana.patch('/me', { birthday: 'hoy' })).status, 400);
+  const r = await ana.patch('/me', { birthday: '02-29' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.user.birthday, '02-29');
+  // El admin puede poner la fecha de alguien; un miembro no
+  assert.equal((await ana.put(`/users/${admin.user.id}/birthday`, { birthday: '05-01' })).status, 403);
+  assert.equal((await admin.put(`/users/${ana.user.id}/birthday`, { birthday: '07-15' })).status, 200);
+  const users = (await admin.get('/users')).data.users;
+  assert.equal(users.find((u) => u.id === ana.user.id).birthday, '07-15');
+  // Felicitar: llega la notificación y queda en el muro (una por persona por año; se puede cambiar el texto)
+  assert.equal((await ana.post(`/birthdays/${ana.user.id}/wish`, {})).status, 400);
+  assert.equal((await admin.post(`/birthdays/${ana.user.id}/wish`, { text: '¡Felicidades!' })).status, 200);
+  assert.equal((await admin.post(`/birthdays/${ana.user.id}/wish`, { text: '¡Feliz día!' })).status, 200);
+  const wishes = (await ana.get(`/birthdays/${ana.user.id}/wishes`)).data.wishes;
+  assert.equal(wishes.length, 1);
+  assert.equal(wishes[0].text, '¡Feliz día!');
+  const notifs = (await ana.get('/notifications')).data.notifications.filter((n) => n.type === 'birthday');
+  assert.equal(notifs.length, 1);
+  // Sin fecha no se puede felicitar
+  assert.equal((await ana.post(`/birthdays/${admin.user.id}/wish`, {})).status, 400);
+  // Borrar la fecha
+  assert.equal((await ana.patch('/me', { birthday: null })).data.user.birthday, null);
+});
+
+test('mesa de juego: asientos, controles al anfitrión y victoria contada', async () => {
+  const admin = await adminClient(srv.url);
+  const beto = await createMember(srv.url, admin, 'Beto');
+  const caro = await createMember(srv.url, admin, 'Caro');
+  const floor = (await admin.get('/floors/1')).data.floor;
+  const table = floor.objects.find((o) => o.type === 'pingPong');
+  const arcade = floor.objects.find((o) => o.type === 'arcade');
+  assert.ok(table && arcade, 'la plantilla tiene ping pong y arcade');
+  const a = await connect(admin), b = await connect(beto), c = await connect(caro);
+  try {
+    a.emit('game:join', table.id);
+    await once(a, 'game:room', (r) => r.objectId === table.id && r.seats[0] === admin.user.id);
+    const both = once(a, 'game:room', (r) => r.seats[1] === beto.user.id);
+    b.emit('game:join', table.id);
+    await both;
+    // Un tercero solo mira
+    const third = once(c, 'game:room', (r) => r.watchers.includes(caro.user.id));
+    c.emit('game:join', table.id);
+    await third;
+    // El invitado manda controles; le llegan al anfitrión
+    const inp = once(a, 'game:input');
+    b.emit('game:input', { objectId: table.id, data: { y: 120 } });
+    assert.deepEqual((await inp).data, { y: 120 });
+    // El que mira no puede mandar controles ni estado
+    c.emit('game:input', { objectId: table.id, data: { y: 1 } });
+    // El anfitrión manda estado; le llega a los demás
+    const stB = once(b, 'game:state'), stC = once(c, 'game:state');
+    a.emit('game:state', { objectId: table.id, data: { s: [1, 0] } });
+    assert.deepEqual((await stB).data, { s: [1, 0] });
+    assert.deepEqual((await stC).data, { s: [1, 0] });
+    // Fin de partida: gana Beto y se cuenta
+    const win = once(c, 'game:win');
+    a.emit('game:event', { objectId: table.id, data: { type: 'end', winner: 1, score: '3-7' } });
+    const w = await win;
+    assert.equal(w.winner, beto.user.id);
+    const top = (await admin.get('/games/pong/top')).data.top;
+    assert.equal(top[0].userId, beto.user.id);
+    // Si se va el anfitrión, Beto pasa al asiento 0 y Caro se sienta
+    const re = once(b, 'game:room', (r) => r.seats[0] === beto.user.id && r.seats[1] === caro.user.id);
+    a.emit('game:leave', table.id);
+    await re;
+    // Arcade: un solo asiento; las puntuaciones se guardan
+    b.emit('game:join', arcade.id);
+    await once(b, 'game:room', (r) => r.objectId === arcade.id && r.seats[0] === beto.user.id);
+    const second = once(c, 'game:room', (r) => r.objectId === arcade.id && r.watchers.includes(caro.user.id));
+    c.emit('game:join', arcade.id);
+    await second;
+    assert.equal((await beto.post('/games/arcade/score', { score: 1234 })).status, 200);
+    assert.equal((await beto.post('/games/arcade/score', { score: 99 })).status, 429);
+    assert.equal((await caro.post('/games/arcade/score', { score: -5 })).status, 400);
+    const at = (await caro.get('/games/arcade/top')).data.top;
+    assert.deepEqual(at.map((x) => [x.userId, x.score]), [[beto.user.id, 1234]]);
+  } finally {
+    a.close(); b.close(); c.close();
+  }
+});
+
+test('aviso diario de cumpleaños al webhook', async () => {
+  const http = await import('node:http');
+  const got = [];
+  const hook = http.createServer((req, res) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { got.push(JSON.parse(b)); res.end('ok'); }); });
+  await new Promise((r) => hook.listen(0, r));
+  const s2 = await startServer({ env: { BIRTHDAY_WEBHOOK_URL: `http://127.0.0.1:${hook.address().port}/hook`, OFFICE_TIMEZONE: 'UTC' } });
+  try {
+    const admin = await adminClient(s2.url);
+    const d = new Date();
+    const md = `${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    await admin.patch('/me', { birthday: md });
+    // Llamar directo a la función con la misma base de datos del servidor de prueba
+    process.env.DATA_DIR = s2.dataDir;
+    process.env.BIRTHDAY_WEBHOOK_URL = `http://127.0.0.1:${hook.address().port}/hook`;
+    process.env.OFFICE_TIMEZONE = 'UTC';
+    const { announceBirthdays } = await import('../server/birthdays.js');
+    const at = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 10));
+    assert.equal(await announceBirthdays(at), true);
+    assert.equal(await announceBirthdays(at), false); // solo una vez al día
+    assert.match(got[0].text, /Hoy cumple años/);
+  } finally {
+    await s2.stop();
+    hook.close();
+  }
+});

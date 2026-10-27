@@ -1819,3 +1819,17 @@ export function drawAvatarFace(canvas, avatar) {
   const sheet = getSheet(avatar);
   if (sheet) ctx.drawImage(sheet, 4, 8, 24, 24, 0, 0, canvas.width, canvas.height);
 }
+
+// Gorrito de fiesta (el día de su cumpleaños)
+export function drawPartyHat(ctx, cx, by, sit = false) {
+  const top = Math.round(by - FRAME_H + (sit ? 4 : 1));
+  const x = Math.round(cx), y = top + 9;
+  ctx.save();
+  ctx.fillStyle = '#FE3377';
+  ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y); ctx.lineTo(x + 1, y - 13); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#FFCC00';
+  ctx.fillRect(x - 4, y - 5, 7, 2);
+  ctx.fillRect(x - 2, y - 9, 4, 2);
+  ctx.beginPath(); ctx.arc(x + 1, y - 13, 2.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}

@@ -177,6 +177,15 @@ addColumn('users', 'totp_recovery', 'TEXT');
 addColumn('users', 'shift_at', 'INTEGER');
 addColumn('events', 'area_id', 'INTEGER');
 addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('users', 'birthday', 'TEXT'); // 'MM-DD' (sin año, por privacidad)
+db.exec(`CREATE TABLE IF NOT EXISTS birthday_wishes (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  year INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, from_id, year)
+)`);
 db.exec(`
 CREATE TABLE IF NOT EXISTS feedback (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

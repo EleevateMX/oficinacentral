@@ -83,6 +83,8 @@ Variables de entorno:
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Servidor de medios LiveKit (propio o LiveKit Cloud). Vacío = conexión directa P2P |
 | `ALERT_WEBHOOK_URL` | Webhook de Discord o Slack para avisos de errores, reinicios y caídas |
+| `BIRTHDAY_WEBHOOK_URL` | Webhook de Discord o Slack donde se anuncia cada mañana (9:00) quién cumple años |
+| `OFFICE_TIMEZONE` | Zona horaria de la oficina para el aviso de cumpleaños (por defecto `America/Mexico_City`) |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `PUBLIC_URL` | Entrar con Discord (vincular cuenta, entrar o aceptar invitación) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Notificaciones push (Web Push). Si faltan las llaves, se generan solas la primera vez y se guardan en la base de datos. `VAPID_SUBJECT` es un contacto `mailto:` o `https://` (por omisión `mailto:` + `ADMIN_EMAIL`) |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |

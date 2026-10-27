@@ -5,9 +5,15 @@ import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
-import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo } from '../lib/render.js';
+import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat } from '../lib/render.js';
+import { todayMD } from '../lib/birthdays.js';
+
+// Fecha de hoy ('MM-DD') para el gorrito de cumpleaños; se recalcula cada minuto
+let bdayToday = { at: 0, md: '' };
+const todayCached = () => { const t = Date.now(); if (t - bdayToday.at > 60e3) bdayToday = { at: t, md: todayMD() }; return bdayToday.md; };
 import { mapBrand, officeLogo } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
+import { GAME_OF } from '../games/index.js';
 import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
 import VideoStrip from './VideoStrip.jsx';
@@ -21,7 +27,8 @@ import { Avatar } from './ui.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
-const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla' };
+const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar' };
+const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
 
 // Objeto interactivo más cercano (pizarrón, tablero, pantalla) a menos de 2 casillas
 function nearInteractive(f, me) {
@@ -42,6 +49,7 @@ export function interact(o) {
   const kind = CATALOG[o.type]?.interactive;
   if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
+  else if (kind === 'game') office.set({ modal: { type: 'game', objectId: o.id, game: GAME_OF[o.type] } });
   else if (kind === 'screen') {
     const st = office.state;
     const sc = st.talkingWith.find((id) => st.users[id]?.online && st.users[id]?.screen);
@@ -177,7 +185,7 @@ export default function MapView({ active }) {
   useEffect(() => {
     const down = (e) => {
       const { active: on, editMode: em } = stateRef.current;
-      if (!on || isTyping()) return;
+      if (!on || isTyping() || office.state.modal) return;
       if (e.code === 'KeyX' && !em) {
         const f = stateRef.current.floor;
         const mine = office.players[stateRef.current.me.id];
@@ -563,6 +571,7 @@ export default function MapView({ active }) {
         const re = office.reactions[id];
         const hopY = re && re.until - performance.now() > 3000 ? -Math.abs(Math.sin((re.until - performance.now()) / 60)) * 4 : 0;
         drawAvatar(ctx, (p.rx + 0.5) * T, (p.ry + 1) * T - 2 + hopY, u?.avatar, seat?.dir || p.dir, step, !!seat, blink);
+        if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, (p.rx + 0.5) * T, (p.ry + 1) * T - 2 + hopY, !!seat);
         // Sentado mirando hacia arriba: el respaldo de la silla tapa la parte de abajo (como en Gather)
         if (seat?.obj && seat.dir === 'up' && CATALOG[seat.obj.type]?.rotatable) {
           ctx.save();
@@ -695,7 +704,7 @@ export default function MapView({ active }) {
         if (office.pendingInteract === near.o.id) { office.pendingInteract = null; interact(near.o); }
         const { w: ow } = objSize(near.o);
         const hp = worldToScreen(near.o.x + ow / 2, near.o.y - 0.6);
-        const txt = INTERACT_LABELS[near.kind];
+        const txt = GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         const tw = ctx.measureText(txt).width + 34;
         ctx.fillStyle = 'rgba(16,16,16,.88)';
@@ -713,7 +722,7 @@ export default function MapView({ active }) {
         const u = us[id];
         if (!u) continue;
         const sp = worldToScreen(p.rx + 0.5, p.ry);
-        const name = u.shift ? `🖥️ ${u.displayName}` : u.displayName;
+        const name = `${u.birthday && u.birthday === todayCached() ? '🎂 ' : ''}${u.shift ? `🖥️ ${u.displayName}` : u.displayName}`;
         const w = ctx.measureText(name).width + 24;
         const y = sp.y - 34 * v.zoom / 1.5 + 4;
         const isMe = Number(id) === meU.id;

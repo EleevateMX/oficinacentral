@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Search, Map, MessageCircle, Calendar, Bell, Settings, MessageSquareHeart } from 'lucide-react';
+import { Search, Map, MessageCircle, Calendar, Bell, Settings, MessageSquareHeart, Cake } from 'lucide-react';
+import { isBirthday } from '../lib/birthdays.js';
 import { office, useOffice } from '../lib/store.js';
 import { Kbd } from './ui.jsx';
 import { OfficeMark, Simbolo } from './brand.jsx';
@@ -14,6 +15,7 @@ export default function Rail() {
   const notifications = useOffice((s) => s.notifications);
   const unreadChat = chat.channels.reduce((a, c) => a + c.unread, 0) + chat.dms.reduce((a, d) => a + d.unread, 0);
   const unreadNotif = notifications.filter((n) => !n.read).length;
+  const bdays = useOffice((s) => Object.values(s.users).filter((u) => isBirthday(u)).length);
 
   useEffect(() => {
     const k = (e) => {
@@ -52,6 +54,10 @@ export default function Rail() {
       {item('chat', MessageCircle, 'Chat', unreadChat)}
       {item('calendar', Calendar, 'Calendario')}
       {item('activity', Bell, 'Actividad', unreadNotif)}
+      <button className={`rail-btn ${bdays ? 'bday-on' : ''}`} onClick={() => office.set({ modal: { type: 'birthdays' } })} title={bdays ? '¡Hoy hay cumpleaños!' : 'Cumpleaños'} aria-label="Cumpleaños">
+        <Cake size={20} />
+        {bdays > 0 && <span className="badge">🎂</span>}
+      </button>
       <div className="rail-spacer" />
       {officeLogo(config) && (
         <a className="rail-btn rail-by" href="https://nuvora.mx" target="_blank" rel="noreferrer noopener" title="Estamos construyendo cosas increíbles" aria-label="Nuvora: estamos construyendo cosas increíbles">

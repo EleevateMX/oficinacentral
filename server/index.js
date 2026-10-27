@@ -1,3 +1,4 @@
+import { startBirthdayAnnouncer } from './birthdays.js';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -104,6 +105,7 @@ if (fs.existsSync(dist)) {
 
 const server = http.createServer(app);
 initRealtime(server);
+startBirthdayAnnouncer();
 scheduleBackups();
 startPushScheduler();
 

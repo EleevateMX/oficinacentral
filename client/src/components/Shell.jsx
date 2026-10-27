@@ -1,4 +1,6 @@
 import Whiteboard from './Whiteboard.jsx';
+import GameModal from './GameModal.jsx';
+import Birthdays, { checkBirthdays } from './Birthdays.jsx';
 import Notices from './Notices.jsx';
 import Feedback from './Feedback.jsx';
 import React, { useEffect, useState } from 'react';
@@ -44,6 +46,7 @@ export default function Shell({ session, onLogout }) {
       if (['linked', 'welcome'].includes(returnInfo.discord)) office.toast({ title: discordMessage });
       if (!office.state.prefs.onboarding?.hide) office.set({ onboarding: true });
       setupAutoPip();
+      checkBirthdays();
     }).catch((e) => console.error(e));
     const out = () => onLogout();
     window.addEventListener('office:logout', out);
@@ -82,6 +85,8 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'event' && <EventModal event={modal.event} />}
       {modal?.type === 'board' && <Whiteboard objectId={modal.objectId} />}
       {modal?.type === 'notices' && <Notices />}
+      {modal?.type === 'birthdays' && <Birthdays />}
+      {modal?.type === 'game' && <GameModal key={modal.objectId} objectId={modal.objectId} game={modal.game} />}
       {modal?.type === 'feedback' && <Feedback />}
       {onboarding && !modal && <Onboarding />}
       {!modal && <AppBanner mobile={mobile} />}

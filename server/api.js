@@ -16,6 +16,7 @@ import { openShift, shiftReport } from './shifts.js';
 import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
+import { addScore, topScores, SCORE_GAMES } from './games.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
 export const api = express.Router();
@@ -53,6 +54,7 @@ export function publicUser(u) {
     twoFactor: !!u.totp_enabled,
     discordName: u.discord_name || null,
     shiftAt: u.shift_at || null,
+    birthday: u.birthday || null,
     disabled: !!u.disabled,
     lastActive: u.last_active,
     createdAt: u.created_at,
@@ -384,10 +386,76 @@ api.patch('/me', wrap((req, res) => {
     if (avatar.sprite && !db.prepare('SELECT 1 FROM characters WHERE id = ?').get(avatar.sprite)) return fail(res, 400, 'Ese personaje ya no existe');
   }
   const email = b.email !== undefined ? String(b.email).trim().toLowerCase().slice(0, 120) : u.email;
-  db.prepare('UPDATE users SET display_name = ?, timezone = ?, status_text = ?, avatar = ?, email = ? WHERE id = ?')
-    .run(displayName, timezone, statusText, JSON.stringify(avatar), email, u.id);
+  let birthday = u.birthday || null;
+  if (b.birthday !== undefined) {
+    birthday = cleanBirthday(b.birthday);
+    if (birthday === false) return fail(res, 400, 'Fecha de cumpleaños inválida');
+  }
+  db.prepare('UPDATE users SET display_name = ?, timezone = ?, status_text = ?, avatar = ?, email = ?, birthday = ? WHERE id = ?')
+    .run(displayName, timezone, statusText, JSON.stringify(avatar), email, birthday, u.id);
   broadcastUser(u.id);
   res.json({ user: publicUser(getUser(u.id)) });
+}));
+
+// ---------- Cumpleaños ----------
+// 'MM-DD' válido, null para borrarlo, false si no es una fecha
+export function cleanBirthday(v) {
+  if (v == null || v === '') return null;
+  const m = /^(\d{2})-(\d{2})$/.exec(String(v));
+  if (!m) return false;
+  const mo = Number(m[1]), d = Number(m[2]);
+  const days = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= days[mo - 1] ? `${m[1]}-${m[2]}` : false;
+}
+
+// El admin puede poner el cumpleaños de alguien (por ejemplo al importar al equipo)
+api.put('/users/:id/birthday', requireAdmin, wrap((req, res) => {
+  const id = Number(req.params.id);
+  if (!getUser(id)) return fail(res, 404, 'No existe');
+  const birthday = cleanBirthday(req.body?.birthday);
+  if (birthday === false) return fail(res, 400, 'Fecha de cumpleaños inválida');
+  db.prepare('UPDATE users SET birthday = ? WHERE id = ?').run(birthday, id);
+  broadcastUser(id);
+  res.json({ ok: true });
+}));
+
+// Felicitaciones de este año para alguien
+api.get('/birthdays/:userId/wishes', (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const rows = db.prepare('SELECT from_id AS fromId, text, created_at AS at FROM birthday_wishes WHERE user_id = ? AND year = ? ORDER BY created_at').all(Number(req.params.userId), year);
+  res.json({ wishes: rows });
+});
+
+api.post('/birthdays/:userId/wish', wrap((req, res) => {
+  const to = Number(req.params.userId);
+  const target = getUser(to);
+  if (!target || to === req.user.id) return fail(res, 400, 'No puedes felicitar a esa persona');
+  if (!target.birthday) return fail(res, 400, 'Esa persona no tiene cumpleaños registrado');
+  const text = String(req.body?.text || '¡Feliz cumpleaños! 🎉').trim().slice(0, 280) || '¡Feliz cumpleaños! 🎉';
+  const year = Number(req.body?.year) || new Date().getFullYear();
+  const prev = db.prepare('SELECT 1 FROM birthday_wishes WHERE user_id = ? AND from_id = ? AND year = ?').get(to, req.user.id, year);
+  db.prepare('INSERT INTO birthday_wishes (user_id, from_id, year, text, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, from_id, year) DO UPDATE SET text = excluded.text')
+    .run(to, req.user.id, year, text, now());
+  if (!prev) notify(to, 'birthday', req.user.id, { text });
+  emitAll('birthday:wish', { userId: to, fromId: req.user.id, text, year });
+  res.json({ ok: true });
+}));
+
+// ---------- Juegos: puntuaciones ----------
+api.get('/games/:game/top', (req, res) => {
+  if (!SCORE_GAMES.includes(req.params.game)) return fail(res, 404, 'No existe');
+  res.json({ top: topScores(req.params.game) });
+});
+
+let scoreTimes = new Map();
+api.post('/games/arcade/score', wrap((req, res) => {
+  const score = Math.trunc(Number(req.body?.score));
+  if (!Number.isFinite(score) || score <= 0 || score > 1e6) return fail(res, 400, 'Puntuación inválida');
+  const t = Date.now();
+  if (t - (scoreTimes.get(req.user.id) || 0) < 5000) return fail(res, 429, 'Espera un momento');
+  scoreTimes.set(req.user.id, t);
+  addScore(req.user.id, 'arcade', score);
+  res.json({ ok: true, top: topScores('arcade') });
 }));
 
 // Entrar o salir de turno
