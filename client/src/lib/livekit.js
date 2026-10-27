@@ -26,6 +26,7 @@ export class LiveKitManager extends EventTarget {
     this.screenTrack = null; // LocalVideoTrack
     this.screenAudioTrack = null; // LocalAudioTrack
     this.talk = new Set();
+    this.warm = new Set();
     this.watching = new Set();
     this.watchers = new Set();
     this.streamVolumes = new Map();
@@ -182,9 +183,12 @@ export class LiveKitManager extends EventTarget {
   }
 
   // ---------- Suscripciones ----------
-  setPeers(ids) {
+  // warm: gente cercana cuyo audio ya se suscribe (en silencio) para que la voz entre al instante
+  setPeers(ids, warm = []) {
     this.talk = new Set(ids);
+    this.warm = new Set(warm);
     this.applySubscriptions();
+    this.applyMutes();
     this.emitPeers();
   }
 
@@ -215,9 +219,25 @@ export class LiveKitManager extends EventTarget {
       const id = Number(p.identity);
       for (const pub of p.trackPublications.values()) {
         const talkTrack = pub.source === MIC || pub.source === CAM;
-        const want = talkTrack ? this.talk.has(id) : (pub.source === SCREEN || pub.source === SCREEN_AUDIO) && this.watching.has(id);
+        const want = talkTrack ? (this.talk.has(id) || (pub.source === MIC && this.warm.has(id))) : (pub.source === SCREEN || pub.source === SCREEN_AUDIO) && this.watching.has(id);
         if (pub.isSubscribed !== want) pub.setSubscribed(want);
       }
+    }
+  }
+
+  peerVolume(id) {
+    try { return JSON.parse(localStorage.getItem('nuvora:vol') || '{}')[id] ?? 1; } catch { return 1; }
+  }
+
+  setPeerVolume(id, v) {
+    const el = this.audioEls.get(`${id}:${MIC}`);
+    if (el) el.volume = Math.max(0, Math.min(1, v));
+  }
+
+  applyMutes() {
+    for (const [key, el] of this.audioEls) {
+      if (!key.endsWith(`:${MIC}`)) continue;
+      el.muted = !this.talk.has(Number(key.split(':')[0]));
     }
   }
 
@@ -234,6 +254,7 @@ export class LiveKitManager extends EventTarget {
     }
     el.srcObject = new MediaStream([track.mediaStreamTrack]);
     if (pub.source === SCREEN_AUDIO) el.volume = this.volumeFor(id);
+    if (pub.source === MIC) { el.muted = !this.talk.has(id); el.volume = Math.max(0, Math.min(1, this.peerVolume(id))); }
     el.play().catch(() => {});
   }
 

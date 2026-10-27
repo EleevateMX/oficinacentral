@@ -15,6 +15,7 @@ import ProfileCard from './ProfileCard.jsx';
 import EditProfile from './EditProfile.jsx';
 import Preferences from './settings/Preferences.jsx';
 import Toasts from './Toasts.jsx';
+import IncomingCall from './IncomingCall.jsx';
 import SearchPalette from './SearchPalette.jsx';
 import { handleLaunchUrl, syncPush } from '../lib/push.js';
 import Onboarding, { Loader } from './Onboarding.jsx';
@@ -84,6 +85,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'feedback' && <Feedback />}
       {onboarding && !modal && <Onboarding />}
       {!modal && <AppBanner mobile={mobile} />}
+      <IncomingCall />
       <Toasts />
     </div>
   );

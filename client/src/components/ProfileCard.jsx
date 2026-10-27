@@ -1,7 +1,8 @@
 import { petDef } from '@shared/pets.js';
 import { since } from '../lib/time.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase, MonitorUp } from 'lucide-react';
+import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase, MonitorUp, Phone, DoorClosed, Volume2, MapPin } from 'lucide-react';
+import { areaAt } from '@shared/map.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
 import { fmtTime, sameDay } from '../lib/time.js';
@@ -14,6 +15,7 @@ export default function ProfileCard({ userId }) {
   const floor = useOffice((s) => s.floor);
   const [, tick] = useState(0);
   const [menu, setMenu] = useState(false);
+  const [vol, setVol] = useState(() => office.peerVolume(userId));
   const ref = useRef(null);
   useEffect(() => {
     const id = setInterval(() => tick((x) => x + 1), 30e3);
@@ -27,6 +29,8 @@ export default function ProfileCard({ userId }) {
   const today = events.filter((e) => sameDay(e.startsAt, Date.now()) && (e.attendees.includes(u.id) || e.createdBy === u.id)).sort((a, b) => a.startsAt - b.startsAt);
   const deskId = floor && Object.entries(floor.claims).find(([, owner]) => owner === u.id)?.[0];
   const desk = deskId && floor.desks.find((d) => d.id === Number(deskId));
+  const pl = office.players?.[u.id];
+  const room = floor && pl && pl.floorId === floor.id ? areaAt(floor, pl.x, pl.y) : null;
 
   return (
     <div className="profile-card" ref={ref}>
@@ -62,12 +66,13 @@ export default function ProfileCard({ userId }) {
           <button className="btn primary flex1" onClick={() => office.set({ modal: { type: 'profile' }, profileCard: null })}><User size={15} /> Editar perfil</button>
         ) : (
           <>
-            {u.online && u.screen && u.id !== me.id ? (
+            {u.online && u.screen ? (
               <button className="btn primary flex1" onClick={() => { office.watchUser(u.id); close(); }}><MonitorUp size={15} /> Ver transmisión</button>
             ) : (
-              <button className="btn primary flex1" disabled={!u.online} onClick={() => office.goTo(u.id)}><Navigation size={15} /> Ir a</button>
+              <button className="btn primary flex1" disabled={!u.online} onClick={() => office.goTo(u.id)}><Navigation size={15} /> Ir a su lado</button>
             )}
             <button className="btn icon" title="Saludar" onClick={() => office.wave(u.id).then(() => office.toast({ title: `Saludaste a ${u.displayName} 👋` })).catch((e) => office.toast({ title: e.message, kind: 'error' }))}><Hand size={16} /></button>
+            <button className="btn icon" title="Llamar" onClick={() => office.callUser(u.id).catch((e) => office.toast({ title: e.message, kind: 'error' }))}><Phone size={16} /></button>
             <button className="btn icon" title="Mensaje" onClick={() => { office.openConv(`d:${u.id}`); close(); }}><MessageCircle size={16} /></button>
           </>
         )}
@@ -85,6 +90,25 @@ export default function ProfileCard({ userId }) {
           </div>
         )}
       </div>
+      {!isMe && room?.closed && (
+        <button className="btn ghost pc-row" onClick={() => { office.socket?.emit('room:knock', { areaId: room.id }); office.toast({ title: `🚪 Tocaste la puerta de ${room.name}` }); }}>
+          <DoorClosed size={15} /> Tocar la puerta de {room.name}
+        </button>
+      )}
+      {!isMe && !room?.closed && desk && (
+        <button className="btn ghost pc-row" onClick={() => { office.goToDesk(desk); close(); }}><Briefcase size={15} /> Ir al escritorio de {u.displayName.split(' ')[0]}</button>
+      )}
+      {!isMe && u.online && (
+        <label className="pc-vol">
+          <Volume2 size={15} />
+          <span>Volumen de {u.displayName.split(' ')[0]}</span>
+          <input type="range" min="0" max="1" step="0.05" value={vol} onChange={(e) => { const v = Number(e.target.value); setVol(v); office.setPeerVolume(u.id, v); }} />
+          <b>{Math.round(vol * 100)}%</b>
+        </label>
+      )}
+      {!isMe && u.online && (room || desk) && (
+        <div className="pc-sub pc-where"><MapPin size={12} /> {room ? `${room.name}${room.closed ? ' · cerrada 🔒' : ''}` : 'En su escritorio'}</div>
+      )}
       <div className="pc-section">
         <div className="pc-label">Avatar</div>
         <div className="pc-avatar"><AvatarCanvas avatar={u.avatar} width={60} height={76} /></div>

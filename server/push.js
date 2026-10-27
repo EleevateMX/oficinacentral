@@ -137,6 +137,10 @@ function fmtWhen(ts, userId) {
 export function pushNotification(userId, type, actorId, data = {}) {
   try {
     const who = displayName(actorId);
+    if (type === 'call') {
+      pushLater(userId, { title: `📞 ${who} te está llamando`, body: 'Toca para ir con esa persona', tag: `call-${actorId}`, url: `/?conv=d:${actorId}` });
+      return;
+    }
     if (type === 'wave') {
       pushLater(userId, { title: `${who} te saludó 👋`, body: 'Toca para responder', tag: `wave-${actorId}`, url: `/?conv=d:${actorId}` });
     } else if (type === 'event') {

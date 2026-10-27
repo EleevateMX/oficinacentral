@@ -133,6 +133,13 @@ export class MediaManager extends EventTarget {
     this.emit('local', this.state);
   }
 
+  setPeerVolume(id, v) {
+    this.peerVolumes = this.peerVolumes || new Map();
+    this.peerVolumes.set(id, v);
+    const p = this.peers.get(id);
+    if (p) p.audio.volume = Math.max(0, Math.min(1, v));
+  }
+
   setStreamVolume(id, v) {
     this.streamVolumes.set(id, v);
     const p = this.peers.get(id);
@@ -176,28 +183,39 @@ export class MediaManager extends EventTarget {
       audio: this.audioTrack, video: this.videoTrack,
       screen: watching ? this.screenTrack : null, screenAudio: watching ? this.screenAudioTrack : null,
     };
+    // A quien solo está cerca (conexión preparada) no se le manda nada todavía
+    const hold = (kind) => !p.active && (kind === 'audio' || kind === 'video');
     for (const kind of ['audio', 'video', 'screen', 'screenAudio']) {
       const track = wanted[kind];
+      const send = hold(kind) ? null : track; // lo que de verdad sale hacia esta persona
       const sender = p.senders[kind];
       if (track && !sender) {
+        // Se crea el canal ya negociado; si aún no hablan, se deja en silencio
         p.senders[kind] = p.pc.addTrack(track, kind === 'screen' || kind === 'screenAudio' ? this.screenStream : this.localStream);
-      } else if (sender && sender.track !== track) {
-        if (track) sender.replaceTrack(track).catch(() => {});
-        else {
-          try { p.pc.removeTrack(sender); } catch { /* cerrado */ }
-          delete p.senders[kind];
-        }
+        if (!send) p.senders[kind].replaceTrack(null).catch(() => {});
+      } else if (sender && !track) {
+        try { p.pc.removeTrack(sender); } catch { /* cerrado */ }
+        delete p.senders[kind];
+      } else if (sender && sender.track !== send) {
+        sender.replaceTrack(send).catch(() => {});
       }
     }
   }
 
   // ---------- Pares ----------
-  setPeers(ids) {
-    const wanted = new Set(ids);
+  // ids: con quién hablas ahora. warm: quién está cerca; la conexión se prepara antes
+  // (sin enviar audio ni video) para que al acercarte la voz suene al instante.
+  setPeers(ids, warm = []) {
+    this.active = new Set(ids);
+    const wanted = new Set([...ids, ...warm]);
     for (const id of wanted) {
       clearTimeout(this.closeTimers.get(id));
       this.closeTimers.delete(id);
       if (!this.peers.has(id)) this.createPeer(id);
+    }
+    for (const p of this.peers.values()) {
+      const on = this.active.has(p.id);
+      if (p.active !== on) { p.active = on; p.audio.muted = !on; p.screenAudio.muted = !on; this.attachTracks(p); }
     }
     for (const id of this.peers.keys()) {
       if (!wanted.has(id) && !this.closeTimers.has(id)) {
@@ -220,8 +238,14 @@ export class MediaManager extends EventTarget {
     screenAudio.autoplay = true;
     screenAudio.volume = this.settings.screenVolume;
     if (this.settings.speakerId && screenAudio.setSinkId) screenAudio.setSinkId(this.settings.speakerId).catch(() => {});
+    const active = !!this.active?.has(id);
+    audio.muted = !active;
+    let vol = this.peerVolumes?.get(id);
+    if (vol == null) { try { vol = JSON.parse(localStorage.getItem('nuvora:vol') || '{}')[id]; } catch { /* sin almacenamiento */ } }
+    if (vol != null) audio.volume = Math.max(0, Math.min(1, vol));
+    screenAudio.muted = !active;
     const p = {
-      id, pc, audio, screenAudio,
+      id, pc, audio, screenAudio, active,
       polite: this.myId > id,
       makingOffer: false,
       ignoreOffer: false,

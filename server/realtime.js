@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
 import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
-import { getFloor, defaultFloorId } from './world.js';
-import { isWalkable, nearestWalkable, canTalk } from '../shared/map.js';
+import { getFloor, defaultFloorId, setAreaClosed, isAreaClosed, closedAreaIds, floorPayload, floorOfArea } from './world.js';
+import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../shared/map.js';
 import { initBoards } from './boards.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
@@ -56,6 +56,21 @@ export function relocate(userId, floorId, x, y) {
   io.emit('player', { id: userId, ...publicPresence(userId) });
 }
 
+// Una sala cerrada se vuelve a abrir sola cuando queda vacía
+function reopenEmptyRooms() {
+  for (const id of closedAreaIds()) {
+    let busy = false;
+    for (const [, q] of presence) {
+      const f = getFloor(q.floorId)?.state;
+      if (f && areaAt(f, q.x, q.y)?.id === id) { busy = true; break; }
+    }
+    if (busy) continue;
+    setAreaClosed(id, false);
+    const fid = floorOfArea(id);
+    if (fid) io?.emit('floor', floorPayload(fid));
+  }
+}
+
 export function disconnectUser(userId) {
   const p = presence.get(userId);
   if (!p) return;
@@ -101,7 +116,8 @@ export function initRealtime(httpServer) {
       const y = Math.trunc(m.y);
       const changingFloor = floorId !== p.floorId;
       // Movimiento normal: máximo 1 casilla por paso. Teletransporte permitido (Ir a / cambiar de piso).
-      if (!isWalkable(f, x, y)) {
+      // No se puede entrar caminando a una sala cerrada (sí con "Ir a"/teletransporte de quien ya estaba dentro)
+      if (!isWalkable(f, x, y) || (!changingFloor && closedRoomAt(f, p, { x, y }))) {
         socket.emit('player', { id: userId, ...publicPresence(userId) });
         return;
       }
@@ -110,6 +126,37 @@ export function initRealtime(httpServer) {
       p.y = y;
       if (['up', 'down', 'left', 'right'].includes(m.dir)) p.dir = m.dir;
       socket.broadcast.emit('move', { id: userId, floorId, x, y, dir: p.dir, tp: !!m.tp || changingFloor });
+      if (closedAreaIds().length) reopenEmptyRooms();
+      // Cuando ya están los dos en una sala 1:1, la puerta se cierra sola (para no molestar a los demás)
+      const here = areaAt(f, x, y);
+      const inRoom = here ? [...presence.values()].filter((q) => q.floorId === floorId && areaAt(f, q.x, q.y)?.id === here.id).length : 0;
+      if (here?.private && /1\s*:\s*1/.test(here.name) && !isAreaClosed(here.id) && inRoom >= 2) {
+        setAreaClosed(here.id, true);
+        io.emit('floor', floorPayload(floorId));
+        io.emit('room-state', { areaId: here.id, closed: true, by: userId, auto: true });
+      }
+    });
+
+    // Cerrar o abrir la sala donde estás: cerrada, solo se oye dentro y nadie más entra
+    socket.on('room:close', (m) => {
+      const f = getFloor(p.floorId);
+      const a = f && areaAt(f.state, p.x, p.y);
+      if (!a || a.id !== Number(m?.areaId)) return;
+      setAreaClosed(a.id, !!m.closed);
+      io.emit('floor', floorPayload(f.id));
+      io.emit('room-state', { areaId: a.id, closed: !!m.closed, by: userId });
+    });
+
+    // Tocar la puerta de una sala cerrada: les llega a quienes están dentro
+    let lastKnock = 0;
+    socket.on('room:knock', (m) => {
+      const areaId = Number(m?.areaId);
+      if (!isAreaClosed(areaId) || Date.now() - lastKnock < 8000) return;
+      lastKnock = Date.now();
+      for (const [id, q] of presence) {
+        const f = getFloor(q.floorId)?.state;
+        if (f && areaAt(f, q.x, q.y)?.id === areaId) emitToUser(id, 'room:knock', { from: userId, areaId });
+      }
     });
 
     socket.on('state', (s) => {
@@ -197,6 +244,7 @@ export function initRealtime(httpServer) {
         savePosition(userId);
         presence.delete(userId);
         io.emit('player', { id: userId, online: false });
+        if (closedAreaIds().length) reopenEmptyRooms();
       }
     });
   });

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { ChevronDown, PanelLeftClose, Layers, UserPlus } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, Layers, UserPlus, Lock } from 'lucide-react';
 import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, Kbd } from './ui.jsx';
@@ -81,6 +81,7 @@ export default function PeoplePanel() {
         <span className="search-kbd"><Kbd>⌘</Kbd><Kbd>F</Kbd></span>
       </div>
       <div className="panel-scroll">
+        <Meetings floor={floor} users={users} />
         {onShift.length > 0 && (
           <>
             <button className="group-head" onClick={() => setOpen({ ...open, shift: !open.shift })}>
@@ -110,5 +111,39 @@ export default function PeoplePanel() {
         </button>
       )}
     </div>
+  );
+}
+
+// Reuniones en curso: salas con gente dentro (como en la lista de Gather)
+function Meetings({ floor, users }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 2000); return () => clearInterval(t); }, []);
+  if (!floor) return null;
+  const rooms = floor.areas
+    .filter((a) => a.private || a.closed)
+    .map((a) => ({
+      a,
+      ids: Object.entries(office.players)
+        .filter(([, q]) => q.floorId === floor.id && q.x >= a.x && q.y >= a.y && q.x < a.x + a.w && q.y < a.y + a.h)
+        .map(([id]) => Number(id)),
+    }))
+    .filter((r) => r.ids.length);
+  if (!rooms.length) return null;
+  const names = (ids) => {
+    const n = ids.map((id) => users[id]?.displayName || '…');
+    return n.length > 2 ? `${n.slice(0, 2).join(', ')} y ${n.length - 2} más` : n.join(' y ');
+  };
+  return (
+    <>
+      <div className="group-head static">Reuniones ({rooms.length})</div>
+      {rooms.map(({ a, ids }) => (
+        <button key={a.id} className="meet-card" onClick={() => { office.set({ view: 'map' }); office.pathTarget = { x: a.x + Math.floor(a.w / 2), y: a.y + Math.floor(a.h / 2), near: false }; }}
+          title={a.closed ? 'Sala cerrada: puedes tocar la puerta' : 'Ir a la sala'}>
+          <div className="meet-room">{a.closed && <Lock size={11} />} {a.name}</div>
+          <div className="meet-names">{names(ids)}</div>
+          <div className="meet-avatars">{ids.slice(0, 6).map((id) => <Avatar key={id} user={users[id] || {}} size={24} showStatus={false} />)}</div>
+        </button>
+      ))}
+    </>
   );
 }

@@ -2,7 +2,7 @@ import { useSyncExternalStore, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { api } from './api.js';
 import { MediaManager } from './media.js';
-import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable } from '@shared/map.js';
+import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable, PROXIMITY_RADIUS } from '@shared/map.js';
 import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
 import { FX, pickFx } from './fx.js';
@@ -224,6 +224,30 @@ class Office {
       if (m.tp || floorChanged) { p.rx = m.x; p.ry = m.y; }
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
+    s.on('call:answer', ({ from, accept }) => {
+      const who = this.state.users[from]?.displayName || 'La persona';
+      this.toast({ title: accept ? `✅ ${who} va en camino` : `${who} no puede ahora`, ...(accept ? {} : { action: { label: 'Mensaje', run: () => this.openConv(`d:${from}`) } }) });
+    });
+    s.on('room:knock', ({ from, areaId }) => {
+      const who = this.state.users[from]?.displayName || 'Alguien';
+      playSound('wave', this.state.prefs.audio.notifVolume);
+      this.toast({ title: `🚪 ${who} está tocando la puerta`, action: { label: 'Abrir', run: () => this.setRoomClosed(areaId, false) }, duration: 12000 });
+    });
+    s.on('room-state', ({ areaId, closed, by }) => {
+      const f = this.state.floor;
+      const a = f?.areas.find((x) => x.id === areaId);
+      const me = this.myPlayer;
+      if (!a || !me || by === this.state.me.id) return;
+      if (areaAt(f, me.x, me.y)?.id === areaId) {
+        const who = this.state.users[by]?.displayName || 'Alguien';
+        this.toast({ title: closed ? `🔒 ${who} cerró la sala: ahora solo se oye dentro` : `🔓 ${who} abrió la sala` });
+      }
+    });
+    s.on('room-state', ({ areaId, closed, by, auto }) => {
+      if (!auto || by !== this.state.me.id || !closed) return;
+      const a = this.state.floor?.areas.find((x) => x.id === areaId);
+      this.toast({ title: `🔒 Entraste a ${a?.name || 'un 1:1'}: la puerta se cerró sola y solo se oye dentro`, action: { label: 'Abrir', run: () => this.setRoomClosed(areaId, false) } });
+    });
     s.on('fx', ({ id, kind, from, to }) => {
       if (FX[kind]) this.fx[id] = { kind, from, to, start: performance.now(), dur: FX[kind].dur };
     });
@@ -243,7 +267,7 @@ class Office {
       if (this.floorCache.has(payload.id) || this.state.floor?.id === payload.id) {
         const f = buildFloor(payload);
         this.floorCache.set(payload.id, f);
-        if (this.state.floor?.id === payload.id) this.set({ floor: f });
+        if (this.state.floor?.id === payload.id) { this.set({ floor: f }); this.updateProximity(); }
       }
     });
     s.on('clip', ({ from }) => {
@@ -269,7 +293,10 @@ class Office {
     s.on('notification', (n) => {
       this.set((st) => ({ notifications: [n, ...st.notifications] }));
       const actor = this.state.users[n.actorId];
-      if (n.type === 'wave') {
+      if (n.type === 'call') {
+        this.ring(n.actorId);
+        this.desktopNotify(`📞 ${actor?.displayName || 'Alguien'} te está llamando`);
+      } else if (n.type === 'wave') {
         this.toast({ title: `👋 ${actor?.displayName || 'Alguien'} te saludó`, action: { label: 'Ir', run: () => this.goTo(n.actorId) } });
         playSound('wave', this.state.prefs.audio.notifVolume);
         this.desktopNotify(`${actor?.displayName} te saludó 👋`);
@@ -320,6 +347,59 @@ class Office {
     const dest = nearestWalkable(f, pos.x, pos.y);
     this.moveMe(dest.x, dest.y, 'down', { tp: true, floorId });
     this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
+  }
+
+  // ---------- Llamadas ----------
+  async callUser(id) {
+    const r = await api.post(`/call/${id}`);
+    const who = this.state.users[id]?.displayName || 'la persona';
+    this.toast({ title: r.online ? `📞 Llamando a ${who}…` : `${who} no está conectado; le llegará el aviso` });
+  }
+
+  ring(from) {
+    clearInterval(this.ringTimer);
+    this.set({ incomingCall: { from, at: Date.now() } });
+    let n = 0;
+    const tone = () => { playSound('wave', Math.max(0.4, this.state.prefs.audio.notifVolume)); if (++n > 12 || !this.state.incomingCall) clearInterval(this.ringTimer); };
+    tone();
+    this.ringTimer = setInterval(tone, 2200);
+    clearTimeout(this.ringEnd);
+    this.ringEnd = setTimeout(() => {
+      if (this.state.incomingCall?.from === from) {
+        this.set({ incomingCall: null });
+        this.toast({ title: `Llamada perdida de ${this.state.users[from]?.displayName || 'alguien'}`, action: { label: 'Ir', run: () => this.goTo(from) } });
+      }
+    }, 30e3);
+  }
+
+  answerCall(accept) {
+    const c = this.state.incomingCall;
+    if (!c) return;
+    clearInterval(this.ringTimer);
+    clearTimeout(this.ringEnd);
+    this.set({ incomingCall: null });
+    api.post(`/call/${c.from}/answer`, { accept }).catch(() => {});
+    if (accept) this.goTo(c.from);
+  }
+
+  // Volumen de cada persona (se recuerda en este dispositivo)
+  peerVolume(id) {
+    try { return JSON.parse(localStorage.getItem('nuvora:vol') || '{}')[id] ?? 1; } catch { return 1; }
+  }
+
+  setPeerVolume(id, v) {
+    try { const m = JSON.parse(localStorage.getItem('nuvora:vol') || '{}'); m[id] = v; localStorage.setItem('nuvora:vol', JSON.stringify(m)); } catch { /* sin almacenamiento */ }
+    this.media?.setPeerVolume?.(id, v);
+  }
+
+  // ---------- Salas cerradas ----------
+  setRoomClosed(areaId, closed) { this.socket?.emit('room:close', { areaId, closed }); }
+
+  knockPrompt(area) {
+    const t = performance.now();
+    if (this.lastKnockPrompt && t - this.lastKnockPrompt < 4000) return;
+    this.lastKnockPrompt = t;
+    this.toast({ title: `🔒 ${area.name} está cerrada`, action: { label: 'Tocar la puerta', run: () => { this.socket?.emit('room:knock', { areaId: area.id }); this.toast({ title: 'Tocaste la puerta 🚪' }); } } });
   }
 
   // Ctrl+D: regresar a tu escritorio (rápido, y a veces con un efecto especial)
@@ -382,7 +462,16 @@ class Office {
       if (canTalk(f, me, p)) ids.push(Number(id));
     }
     ids.sort((a, b) => a - b);
-    this.media.setPeers(ids);
+    // Conexión preparada con quien está cerca (hasta 12): al acercarse la voz suena al instante
+    const near = [];
+    for (const [id, p] of Object.entries(this.players)) {
+      const n = Number(id);
+      if (n === this.state.me.id || ids.includes(n) || p.floorId !== me.floorId || !this.state.users[n]?.online) continue;
+      const d = Math.max(Math.abs(p.x - me.x), Math.abs(p.y - me.y));
+      if (d <= PROXIMITY_RADIUS + 7) near.push([d, n]);
+    }
+    near.sort((a, b) => a[0] - b[0]);
+    this.media.setPeers(ids, near.slice(0, 12).map(([, n]) => n));
     this.syncStreams(ids);
     if (this.pendingWatch && ids.includes(this.pendingWatch)) { const w = this.pendingWatch; this.pendingWatch = null; this.watch(w); }
     const prev = this.state.talkingWith;

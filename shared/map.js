@@ -619,8 +619,16 @@ export function talkSpace(f, x, y) {
   const d = deskAt(f, x, y);
   if (d) return `desk:${d.id}`;
   const a = areaAt(f, x, y);
-  if (a && a.private) return `area:${a.id}`;
+  if (a && (a.private || a.closed)) return `area:${a.id}`;
   return null;
+}
+
+// Sala cerrada: solo entra quien ya estaba dentro (los demás pueden tocar la puerta)
+export function closedRoomAt(f, from, to) {
+  const a = areaAt(f, to.x, to.y);
+  if (!a?.closed) return null;
+  const cur = areaAt(f, from.x, from.y);
+  return cur?.id === a.id ? null : a;
 }
 
 export function canTalk(f, a, b) {
