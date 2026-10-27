@@ -890,3 +890,10 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 .feedback-item { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
 .feedback-text { white-space: pre-wrap; }
 .feedback-thumb { max-width: 260px; border-radius: 8px; border: 1px solid var(--border); }
+
+/* Discord y turnos */
+.discord-btn { background: #5865F2; color: #fff; border-color: #5865F2; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.discord-btn:hover { background: #4752c4; color: #fff; }
+.auth-or { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 12px; margin: 4px 0; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.shift-tr { grid-template-columns: minmax(0, 2fr) 1fr 1fr 1fr !important; }

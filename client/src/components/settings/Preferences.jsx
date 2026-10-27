@@ -391,10 +391,81 @@ function Account() {
         </form>
       </Section>
       <TwoFactor />
+      <DiscordLink />
       <Section title="Sesión">
         <button className="btn danger-text" onClick={() => window.dispatchEvent(new Event('office:logout'))}>Cerrar sesión</button>
       </Section>
     </>
+  );
+}
+
+// Vincular Discord para entrar con un clic
+function DiscordLink() {
+  const config = useOffice((s) => s.config);
+  const me = useOffice((s) => s.users[s.me.id] || s.me);
+  if (!config.discordLogin) return null;
+  return (
+    <Section title="Discord">
+      {me.discordName ? (
+        <Row title={`Vinculado con @${me.discordName}`} desc="Puedes entrar con el botón “Entrar con Discord”.">
+          <button className="btn danger-text" onClick={() => api.post('/me/discord/unlink').catch((e) => office.toast({ title: e.message, kind: 'error' }))}>Desvincular</button>
+        </Row>
+      ) : (
+        <Row title="Vincular tu cuenta de Discord" desc="Para entrar con un clic, sin escribir tu contraseña.">
+          <a className="btn discord-btn" href="/api/auth/discord?mode=link">Vincular Discord</a>
+        </Row>
+      )}
+    </Section>
+  );
+}
+
+// Reporte de turnos (admin): horas por persona y turno
+function ShiftReport() {
+  const [range, setRange] = useState('week');
+  const [data, setData] = useState(null);
+  const bounds = () => {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    const day = (d.getDay() + 6) % 7; // lunes = 0
+    const monday = new Date(d); monday.setDate(d.getDate() - day);
+    if (range === 'week') return [monday.getTime(), Date.now()];
+    if (range === 'lastweek') { const a = new Date(monday); a.setDate(a.getDate() - 7); return [a.getTime(), monday.getTime()]; }
+    if (range === 'month') return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), Date.now()];
+    return [new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime(), new Date(d.getFullYear(), d.getMonth(), 1).getTime()];
+  };
+  useEffect(() => {
+    const [from, to] = bounds();
+    api.get(`/admin/shifts/report?from=${from}&to=${to}`).then(setData).catch((e) => office.toast({ title: e.message, kind: 'error' }));
+  }, [range]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hrs = (m) => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+  const byPerson = new Map();
+  for (const r of data?.rows || []) byPerson.set(r.userId, (byPerson.get(r.userId) || 0) + r.minutes);
+  const csv = () => {
+    const rows = [['persona', 'turno', 'horas', 'minutos', 'veces', 'dias'], ...data.rows.map((r) => [r.name, r.shift, (r.minutes / 60).toFixed(2), r.minutes, r.sessions, r.days])];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' }));
+    a.download = `turnos-${new Date(data.from).toISOString().slice(0, 10)}.csv`;
+    a.click();
+  };
+  return (
+    <Section title="Reporte de turnos">
+      <div className="row between gap8 wrap">
+        <Select value={range} onChange={setRange} options={[{ value: 'week', label: 'Esta semana' }, { value: 'lastweek', label: 'Semana pasada' }, { value: 'month', label: 'Este mes' }, { value: 'lastmonth', label: 'Mes pasado' }]} />
+        <button className="btn" disabled={!data?.rows.length} onClick={csv}><Download size={15} /> CSV</button>
+      </div>
+      <div className="table mt12">
+        <div className="tr th shift-tr"><div>Persona</div><div>Turno</div><div>Tiempo</div><div>Veces · días</div></div>
+        {data?.rows.map((r) => (
+          <div key={`${r.userId}-${r.shift}`} className="tr shift-tr">
+            <div className="ellipsis"><b>{r.name}</b> <span className="muted small">total {hrs(byPerson.get(r.userId))}</span></div>
+            <div>{r.shift}</div>
+            <div>{hrs(r.minutes)}</div>
+            <div className="muted">{r.sessions} · {r.days}</div>
+          </div>
+        ))}
+        {data && !data.rows.length && <div className="muted pad">Nadie estuvo en turno en este periodo.</div>}
+      </div>
+      <p className="muted small">Cuenta el tiempo marcado "En turno" mientras la persona estuvo conectada.</p>
+    </Section>
   );
 }
 
@@ -939,6 +1010,7 @@ function BrandAdmin() {
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
       <ShiftsAdmin shifts={config.shifts || []} save={save} />
+      <ShiftReport />
     </>
   );
 }

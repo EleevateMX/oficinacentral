@@ -19,6 +19,9 @@ services:
       TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      PUBLIC_URL: ${PUBLIC_URL:-https://${DOMAIN}}
       # Vacío = audio y pantallas directo entre personas (P2P)
       LIVEKIT_URL: ${LIVEKIT_URL:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}

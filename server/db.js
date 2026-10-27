@@ -165,6 +165,9 @@ function addColumn(table, col, def) {
 addColumn('areas', 'shape', "TEXT NOT NULL DEFAULT 'soft'");
 addColumn('users', 'shift', 'TEXT');
 addColumn('messages', 'attachments', 'TEXT');
+addColumn('users', 'discord_id', 'TEXT');
+addColumn('users', 'discord_name', 'TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord ON users(discord_id) WHERE discord_id IS NOT NULL');
 addColumn('users', 'totp_secret', 'TEXT');
 addColumn('users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'totp_last', 'INTEGER NOT NULL DEFAULT -1');

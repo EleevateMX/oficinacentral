@@ -11,6 +11,8 @@ import * as world from './world.js';
 import { alert } from './alerts.js';
 import * as sec from './security.js';
 import { registerFileRoutes, getFiles } from './files.js';
+import { registerDiscordRoutes, discordEnabled } from './discord.js';
+import { openShift, shiftReport } from './shifts.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 
 export const api = express.Router();
@@ -45,6 +47,7 @@ export function publicUser(u) {
     statusText: u.status_text || '',
     shift: u.shift || null,
     twoFactor: !!u.totp_enabled,
+    discordName: u.discord_name || null,
     shiftAt: u.shift_at || null,
     disabled: !!u.disabled,
     lastActive: u.last_active,
@@ -109,6 +112,7 @@ function officeConfig() {
     // Servidor de medios: LiveKit si está configurado; si no, conexión directa (P2P)
     livekitUrl: livekitEnabled() ? process.env.LIVEKIT_URL : null,
     requireAdmin2fa: sec.requireAdmin2fa(),
+    discordLogin: discordEnabled(),
   };
 }
 
@@ -230,6 +234,13 @@ function validInvite(token) {
   if (!inv || inv.revoked || inv.used_by || inv.expires_at < now()) return null;
   return inv;
 }
+
+registerDiscordRoutes(api, {
+  validInvite,
+  userFromReq: (req) => userFromToken(parseCookies(req.headers.cookie)[SESSION_COOKIE]),
+  publicUser,
+  broadcastUser: (id) => broadcastUser(id),
+});
 
 api.get('/invites/:token', (req, res) => {
   const inv = validInvite(req.params.token);
@@ -364,6 +375,7 @@ api.put('/me/shift', wrap((req, res) => {
   const shift = raw == null || raw === '' ? null : String(raw).trim().slice(0, 30);
   if (shift && !officeConfig().shifts.includes(shift)) return fail(res, 400, 'Ese turno no existe');
   db.prepare('UPDATE users SET shift = ?, shift_at = ? WHERE id = ?').run(shift, shift ? now() : null, req.user.id);
+  openShift(req.user.id, shift);
   broadcastUser(req.user.id);
   res.json({ user: publicUser(getUser(req.user.id)) });
 }));
@@ -657,6 +669,14 @@ admin.post('/users/:id/reset-password', wrap((req, res) => {
   disconnectUser(id);
   res.json({ password });
 }));
+
+// Reporte de turnos: horas por persona y turno en un rango de fechas
+admin.get('/shifts/report', (req, res) => {
+  const to = Number(req.query.to) || now();
+  const from = Number(req.query.from) || to - 7 * 864e5;
+  if (to <= from || to - from > 400 * 864e5) return fail(res, 400, 'Rango de fechas inválido');
+  res.json({ from, to, rows: shiftReport(from, to) });
+});
 
 admin.get('/feedback', (req, res) => {
   const st = String(req.query.status || '');

@@ -4,6 +4,7 @@ import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId } from './world.js';
 import { isWalkable, nearestWalkable, canTalk } from '../shared/map.js';
 import { initBoards } from './boards.js';
+import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -82,6 +83,7 @@ export function initRealtime(httpServer) {
       presence.set(userId, p);
     }
     p.sockets.add(socket);
+    if (p.sockets.size === 1) shiftOnConnect(user);
     db.prepare('UPDATE users SET last_active = ? WHERE id = ?').run(now(), userId);
 
     const all = {};
@@ -163,6 +165,7 @@ export function initRealtime(httpServer) {
     socket.on('disconnect', () => {
       p.sockets.delete(socket);
       if (p.sockets.size === 0) {
+        closeShift(userId);
         savePosition(userId);
         presence.delete(userId);
         io.emit('player', { id: userId, online: false });

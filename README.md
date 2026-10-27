@@ -78,6 +78,7 @@ Variables de entorno:
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | TURN de Cloudflare con credenciales temporales (para Railway u otros hostings sin UDP) |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Servidor de medios LiveKit (propio o LiveKit Cloud). Vacío = conexión directa P2P |
 | `ALERT_WEBHOOK_URL` | Webhook de Discord o Slack para avisos de errores, reinicios y caídas |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `PUBLIC_URL` | Entrar con Discord (vincular cuenta, entrar o aceptar invitación) |
 | `TRUST_PROXY` | `1` si hay un proxy delante (Railway, Caddy) para leer bien la IP de quien entra |
 | `BACKUP_KEEP`, `BACKUP_EVERY_HOURS` | Respaldos automáticos de la base de datos (14 copias, cada 24 h) |
 | `TRUST_PROXY=1` | Si está detrás de un proxy (nginx, Caddy…) |
@@ -162,3 +163,11 @@ GitHub Actions corre ambas en cada push y pull request (`.github/workflows/ci.ym
   Si alguien pierde su teléfono, otro admin la quita desde *Miembros*, o en el servidor: `npm run reset-2fa -- <usuario>`.
 - **Registro de actividad** (Preferencias → Seguridad): invitaciones, cambios de rol, cuentas desactivadas, contraseñas restablecidas,
   pisos, áreas, líderes, logos, objetos borrados por admins, inicios de sesión de admins y los fallidos. Exportable a CSV.
+
+## Discord y turnos
+
+- **Entrar con Discord**: cada quien vincula su Discord en *Cuenta* y entra con un clic; una invitación también se puede aceptar con Discord.
+  Sigue siendo solo por invitación: un Discord sin vincular no entra. Si la persona tiene verificación en dos pasos, se pide igual.
+  Configura en Discord Developer Portal → OAuth2 la redirección `https://TU-DOMINIO/api/auth/discord/callback`.
+- **Reporte de turnos** (Marca de la oficina → Reporte de turnos): horas por persona y turno (esta semana, la pasada, este mes, el pasado),
+  número de veces y días, exportable a CSV. Cuenta el tiempo "En turno" mientras la persona está conectada.

@@ -4,6 +4,7 @@ import Feedback from './Feedback.jsx';
 import React, { useEffect, useState } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
+import { returnInfo, discordMessage } from '../App.jsx';
 import { Boot } from './brand.jsx';
 import PeoplePanel from './PeoplePanel.jsx';
 import MapView from './MapView.jsx';
@@ -28,7 +29,9 @@ export default function Shell({ session, onLogout }) {
   const mobile = useIsMobile();
 
   useEffect(() => {
-    office.start(session.user, session.prefs).catch((e) => console.error(e));
+    office.start(session.user, session.prefs).then(() => {
+      if (['linked', 'welcome'].includes(returnInfo.discord)) office.toast({ title: discordMessage });
+    }).catch((e) => console.error(e));
     const out = () => onLogout();
     window.addEventListener('office:logout', out);
     return () => {

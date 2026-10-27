@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import AuthLayout from './AuthLayout.jsx';
-import { PasswordInput } from './Login.jsx';
+import { PasswordInput, DiscordIcon } from './Login.jsx';
 
 export default function InviteAccept({ token, config, onDone }) {
   const [invite, setInvite] = useState(undefined);
@@ -63,6 +63,12 @@ export default function InviteAccept({ token, config, onDone }) {
         <PasswordInput id="pw2" value={form.confirm} onChange={set('confirm')} autoComplete="new-password" />
         {error && <div className="auth-error">{error}</div>}
         <button className="btn primary block" disabled={busy}>{busy ? 'Creando cuenta…' : 'Crear cuenta y entrar'}</button>
+              {config.discordLogin && (
+          <>
+            <div className="auth-or"><span>o</span></div>
+            <a className="btn block discord-btn" href={`/api/auth/discord?mode=invite&invite=${encodeURIComponent(token)}`}><DiscordIcon /> Crear cuenta con Discord</a>
+          </>
+        )}
       </form>
     </AuthLayout>
   );
