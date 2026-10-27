@@ -5,7 +5,7 @@ import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcas
 import { areaAt } from '@shared/map.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
-import { fmtTime, sameDay } from '../lib/time.js';
+import { fmtTime, sameDay, tzDiffLabel } from '../lib/time.js';
 import { api } from '../lib/api.js';
 
 export default function ProfileCard({ userId }) {
@@ -38,7 +38,7 @@ export default function ProfileCard({ userId }) {
         <Avatar user={isMe ? { ...u, online: true } : u} size={52} ring />
         <div className="pc-id">
           <div className="pc-name">{u.displayName}{u.role === 'admin' && <span className="tag">Admin</span>}</div>
-          <div className="pc-sub"><Clock size={12} /> {fmtTime(Date.now(), u.timezone)} hora local</div>
+          <div className="pc-sub"><Clock size={12} /> {fmtTime(Date.now(), u.timezone)} {isMe ? 'tu hora local' : 'hora local'}{!isMe && u.timezone && <span className="pc-tzdiff"> · {tzDiffLabel(u.timezone)}</span>}</div>
           <div className="pc-sub">
             <span className="dot" style={{ background: u.online ? STATUS[u.status || 'active'].color : 'var(--gray-dot)' }} />
             {u.online ? STATUS[u.status || 'active'].label : 'Desconectado'}

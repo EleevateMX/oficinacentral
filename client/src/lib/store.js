@@ -196,6 +196,7 @@ class Office {
         // reconexión: volver a anunciar estado de medios (y si estoy grabando)
         s.emit('state', { ...this.media.state, recording: this.state.recording });
       }
+      this.syncTimezone();
       // Fusionar presencia con la lista de usuarios
       this.set((st) => {
         const users = {};
@@ -370,6 +371,15 @@ class Office {
     const dest = nearestWalkable(f, pos.x, pos.y);
     this.moveMe(dest.x, dest.y, 'down', { tp: true, floorId });
     this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
+  }
+
+  // Tu hora local se toma de tu dispositivo (Chile, Argentina, Nueva York, Europa…) salvo que la elijas a mano
+  syncTimezone() {
+    try {
+      if (localStorage.getItem('nuvora:tzManual')) return;
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz && tz !== this.state.me?.timezone) api.patch('/me', { timezone: tz }).catch(() => {});
+    } catch { /* sin almacenamiento */ }
   }
 
   // ---------- Llamadas ----------
