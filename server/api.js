@@ -15,6 +15,7 @@ import { registerDiscordRoutes, discordEnabled } from './discord.js';
 import { openShift, shiftReport } from './shifts.js';
 import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
+import { PET_IDS } from '../shared/pets.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
 export const api = express.Router();
@@ -104,7 +105,7 @@ api.get('/health', (req, res) => {
 // Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
 const THEMES = ['nuvora', 'gtahub', 'custom'];
 
-function officeConfig() {
+export function officeConfig() {
   const logoV = getSetting('logo_v');
   return {
     officeName: getSetting('office_name') || process.env.OFFICE_NAME || 'Mi oficina',
@@ -346,7 +347,7 @@ api.get('/users/:id/photo', (req, res) => {
   res.send(Buffer.from(m[3], 'base64'));
 });
 
-const AVATAR_KEYS = SPEC_KEYS;
+const AVATAR_KEYS = [...SPEC_KEYS, 'pet', 'petColor'];
 
 api.patch('/me', wrap((req, res) => {
   const b = req.body || {};
@@ -363,6 +364,8 @@ api.patch('/me', wrap((req, res) => {
     // El avatar se reemplaza completo: ficha generada o personaje subido (sprite)
     avatar = {};
     for (const k of AVATAR_KEYS) if (typeof b.avatar[k] === 'string') avatar[k] = b.avatar[k].slice(0, 40);
+    if (avatar.pet && !PET_IDS.includes(avatar.pet)) delete avatar.pet;
+    if (avatar.petColor && !/^#[0-9a-fA-F]{6}$/.test(avatar.petColor)) delete avatar.petColor;
     if (avatar.sprite && !db.prepare('SELECT 1 FROM characters WHERE id = ?').get(avatar.sprite)) return fail(res, 400, 'Ese personaje ya no existe');
   }
   const email = b.email !== undefined ? String(b.email).trim().toLowerCase().slice(0, 120) : u.email;
@@ -599,6 +602,16 @@ admin.delete('/office/logo', (req, res) => {
 
 admin.get('/invites', (req, res) => {
   res.json({ invites: db.prepare('SELECT * FROM invites ORDER BY created_at DESC').all().map(inviteRow) });
+});
+
+// Actualizar global: todos los que estén conectados recargan la app (para publicar cambios al instante)
+let lastReload = 0;
+admin.post('/reload-all', (req, res) => {
+  if (Date.now() - lastReload < 30e3) return fail(res, 429, 'Espera unos segundos antes de volver a actualizar a todos.');
+  lastReload = Date.now();
+  const message = String(req.body?.message || '').trim().slice(0, 140);
+  emitAll('force-reload', { by: req.user.display_name, message, in: 8 });
+  res.json({ ok: true, online: presence.size });
 });
 
 admin.post('/invites', (req, res) => {

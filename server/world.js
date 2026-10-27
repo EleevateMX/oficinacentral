@@ -1,5 +1,5 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
-import { db, now, tx } from './db.js';
+import { db, now, tx, getSetting, setSetting } from './db.js';
 import { composeFloor, getTemplate, TEMPLATES, inRect } from '../shared/map.js';
 import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 import { AREA_SHAPES } from '../shared/map.js';
@@ -55,13 +55,43 @@ export function createFloor(name, template = 'open') {
     for (const o of t.objects) insO.run(fid, o.type, o.x, o.y, o.w ?? null, o.h ?? null, o.rot || 0, o.color ?? null, now());
     return fid;
   });
+  if (template === 'hq') furnishDesks(id);
   return rebuild(id);
+}
+
+// Amuebla los escritorios de un piso: mamparas de cubículo y un equipo básico
+// (monitor y teclado) en los que no tienen decoración. No toca lo ya decorado.
+const DEPT_WALLS = { glassDesk: '#b9a7e6', gamingDesk: '#8fc9bb', standingDesk: '#f0a7a0', desk: '#a9b9d6', woodDesk: null };
+export function furnishDesks(floorId) {
+  const desks = db.prepare(`SELECT * FROM objects WHERE floor_id = ? AND type IN (${DESK_TYPES.map(() => '?').join(',')})`).all(floorId, ...DESK_TYPES);
+  const hasWalls = db.prepare("SELECT 1 FROM objects WHERE floor_id = ? AND type = 'cubicleWalls' AND x = ? AND y = ?");
+  const hasDecor = db.prepare('SELECT 1 FROM objects WHERE desk_id = ?');
+  const ins = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, desk_id, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)');
+  let n = 0;
+  tx(() => {
+    for (const d of desks) {
+      const wall = DEPT_WALLS[d.type];
+      if (wall !== null && !hasWalls.get(floorId, d.x, d.y)) { ins.run(floorId, 'cubicleWalls', d.x, d.y, wall ?? null, null, now()); n++; }
+      if (!hasDecor.get(d.id)) {
+        const dual = (d.x + d.y) % 2 === 0;
+        ins.run(floorId, dual ? 'dualMonitor' : 'monitor', d.x + (dual ? 0.75 : 1.125), d.y, null, d.id, now());
+        ins.run(floorId, 'keyboard', d.x + 1.125, d.y + 0.5, null, d.id, now());
+        n++;
+      }
+    }
+  });
+  return n;
 }
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) createFloor('Piso 1', 'hq');
-  else for (const r of rows) rebuild(r.id);
+  if (!rows.length) { createFloor('Piso 1', 'hq'); setSetting('migr_cubicles_v1', '1'); return; }
+  // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
+  if (!getSetting('migr_cubicles_v1')) {
+    for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
+    setSetting('migr_cubicles_v1', '1');
+  }
+  for (const r of rows) rebuild(r.id);
 }
 
 export function getFloor(id) {
@@ -331,8 +361,11 @@ export function updateObject(user, id, patch) {
   tx(() => {
     db.prepare('UPDATE objects SET type = ?, x = ?, y = ?, w = ?, h = ?, rot = ?, color = ?, desk_id = ? WHERE id = ?')
       .run(o.type, o.x, o.y, o.w ?? null, o.h ?? null, o.rot, o.color, deskId, row.id);
-    // Si se mueve un escritorio, su decoración lo acompaña
-    if (c.claimable && (dx || dy)) db.prepare('UPDATE objects SET x = x + ?, y = y + ? WHERE desk_id = ?').run(dx, dy, row.id);
+    // Si se mueve un escritorio, su decoración y sus mamparas lo acompañan
+    if (c.claimable && (dx || dy)) {
+      db.prepare('UPDATE objects SET x = x + ?, y = y + ? WHERE desk_id = ?').run(dx, dy, row.id);
+      db.prepare("UPDATE objects SET x = x + ?, y = y + ? WHERE floor_id = ? AND type = 'cubicleWalls' AND x = ? AND y = ?").run(dx, dy, row.floor_id, row.x, row.y);
+    }
   });
   rebuild(f.id);
   return f.id;

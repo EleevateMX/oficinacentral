@@ -267,9 +267,19 @@ pre code { background: none; padding: 0; }
 .control-bar .popover { color: var(--text); }
 
 .desk-tip {
-  position: absolute; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 8px; white-space: nowrap;
-  background: var(--panel); color: var(--text); padding: 6px 8px 6px 12px; border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; pointer-events: auto;
+  position: absolute; transform: translate(-50%, calc(-100% - 10px)); z-index: 15; display: flex; align-items: center; gap: 10px; white-space: nowrap;
+  background: var(--panel); color: var(--text); padding: 8px 8px 8px 10px; border-radius: 12px; box-shadow: var(--shadow);
+  border: 1px solid var(--line, rgba(0,0,0,.08)); font-size: 13px; pointer-events: auto; animation: deskTipIn .14s ease-out;
 }
+.desk-tip::after {
+  content: ''; position: absolute; left: 50%; bottom: -6px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg);
+  background: var(--panel); border-right: 1px solid var(--line, rgba(0,0,0,.08)); border-bottom: 1px solid var(--line, rgba(0,0,0,.08));
+}
+.desk-tip-ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.desk-tip-text { display: flex; flex-direction: column; line-height: 1.2; }
+.desk-tip-text b { font-size: 13px; }
+.desk-tip-text span { font-size: 11px; color: var(--muted, #888); }
+@keyframes deskTipIn { from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)); } }
 
 .obj-toolbar {
   position: absolute; transform: translate(-50%, -100%); z-index: 25; display: flex; align-items: center; gap: 2px;
@@ -909,3 +919,14 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #fff; animation: rec-blink 1.6s ease-in-out infinite; }
 @keyframes rec-blink { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .rec-badge, .rec-dot { animation: none; } }
+
+/* Ausente: el mapa se ve opaco hasta que vuelvas */
+.map-wrap.is-away canvas { filter: grayscale(.7) brightness(.55); transition: filter .4s; }
+.away-veil { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(10,12,20,.25); pointer-events: none; }
+.away-card { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  background: var(--panel); color: var(--text); padding: 18px 22px; border-radius: 16px; box-shadow: var(--shadow); max-width: 320px; }
+.away-card b { font-size: 16px; }
+.away-card span { font-size: 13px; color: var(--muted, #888); margin-bottom: 6px; }
+
+.status-input { width: calc(100% - 16px); margin: 6px 8px 4px; font-size: 13px; padding: 7px 10px; }
+.pet-preview { display: block; margin-top: 10px; border-radius: 12px; background: var(--bg-soft, rgba(127,127,127,.1)); image-rendering: pixelated; }

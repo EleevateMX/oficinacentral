@@ -5,7 +5,7 @@ import express from 'express';
 import { db, now } from './db.js';
 import { hashPassword, defaultAvatar, randomToken } from './auth.js';
 import { loadWorld } from './world.js';
-import { api } from './api.js';
+import { api, officeConfig } from './api.js';
 import { initRealtime } from './realtime.js';
 import { scheduleBackups } from './backup.js';
 import { alert, watchProcess } from './alerts.js';
@@ -44,6 +44,45 @@ app.use('/api', api);
 
 const dist = path.resolve('dist');
 if (fs.existsSync(dist)) {
+  // Marca de la oficina en la pestaña, el ícono y la app instalada (nombre y tema elegidos por el admin)
+  const baseIndex = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+  const baseManifest = JSON.parse(fs.readFileSync(path.join(dist, 'manifest.webmanifest'), 'utf8'));
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const brand = () => {
+    const c = officeConfig();
+    const gta = c.theme === 'gtahub';
+    const name = c.theme === 'nuvora' && !c.logoUrl ? 'Nuvora' : c.officeName;
+    return { name, title: name === 'Nuvora' ? 'Nuvora — Oficina virtual' : `${name} — Oficina virtual by Nuvora`, icons: gta ? '/themes/gtahub' : null, logo: c.logoUrl };
+  };
+  const sendIndex = (req, res) => {
+    const b = brand();
+    let html = baseIndex
+      .replace(/<title>[^<]*<\/title>/, `<title>${esc(b.title)}</title>`)
+      .replace(/(name="(?:application-name|apple-mobile-web-app-title)" content=")[^"]*/g, `$1${esc(b.name)}`);
+    if (b.logo) html = html.replace(/<link rel="icon"[^>]*>/, `<link rel="icon" href="${esc(b.logo)}" />`);
+    else if (b.icons) {
+      html = html
+        .replace(/<link rel="icon"[^>]*>/, `<link rel="icon" type="image/svg+xml" href="${b.icons}/favicon.svg" />`);
+    }
+    if (b.icons) {
+      html = html
+        .replace(/(<link rel="apple-touch-icon" href=")[^"]*/, `$1${b.icons}/apple-touch-icon.png`)
+        .replace(/(name="theme-color" content=")[^"]*/, '$1#101010');
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(html);
+  };
+  app.get('/manifest.webmanifest', (req, res) => {
+    const b = brand();
+    const m = { ...baseManifest, name: b.title, short_name: b.name };
+    if (b.icons) {
+      m.theme_color = '#101010';
+      m.icons = m.icons.map((i) => ({ ...i, src: i.src.replace('/icons/', `${b.icons}/`) }));
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('application/manifest+json').send(JSON.stringify(m));
+  });
+  app.get(['/', '/index.html'], sendIndex);
   app.use(express.static(dist, {
     index: false,
     maxAge: '1h',
@@ -60,7 +99,7 @@ if (fs.existsSync(dist)) {
       }
     },
   }));
-  app.get(/^(?!\/api|\/socket\.io).*/, (req, res) => res.sendFile('index.html', { root: dist }));
+  app.get(/^(?!\/api|\/socket\.io).*/, sendIndex);
 }
 
 const server = http.createServer(app);
