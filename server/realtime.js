@@ -210,7 +210,7 @@ export function initRealtime(httpServer) {
     let lastFx = 0;
     socket.on('fx', (m) => {
       const t = Date.now();
-      if (t - lastFx < 1500 || !['zap', 'alien', 'portal', 'rocket'].includes(m?.kind)) return;
+      if (t - lastFx < 1500 || !['zap', 'alien', 'portal', 'rocket', 'broom', 'bats'].includes(m?.kind)) return;
       lastFx = t;
       const pt = (q) => ({ x: Math.trunc(Number(q?.x) || 0), y: Math.trunc(Number(q?.y) || 0) });
       socket.broadcast.emit('fx', { id: userId, kind: m.kind, from: pt(m.from), to: pt(m.to) });

@@ -1091,6 +1091,15 @@ function BrandAdmin() {
         </Row>
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
+      <Section title="Decoración de temporada">
+        <Row title="Temporada" desc="Adornos, personajes y ambiente especiales en el mapa (calabazas, zombies, perritos, ofrenda…). En automático se pone sola en su fecha.">
+          <select value={config.seasonSetting || 'auto'} onChange={(e) => save({ season: e.target.value })}>
+            <option value="auto">Automática (según la fecha)</option>
+            <option value="halloween">🎃 Halloween y Día de Muertos</option>
+            <option value="none">Sin decoración</option>
+          </select>
+        </Row>
+      </Section>
       <ShiftsAdmin shifts={config.shifts || []} save={save} />
       <ShiftReport />
     </>

@@ -1,16 +1,18 @@
-// Efectos de "regresar a mi escritorio" (Ctrl+D): rápido casi siempre y,
-// 1 de cada 10 veces, uno especial que va cambiando (abducción, portal, cohete).
+// Efectos de "regresar a mi escritorio" (Ctrl+D): casi siempre uno temático que va
+// cambiando (abducción, portal, cohete, escoba de bruja, murciélagos) y a veces el rápido.
 const T = 32;
 export const FX = {
   zap: { dur: 700 },
   alien: { dur: 3000 },
   portal: { dur: 1900 },
   rocket: { dur: 2300 },
+  broom: { dur: 2600 },
+  bats: { dur: 2200 },
 };
-export const SPECIALS = ['alien', 'portal', 'rocket'];
+export const SPECIALS = ['alien', 'broom', 'portal', 'bats', 'rocket'];
 
 export function pickFx() {
-  if (Math.random() >= 0.1) return 'zap';
+  if (Math.random() < 0.2) return 'zap';
   let i = 0;
   try { i = Number(localStorage.getItem('nuvora:fx') || 0); localStorage.setItem('nuvora:fx', String(i + 1)); } catch { /* sin almacenamiento */ }
   return SPECIALS[i % SPECIALS.length];
@@ -48,6 +50,21 @@ export function pose(fx, p) {
       if (p < 0.55) return { hidden: true, cam: { x: lerp(from.x, to.x, seg(p, 0.45, 0.55)), y: lerp(from.y, to.y, seg(p, 0.45, 0.55)) } };
       if (p < 0.85) return at(to, { lift: (1 - ease(seg(p, 0.55, 0.85))) ** 2 * 14 * T, cam: to });
       return at(to, { cam: to });
+    case 'broom': {
+      // Vuela en escoba en arco hasta el escritorio
+      if (p < 0.12) return at(from, { lift: ease(seg(p, 0, 0.12)) * 1.2 * T, cam: from });
+      if (p < 0.88) {
+        const k = ease(seg(p, 0.12, 0.88));
+        const q = { x: lerp(from.x, to.x, k), y: lerp(from.y, to.y, k) };
+        return at(q, { lift: (1.2 + Math.sin(k * Math.PI) * 2.2) * T, cam: q, broom: true, flip: to.x < from.x });
+      }
+      return at(to, { lift: (1 - ease(seg(p, 0.88, 1))) * 1.2 * T, cam: to, broom: p < 0.97, flip: to.x < from.x });
+    }
+    case 'bats':
+      // Se convierte en murciélagos que vuelan al escritorio
+      if (p < 0.25) return at(from, { alpha: 1 - seg(p, 0.1, 0.25), cam: from });
+      if (p < 0.75) { const k = ease(seg(p, 0.25, 0.75)); return { hidden: true, cam: { x: lerp(from.x, to.x, k), y: lerp(from.y, to.y, k) } }; }
+      return at(to, { alpha: seg(p, 0.75, 0.9), cam: to });
     default: // zap
       if (p < 0.4) return at(from, { alpha: 1 - seg(p, 0.1, 0.4), cam: to });
       return at(to, { alpha: seg(p, 0.4, 0.7), cam: to });
@@ -135,9 +152,63 @@ export function drawFxUnder(ctx, fx, p, t) {
   }
 }
 
-// Encima del personaje (nave, rayo, llamas)
+function bat(ctx, x, y, t, s = 1) {
+  const flap = Math.sin(t / 45) * 0.8;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.fillStyle = '#1b1424';
+  ctx.beginPath(); ctx.ellipse(0, 0, 2.6, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+  for (const d of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(d * 2, -1);
+    ctx.quadraticCurveTo(d * 6, -5 * flap - 2, d * 10, -2 * flap);
+    ctx.quadraticCurveTo(d * 7, 0, d * 6, 2);
+    ctx.quadraticCurveTo(d * 4, 0.5, d * 2, 2);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = '#ff5a1f';
+  ctx.fillRect(-1.6, -1.2, 1, 1); ctx.fillRect(0.6, -1.2, 1, 1);
+  ctx.restore();
+}
+
+function broomUnder(ctx, x, y, flip) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (flip) ctx.scale(-1, 1);
+  ctx.fillStyle = '#7a4a2b';
+  ctx.fillRect(-16, -1, 26, 3);
+  ctx.fillStyle = '#d9a441';
+  ctx.beginPath(); ctx.moveTo(-14, -3); ctx.lineTo(-26, -6); ctx.lineTo(-27, 6); ctx.lineTo(-14, 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#b07d2a';
+  ctx.fillRect(-16, -3, 3, 8);
+  ctx.restore();
+}
+
+// Encima del personaje (nave, rayo, llamas, escoba, murciélagos)
 export function drawFxOver(ctx, fx, p, t, pz) {
   const { from, to } = fx;
+  if (fx.kind === 'broom' && !pz.hidden && pz.broom) {
+    const x = (pz.x + 0.5) * T, y = (pz.y + 1) * T - 4 - pz.lift;
+    broomUnder(ctx, x, y, pz.flip);
+    // estela de chispas
+    ctx.save();
+    for (let i = 1; i < 6; i++) {
+      ctx.globalAlpha = 0.5 - i * 0.08;
+      ctx.fillStyle = i % 2 ? '#FFCC00' : '#b46bff';
+      ctx.fillRect(x + (pz.flip ? 1 : -1) * (26 + i * 6) + Math.sin(t / 60 + i) * 2, y + Math.cos(t / 80 + i) * 3, 2.5, 2.5);
+    }
+    ctx.restore();
+  }
+  if (fx.kind === 'bats' && p > 0.12 && p < 0.88) {
+    const k = ease(seg(p, 0.2, 0.8));
+    const cx = (lerp(from.x, to.x, k) + 0.5) * T, cy = (lerp(from.y, to.y, k) + 1) * T - 24 - Math.sin(k * Math.PI) * 30;
+    const spread = Math.sin(seg(p, 0.12, 0.88) * Math.PI) * 18 + 4;
+    for (let i = 0; i < 7; i++) {
+      const a = i * 0.9 + t / 300;
+      bat(ctx, cx + Math.cos(a) * spread, cy + Math.sin(a * 1.3) * spread * 0.5, t + i * 37, 0.9 + (i % 3) * 0.15);
+    }
+  }
   if (fx.kind === 'alien') {
     const k = p < 0.12 ? ease(p / 0.12) : p > 0.95 ? 1 - seg(p, 0.95, 1) : 1;
     const ux = (pz.cam.x + 0.5) * T;
