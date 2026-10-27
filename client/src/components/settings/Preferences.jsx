@@ -567,6 +567,25 @@ function TwoFactor() {
   );
 }
 
+function BackupStatus() {
+  const [st, setSt] = useState(null);
+  useEffect(() => { api.get('/admin/backups/status').then(setSt).catch(() => setSt(null)); }, []);
+  if (!st) return null;
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+  const mb = (b) => (b ? `${(b / 1048576).toFixed(1)} MB` : '');
+  const off = st.offsite || {};
+  return (
+    <Section title="Respaldos">
+      <Row title="Último respaldo diario" desc={st.lastBackupAt ? `${when(st.lastBackupAt)} · ${mb(st.size)} · ${st.localCount} guardados en el servidor` : 'Aún no se ha hecho ninguno'}>
+        <span className={`pill ${st.ok === false ? 'expired' : st.ok ? 'used' : 'pending'}`}>{st.ok === false ? 'Falló' : st.ok ? 'Correcto' : 'Pendiente'}</span>
+      </Row>
+      <Row title="Copia fuera del servidor" desc={!off.enabled ? 'Desactivada: configura BACKUP_S3_* (Cloudflare R2, S3…) para no depender de un solo disco.' : off.status === 'error' ? `Error: ${off.error}` : `${off.bucket}/${off.prefix} · ${when(off.uploadedAt)}${off.uploads ? ` · ${off.uploads.remote} archivos del chat` : ''}`}>
+        <span className={`pill ${!off.enabled ? 'revoked' : off.status === 'ok' ? 'used' : off.status === 'error' ? 'expired' : 'pending'}`}>{!off.enabled ? 'Sin configurar' : off.status === 'ok' ? 'Al día' : off.status === 'error' ? 'Error' : 'Pendiente'}</span>
+      </Row>
+    </Section>
+  );
+}
+
 // ---------- Seguridad (admin): exigir 2FA y registro de actividad ----------
 function SecurityAdmin() {
   const config = useOffice((s) => s.config);
@@ -598,6 +617,7 @@ function SecurityAdmin() {
           <Toggle checked={!!config.requireAdmin2fa} disabled={!me.twoFactor} onChange={toggle} />
         </Row>
       </Section>
+      <BackupStatus />
       <Section title="Registro de actividad">
         <p className="muted small">Quién invitó, cambió permisos, borró o configuró algo, y los inicios de sesión de admins y los fallidos.</p>
         <div className="row gap8">

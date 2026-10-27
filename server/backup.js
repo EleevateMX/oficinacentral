@@ -7,6 +7,8 @@ import { db } from './db.js';
 import { backupDir, localKeep, BACKUP_RE, fmtSize, uploadBackup, writeStatus, s3Config, startServerLock } from './backup-store.js';
 
 export { backupStatus, listLocalBackups, listRemoteBackups } from './backup-store.js';
+import { backupStatus } from './backup-store.js';
+import { alert } from './alerts.js';
 
 // Crea el respaldo local y borra los locales que sobran. Devuelve la ruta del archivo.
 export function backupNow() {
@@ -50,9 +52,12 @@ export function scheduleBackups() {
     if (running) return;
     running = true;
     try {
-      await runBackup();
+      const r = await runBackup();
+      const off = backupStatus().offsite;
+      if (r.remote !== null && off?.status === 'error') alert('No se pudo subir el respaldo fuera del servidor', off.error || '', { level: 'warn', key: 'backup-offsite' });
     } catch (e) {
       console.error('No se pudo crear el respaldo:', e.message);
+      alert('No se pudo crear el respaldo diario', e.message, { key: 'backup-local' });
     } finally {
       running = false;
     }

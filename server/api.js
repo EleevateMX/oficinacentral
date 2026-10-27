@@ -13,6 +13,7 @@ import * as sec from './security.js';
 import { registerFileRoutes, getFiles } from './files.js';
 import { registerDiscordRoutes, discordEnabled } from './discord.js';
 import { openShift, shiftReport } from './shifts.js';
+import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 
@@ -671,6 +672,9 @@ admin.post('/users/:id/reset-password', wrap((req, res) => {
   disconnectUser(id);
   res.json({ password });
 }));
+
+// Estado de los respaldos (último respaldo local y copia fuera del servidor)
+admin.get('/backups/status', (req, res) => res.json(backupStatus()));
 
 // Reporte de turnos: horas por persona y turno en un rango de fechas
 admin.get('/shifts/report', (req, res) => {
