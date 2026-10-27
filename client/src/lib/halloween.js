@@ -48,7 +48,7 @@ export function buildHalloween(f) {
     decor.push({ type: 'web', x: a.x, y: a.y, flip: false, seed: hash(a.x, a.y) });
     decor.push({ type: 'web', x: a.x + a.w - 1, y: a.y, flip: true, seed: hash(a.y, a.x) });
     // Papel picado, salvo donde hay un letrero o logo de la marca en la pared de arriba
-    const sign = (f.objects || []).some((o) => CATALOG[o.type]?.brand && o.y < a.y + 1.5 && o.x + objSize(o).w > a.x && o.x < a.x + a.w);
+    const sign = (f.objects || []).some((o) => CATALOG[o.type]?.brand && o.y < a.y + 1.5 && o.y + objSize(o).h > a.y - 1 && o.x + objSize(o).w > a.x && o.x < a.x + a.w);
     if (a.w >= 5 && !sign) decor.push({ type: 'picado', x: a.x + 0.5, y: a.y + 0.15, w: a.w - 1, seed: hash(a.x, a.w) });
   }
   // Ofrenda de Día de Muertos cerca de la entrada
