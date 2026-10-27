@@ -886,6 +886,23 @@ api.post('/wave/:userId', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// Llamar a alguien: le suena una alerta para que venga contigo (o te conteste)
+const lastCall = new Map();
+api.post('/call/:userId', wrap((req, res) => {
+  const to = Number(req.params.userId);
+  if (!to || to === req.user.id || !getUser(to)) return fail(res, 400, 'Usuario inválido');
+  const key = `${req.user.id}:${to}`;
+  if (Date.now() - (lastCall.get(key) || 0) < 15e3) return fail(res, 429, 'Espera unos segundos antes de volver a llamar');
+  lastCall.set(key, Date.now());
+  notify(to, 'call', req.user.id, {});
+  res.json({ ok: true, online: presence.has(to) });
+}));
+api.post('/call/:userId/answer', wrap((req, res) => {
+  const to = Number(req.params.userId);
+  emitToUser(to, 'call:answer', { from: req.user.id, accept: !!req.body?.accept });
+  res.json({ ok: true });
+}));
+
 // ---------- Notificaciones ----------
 registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push/test
 

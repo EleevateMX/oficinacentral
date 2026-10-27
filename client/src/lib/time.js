@@ -59,3 +59,27 @@ export function since(ts) {
   const h = Math.floor(m / 60);
   return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
 }
+
+// Minutos de diferencia de una zona respecto a UTC (ej. Santiago = -180)
+export function tzOffsetMin(tz, ts = Date.now()) {
+  try {
+    const v = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' }).formatToParts(ts).find((p) => p.type === 'timeZoneName')?.value || 'GMT';
+    const m = v.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+    return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export const myTimezone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } };
+
+// "3 h más que tú", "1 h 30 min menos que tú", "misma hora que tú"
+export function tzDiffLabel(tz) {
+  const mine = myTimezone();
+  if (!tz || !mine) return '';
+  const d = tzOffsetMin(tz) - tzOffsetMin(mine);
+  if (!d) return 'misma hora que tú';
+  const a = Math.abs(d);
+  const txt = a % 60 ? `${Math.floor(a / 60)} h ${a % 60} min` : `${a / 60} h`;
+  return `${txt} ${d > 0 ? 'más' : 'menos'} que tú`;
+}

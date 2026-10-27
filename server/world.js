@@ -20,7 +20,7 @@ const rowToObject = (r) => ({
 });
 const rowToArea = (r, leaders = []) => ({
   id: r.id, name: r.name, x: r.x, y: r.y, w: r.w, h: r.h, color: r.color, private: !!r.private,
-  shape: r.shape || 'soft', openDecor: !!r.open_decor, leaders,
+  shape: r.shape || 'soft', openDecor: !!r.open_decor, leaders, closed: closed.has(r.id),
 });
 
 function rebuild(id) {
@@ -195,6 +195,20 @@ export function listFloors() {
 
 export function defaultFloorId() {
   return listFloors()[0]?.id;
+}
+
+// Salas cerradas en este momento (en memoria: al reiniciar el servidor se abren)
+const closed = new Set();
+export const isAreaClosed = (id) => closed.has(Number(id));
+export function setAreaClosed(id, on) {
+  id = Number(id);
+  if (on) closed.add(id); else closed.delete(id);
+  for (const f of floors.values()) for (const a of f.state.areas) if (a.id === id) a.closed = !!on;
+}
+export function closedAreaIds() { return [...closed]; }
+export function floorOfArea(id) {
+  for (const f of floors.values()) if (f.state.areas.some((a) => a.id === Number(id))) return f.id;
+  return null;
 }
 
 export function floorPayload(id) {

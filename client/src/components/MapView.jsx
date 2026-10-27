@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush } from 'lucide-react';
+import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush, Lock, Unlock, Users } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
-import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt } from '@shared/map.js';
+import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt, closedRoomAt } from '@shared/map.js';
 import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
@@ -284,7 +284,13 @@ export default function MapView({ active }) {
         }
         if (next) {
           input.current.lastStep = t;
-          if (isWalkable(f, next.x, next.y)) office.moveMe(next.x, next.y, dir);
+          const shut = closedRoomAt(f, mine, next);
+          if (shut && !office.admitted.has(shut.id)) {
+            // Sala cerrada: no se entra; se ofrece tocar la puerta
+            input.current.path = [];
+            input.current.held = [];
+            office.knockPrompt(shut);
+          } else if (isWalkable(f, next.x, next.y)) office.moveMe(next.x, next.y, dir);
           else if (dir !== mine.dir) office.moveMe(mine.x, mine.y, dir);
           else input.current.path = [];
         }
@@ -642,7 +648,7 @@ export default function MapView({ active }) {
         const evs = office.state.events;
         for (const a of f.areas) {
           const p = worldToScreen(a.x + 0.3, a.y + 0.45);
-          const label = a.private ? `🔒 ${a.name}` : a.name;
+          const label = a.closed ? `🔒 ${a.name}` : a.name;
           const w = ctx.measureText(label).width + 26;
           ctx.save();
           ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1;
@@ -653,6 +659,21 @@ export default function MapView({ active }) {
           ctx.beginPath(); ctx.arc(p.x + 11, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = '#fff';
           ctx.fillText(label, p.x + 19, p.y + 1);
+          // Salas: Libre / Ocupada · N / Cerrada · N
+          if (a.private || a.closed) {
+            let n = 0;
+            for (const q of Object.values(office.players)) if (q.floorId === f.id && q.x >= a.x && q.y >= a.y && q.x < a.x + a.w && q.y < a.y + a.h) n++;
+            const st = a.closed ? `Cerrada · ${n}` : n ? `Ocupada · ${n}` : 'Libre';
+            ctx.font = '700 10px "Public Sans", system-ui, sans-serif';
+            const sw = ctx.measureText(st).width + 18;
+            ctx.fillStyle = 'rgba(255,255,255,.95)';
+            ctx.beginPath(); ctx.roundRect(p.x + w + 4, p.y - 9, sw, 18, 9); ctx.fill();
+            ctx.fillStyle = a.closed ? '#e63946' : n ? '#f59f00' : '#2fb67c';
+            ctx.beginPath(); ctx.arc(p.x + w + 12, p.y, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#1d1d22';
+            ctx.fillText(st, p.x + w + 18, p.y + 0.5);
+            ctx.font = '700 12px "Public Sans", system-ui, sans-serif';
+          }
           // Reunión apartada en esta sala: ahora o en los próximos 30 minutos
           const ev = evs.find((e) => (e.areaId === a.id) && e.endsAt > nowTs && e.startsAt - nowTs < 30 * 60e3);
           if (ev) {
@@ -1002,6 +1023,8 @@ export default function MapView({ active }) {
   };
 
   const myAway = users[me.id]?.status === 'away';
+  const space = useOffice((s) => s.space);
+  const roomHere = space?.startsWith('area:') ? floor?.areas.find((a) => `area:${a.id}` === space) : null;
   const hoverOwner = hoverDesk && users[floor?.claims[hoverDesk.desk.id]];
   const isMyDesk = hoverDesk && floor?.claims[hoverDesk.desk.id] === me.id;
 
@@ -1106,6 +1129,15 @@ export default function MapView({ active }) {
         <span className="desk-ind-arrow" aria-hidden="true" />
         <Armchair size={14} /> Mi escritorio
       </button>
+      {roomHere && !editMode && (
+        <div className={`room-pill ${roomHere.closed ? 'closed' : ''}`}>
+          {roomHere.closed ? <Lock size={13} /> : <Users size={13} />}
+          <span><b>{roomHere.name}</b> · {roomHere.closed ? 'Cerrada, solo se oye dentro' : 'Solo se oye dentro'}</span>
+          <button className="btn tiny" onClick={() => office.setRoomClosed(roomHere.id, !roomHere.closed)}>
+            {roomHere.closed ? <><Unlock size={12} /> Abrir</> : <><Lock size={12} /> Cerrar</>}
+          </button>
+        </div>
+      )}
       {!myAway && !editMode && <Minimap floor={floor} staticRef={staticRef} view={view} />}
       {!myAway && <ControlBar />}
     </div>

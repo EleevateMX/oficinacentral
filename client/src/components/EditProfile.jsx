@@ -58,6 +58,8 @@ export default function EditProfile() {
     setError('');
     try {
       await api.patch('/me', { ...form, avatar });
+      // Si eliges una zona distinta a la de tu dispositivo, ya no se ajusta sola
+      try { if (form.timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone) localStorage.setItem('nuvora:tzManual', '1'); else localStorage.removeItem('nuvora:tzManual'); } catch { /* sin almacenamiento */ }
       close();
     } catch (err) {
       setError(err.message);

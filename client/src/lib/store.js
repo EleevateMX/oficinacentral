@@ -2,7 +2,7 @@ import { useSyncExternalStore, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { api } from './api.js';
 import { MediaManager } from './media.js';
-import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable } from '@shared/map.js';
+import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable, PROXIMITY_RADIUS } from '@shared/map.js';
 import { playSound } from './sounds.js';
 import { applyBrand } from './themes.js';
 import { FX, pickFx } from './fx.js';
@@ -39,6 +39,8 @@ class Office {
     this.listeners = new Set();
     this.state = this.initial();
     this.players = {}; // posiciones en vivo (no dispara renders)
+    this.admitted = new Set(); // salas cerradas donde me dejaron pasar
+    this.pendingDoor = null; // "Ir a su lado" hacia alguien en sala cerrada
     this.reactions = {}; // id -> { emoji, until }
     this.fx = {}; // id -> efecto de Ctrl+D en curso
     this.floorCache = new Map();
@@ -194,6 +196,7 @@ class Office {
         // reconexión: volver a anunciar estado de medios (y si estoy grabando)
         s.emit('state', { ...this.media.state, recording: this.state.recording });
       }
+      this.syncTimezone();
       // Fusionar presencia con la lista de usuarios
       this.set((st) => {
         const users = {};
@@ -224,6 +227,47 @@ class Office {
       if (m.tp || floorChanged) { p.rx = m.x; p.ry = m.y; }
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
+    s.on('call:answer', ({ from, accept }) => {
+      const who = this.state.users[from]?.displayName || 'La persona';
+      this.toast({ title: accept ? `✅ ${who} va en camino` : `${who} no puede ahora`, ...(accept ? {} : { action: { label: 'Mensaje', run: () => this.openConv(`d:${from}`) } }) });
+    });
+    s.on('room:knock', ({ from, areaId }) => {
+      const who = this.state.users[from]?.displayName || 'Alguien';
+      playSound('wave', this.state.prefs.audio.notifVolume);
+      this.toast({
+        title: `🚪 ${who} está tocando la puerta`,
+        action: { label: 'Dejar pasar', run: () => { s.emit('room:admit', { areaId, userId: from }); this.toast({ title: `Dejaste pasar a ${who}` }); } },
+        actions: [{ label: 'Abrir sala', run: () => this.setRoomClosed(areaId, false) }],
+        duration: 20000,
+      });
+    });
+    s.on('room:admitted', ({ areaId, by }) => {
+      this.admitted.add(areaId);
+      const who = this.state.users[by]?.displayName || 'Alguien';
+      this.toast({ title: `🚪 ${who} te dejó pasar` });
+      const d = this.pendingDoor;
+      if (d?.areaId === areaId) {
+        this.pendingDoor = null;
+        this.set({ view: 'map' });
+        this.pathTarget = d.target;
+        this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
+      }
+    });
+    s.on('room-state', ({ areaId, closed, by }) => {
+      const f = this.state.floor;
+      const a = f?.areas.find((x) => x.id === areaId);
+      const me = this.myPlayer;
+      if (!a || !me || by === this.state.me.id) return;
+      if (areaAt(f, me.x, me.y)?.id === areaId) {
+        const who = this.state.users[by]?.displayName || 'Alguien';
+        this.toast({ title: closed ? `🔒 ${who} cerró la sala: ahora solo se oye dentro` : `🔓 ${who} abrió la sala` });
+      }
+    });
+    s.on('room-state', ({ areaId, closed, by, auto }) => {
+      if (!auto || by !== this.state.me.id || !closed) return;
+      const a = this.state.floor?.areas.find((x) => x.id === areaId);
+      this.toast({ title: `🔒 Entraste a ${a?.name || 'un 1:1'}: la puerta se cerró sola y solo se oye dentro`, action: { label: 'Abrir', run: () => this.setRoomClosed(areaId, false) } });
+    });
     s.on('fx', ({ id, kind, from, to }) => {
       if (FX[kind]) this.fx[id] = { kind, from, to, start: performance.now(), dur: FX[kind].dur };
     });
@@ -243,7 +287,11 @@ class Office {
       if (this.floorCache.has(payload.id) || this.state.floor?.id === payload.id) {
         const f = buildFloor(payload);
         this.floorCache.set(payload.id, f);
-        if (this.state.floor?.id === payload.id) this.set({ floor: f });
+        if (this.state.floor?.id === payload.id) {
+          for (const id of this.admitted) if (!f.areas.find((a) => a.id === id)?.closed) this.admitted.delete(id);
+          this.set({ floor: f });
+          this.updateProximity();
+        }
       }
     });
     s.on('clip', ({ from }) => {
@@ -269,7 +317,10 @@ class Office {
     s.on('notification', (n) => {
       this.set((st) => ({ notifications: [n, ...st.notifications] }));
       const actor = this.state.users[n.actorId];
-      if (n.type === 'wave') {
+      if (n.type === 'call') {
+        this.ring(n.actorId);
+        this.desktopNotify(`📞 ${actor?.displayName || 'Alguien'} te está llamando`);
+      } else if (n.type === 'wave') {
         this.toast({ title: `👋 ${actor?.displayName || 'Alguien'} te saludó`, action: { label: 'Ir', run: () => this.goTo(n.actorId) } });
         playSound('wave', this.state.prefs.audio.notifVolume);
         this.desktopNotify(`${actor?.displayName} te saludó 👋`);
@@ -322,6 +373,74 @@ class Office {
     this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
   }
 
+  // Tu hora local se toma de tu dispositivo (Chile, Argentina, Nueva York, Europa…) salvo que la elijas a mano
+  syncTimezone() {
+    try {
+      if (localStorage.getItem('nuvora:tzManual')) return;
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz && tz !== this.state.me?.timezone) api.patch('/me', { timezone: tz }).catch(() => {});
+    } catch { /* sin almacenamiento */ }
+  }
+
+  // ---------- Llamadas ----------
+  async callUser(id) {
+    const r = await api.post(`/call/${id}`);
+    const who = this.state.users[id]?.displayName || 'la persona';
+    this.toast({ title: r.online ? `📞 Llamando a ${who}…` : `${who} no está conectado; le llegará el aviso` });
+  }
+
+  ring(from) {
+    clearInterval(this.ringTimer);
+    this.set({ incomingCall: { from, at: Date.now() } });
+    let n = 0;
+    const tone = () => { playSound('wave', Math.max(0.4, this.state.prefs.audio.notifVolume)); if (++n > 12 || !this.state.incomingCall) clearInterval(this.ringTimer); };
+    tone();
+    this.ringTimer = setInterval(tone, 2200);
+    clearTimeout(this.ringEnd);
+    this.ringEnd = setTimeout(() => {
+      if (this.state.incomingCall?.from === from) {
+        this.set({ incomingCall: null });
+        this.toast({ title: `Llamada perdida de ${this.state.users[from]?.displayName || 'alguien'}`, action: { label: 'Ir', run: () => this.goTo(from) } });
+      }
+    }, 30e3);
+  }
+
+  answerCall(accept) {
+    const c = this.state.incomingCall;
+    if (!c) return;
+    clearInterval(this.ringTimer);
+    clearTimeout(this.ringEnd);
+    this.set({ incomingCall: null });
+    api.post(`/call/${c.from}/answer`, { accept }).catch(() => {});
+    if (accept) this.goTo(c.from);
+  }
+
+  // Volumen de cada persona (se recuerda en este dispositivo)
+  peerVolume(id) {
+    try { return JSON.parse(localStorage.getItem('nuvora:vol') || '{}')[id] ?? 1; } catch { return 1; }
+  }
+
+  setPeerVolume(id, v) {
+    try { const m = JSON.parse(localStorage.getItem('nuvora:vol') || '{}'); m[id] = v; localStorage.setItem('nuvora:vol', JSON.stringify(m)); } catch { /* sin almacenamiento */ }
+    this.media?.setPeerVolume?.(id, v);
+  }
+
+  // ---------- Salas cerradas ----------
+  setRoomClosed(areaId, closed) { this.socket?.emit('room:close', { areaId, closed }); }
+
+  knockPrompt(area) {
+    const t = performance.now();
+    if (this.lastKnockPrompt && t - this.lastKnockPrompt < 4000) return;
+    this.lastKnockPrompt = t;
+    // Venías con "Ir a su lado": se toca la puerta sola y esperas a que te dejen pasar
+    if (this.pendingDoor?.areaId === area.id) {
+      this.socket?.emit('room:knock', { areaId: area.id });
+      this.toast({ title: `🚪 Tocaste la puerta de ${area.name}. Espera a que te dejen pasar`, duration: 8000 });
+      return;
+    }
+    this.toast({ title: `🔒 ${area.name} está cerrada`, action: { label: 'Tocar la puerta', run: () => { this.socket?.emit('room:knock', { areaId: area.id }); this.toast({ title: 'Tocaste la puerta 🚪' }); } } });
+  }
+
   // Ctrl+D: regresar a tu escritorio (rápido, y a veces con un efecto especial)
   goHome() {
     const f = this.state.floor;
@@ -361,6 +480,11 @@ class Office {
       return;
     }
     this.pathTarget = { x: target.x, y: target.y + 1, near: true };
+    // Si está en una sala cerrada te deja en la puerta y la toca por ti
+    const f = this.state.floor;
+    const room = f && areaAt(f, target.x, target.y);
+    const myRoom = f && areaAt(f, me.x, me.y);
+    this.pendingDoor = room?.closed && myRoom?.id !== room.id && !this.admitted.has(room.id) ? { areaId: room.id, target: this.pathTarget } : null;
     this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
   }
 
@@ -382,7 +506,16 @@ class Office {
       if (canTalk(f, me, p)) ids.push(Number(id));
     }
     ids.sort((a, b) => a - b);
-    this.media.setPeers(ids);
+    // Conexión preparada con quien está cerca (hasta 12): al acercarse la voz suena al instante
+    const near = [];
+    for (const [id, p] of Object.entries(this.players)) {
+      const n = Number(id);
+      if (n === this.state.me.id || ids.includes(n) || p.floorId !== me.floorId || !this.state.users[n]?.online) continue;
+      const d = Math.max(Math.abs(p.x - me.x), Math.abs(p.y - me.y));
+      if (d <= PROXIMITY_RADIUS + 7) near.push([d, n]);
+    }
+    near.sort((a, b) => a[0] - b[0]);
+    this.media.setPeers(ids, near.slice(0, 12).map(([, n]) => n));
     this.syncStreams(ids);
     if (this.pendingWatch && ids.includes(this.pendingWatch)) { const w = this.pendingWatch; this.pendingWatch = null; this.watch(w); }
     const prev = this.state.talkingWith;
