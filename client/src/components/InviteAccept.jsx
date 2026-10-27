@@ -12,7 +12,9 @@ export default function InviteAccept({ token, config, onDone }) {
   useEffect(() => {
     api.get(`/invites/${token}`).then((r) => {
       setInvite(r);
-      setForm((f) => ({ ...f, email: r.email || '' }));
+      // Si el admin puso el nombre al invitar, se propone nombre y usuario
+      const user = (r.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '').slice(0, 24);
+      setForm((f) => ({ ...f, email: r.email || '', displayName: r.name || '', username: user }));
     }).catch((e) => setInvite({ error: e.message }));
   }, [token]);
 

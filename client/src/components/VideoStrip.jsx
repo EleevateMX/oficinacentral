@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MicOff, Maximize2, Minimize2 } from 'lucide-react';
+import { MicOff, Maximize2, Minimize2, X, PictureInPicture2, Volume2, VolumeX, Expand } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar } from './ui.jsx';
 
@@ -62,6 +62,82 @@ function Tile({ user, stream, cam, mic, isMe, screen, big, onExpand }) {
   );
 }
 
+// Pantallas compartidas que ves ahora (la tuya primero)
+export function useScreens() {
+  const peers = useOffice((s) => s.peers);
+  const talking = useOffice((s) => s.talkingWith);
+  const me = useOffice((s) => s.me);
+  const media = useOffice((s) => s.media);
+  return [
+    ...(media.screen && office.media?.screenStream ? [{ id: me.id, stream: office.media.screenStream, mine: true }] : []),
+    ...peers.filter((p) => p.screen && talking.includes(p.id)).map((p) => ({ id: p.id, stream: p.screen })),
+  ];
+}
+
+// Escenario: la pantalla compartida en grande, con pantalla completa, PiP y volumen
+export function ScreenStage() {
+  const stage = useOffice((s) => s.stage);
+  const users = useOffice((s) => s.users);
+  const screenPrefs = useOffice((s) => s.prefs.screen);
+  const autoOpen = screenPrefs.autoOpen;
+  const screens = useScreens();
+  const ref = useRef(null);
+  const boxRef = useRef(null);
+  const seen = useRef(new Set());
+
+  // Abrir solo cuando alguien empieza a compartir cerca de ti
+  useEffect(() => {
+    for (const sc of screens) {
+      const key = `${sc.id}:${sc.stream.id}`;
+      if (!seen.current.has(key)) {
+        seen.current.add(key);
+        if (autoOpen && !sc.mine && office.state.stage == null) office.set({ stage: sc.id });
+      }
+    }
+    if (stage != null && !screens.some((sc) => sc.id === stage)) office.set({ stage: null });
+  }, [screens.map((sc) => `${sc.id}:${sc.stream.id}`).join(','), stage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cur = screens.find((sc) => sc.id === stage);
+  useEffect(() => {
+    if (ref.current && cur && ref.current.srcObject !== cur.stream) ref.current.srcObject = cur.stream;
+  }, [cur?.stream]);
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && !document.fullscreenElement && office.set({ stage: null });
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+  if (!cur) return null;
+
+  const hasAudio = cur.stream.getAudioTracks().length > 0;
+  const setVol = (v) => office.updatePrefs({ screen: { ...screenPrefs, volume: v } });
+  return (
+    <div className="screen-stage" ref={boxRef}>
+      <video ref={ref} autoPlay playsInline muted onDoubleClick={() => boxRef.current?.requestFullscreen?.()} />
+      <div className="stage-bar">
+        <span className="stage-title">{cur.mine ? 'Tu pantalla (así la ven los demás)' : `Pantalla de ${users[cur.id]?.displayName || ''}`}</span>
+        {screens.length > 1 && (
+          <div className="stage-switch">
+            {screens.map((sc) => (
+              <button key={sc.id} className={sc.id === stage ? 'on' : ''} onClick={() => office.set({ stage: sc.id })}>{sc.mine ? 'Tú' : users[sc.id]?.displayName}</button>
+            ))}
+          </div>
+        )}
+        {!cur.mine && hasAudio && (
+          <label className="stage-vol" title="Volumen de la pantalla">
+            {screenPrefs.volume > 0 ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            <input type="range" min="0" max="1" step="0.05" value={screenPrefs.volume} onChange={(e) => setVol(Number(e.target.value))} />
+          </label>
+        )}
+        {document.pictureInPictureEnabled && (
+          <button className="icon-btn" title="Ventana flotante" onClick={() => ref.current?.requestPictureInPicture?.().catch(() => {})}><PictureInPicture2 size={17} /></button>
+        )}
+        <button className="icon-btn" title="Pantalla completa" onClick={() => (document.fullscreenElement ? document.exitFullscreen() : boxRef.current?.requestFullscreen?.())}><Expand size={17} /></button>
+        <button className="icon-btn" title="Cerrar (Esc)" onClick={() => office.set({ stage: null })}><X size={18} /></button>
+      </div>
+    </div>
+  );
+}
+
 export default function VideoStrip() {
   const peers = useOffice((s) => s.peers);
   const talking = useOffice((s) => s.talkingWith);
@@ -70,21 +146,19 @@ export default function VideoStrip() {
   const media = useOffice((s) => s.media);
   const hideSelf = useOffice((s) => s.prefs.video.hideSelf);
   const maxTiles = useOffice((s) => s.prefs.meetings.maxTiles);
-  const [expanded, setExpanded] = useState(null);
+  const stage = useOffice((s) => s.stage);
+  const screensAll = useScreens();
 
   if (!talking.length) return null;
   const local = office.media?.localStream;
   const byId = Object.fromEntries(peers.map((p) => [p.id, p]));
   const people = talking.slice(0, maxTiles);
-  const screens = [
-    ...(media.screen && office.media?.screenStream ? [{ id: me.id, stream: office.media.screenStream }] : []),
-    ...peers.filter((p) => p.screen && talking.includes(p.id)).map((p) => ({ id: p.id, stream: p.screen })),
-  ];
+  const screens = screensAll.filter((sc) => sc.id !== stage);
 
   return (
     <div className="video-strip">
       {screens.map((s) => (
-        <Tile key={`s${s.id}`} user={users[s.id]} stream={s.stream} screen big={expanded === s.id} onExpand={() => setExpanded(expanded === s.id ? null : s.id)} />
+        <Tile key={`s${s.id}`} user={users[s.id]} stream={s.stream} screen onExpand={() => office.set({ stage: s.id })} />
       ))}
       {!hideSelf && <Tile user={{ ...users[me.id], online: true }} stream={local} cam={media.cam} mic={media.mic} isMe />}
       {people.map((id) => {

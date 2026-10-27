@@ -1,3 +1,4 @@
+import { since } from '../lib/time.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { X, User, Hand, MessageCircle, Navigation, Clock, MoreVertical, Briefcase } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
@@ -41,6 +42,7 @@ export default function ProfileCard({ userId }) {
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={16} /></button>
       </div>
       {u.statusText && <div className="pc-status">{u.statusText}</div>}
+      {u.online && u.shift && <div className="pc-status">🖥️ En turno {u.shift} · {since(u.shiftAt)}</div>}
       <div className="pc-actions">
         {isMe ? (
           <button className="btn primary flex1" onClick={() => office.set({ modal: { type: 'profile' }, profileCard: null })}><User size={15} /> Editar perfil</button>

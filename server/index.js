@@ -41,7 +41,7 @@ app.use('/api', api);
 const dist = path.resolve('dist');
 if (fs.existsSync(dist)) {
   app.use(express.static(dist, { index: false, maxAge: '1h' }));
-  app.get(/^(?!\/api|\/socket\.io).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')));
+  app.get(/^(?!\/api|\/socket\.io).*/, (req, res) => res.sendFile('index.html', { root: dist }));
 }
 
 const server = http.createServer(app);

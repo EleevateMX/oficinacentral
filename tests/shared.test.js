@@ -9,11 +9,7 @@ const templateIds = Object.keys(TEMPLATES);
 
 // Problemas conocidos de las plantillas: se reportan como TODO sin romper la CI.
 // Quitar la entrada en cuanto se corrija la plantilla.
-const KNOWN_ISSUES = {
-  main: {
-    overlaps: 'la fila "Pared superior" (y=12) cae sobre el muro doble b.thick(1, 11, 78)',
-  },
-};
+const KNOWN_ISSUES = {};
 
 // Estado jugable de una plantilla tal como lo arma el servidor al crear el piso
 function floorOf(id) {

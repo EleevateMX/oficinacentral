@@ -50,3 +50,12 @@ export function tzOffsetLabel(tz) {
     return tz;
   }
 }
+
+// Duración desde un momento: "25 min", "3 h 10 min"
+export function since(ts) {
+  if (!ts) return '';
+  const m = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+}

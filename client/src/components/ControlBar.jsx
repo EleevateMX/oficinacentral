@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, MonitorCheck } from 'lucide-react';
+import { api } from '../lib/api.js';
+import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS } from './ui.jsx';
 
@@ -21,6 +23,8 @@ export default function ControlBar({ compact = false }) {
   const ref = useRef(null);
   useClickOutside(ref, () => setMenu(null));
   const meU = users[me.id] || me;
+  const shifts = useOffice((s) => s.config.shifts) || [];
+  const setShift = (shift) => api.put('/me/shift', { shift }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
 
   return (
     <div className={`control-bar ${compact ? 'compact' : ''}`} ref={ref}>
@@ -36,6 +40,18 @@ export default function ControlBar({ compact = false }) {
                 <span className="dot" style={{ background: s.color }} /> {s.label}
               </button>
             ))}
+            {shifts.length > 0 && (
+              <>
+                <div className="pop-sep" />
+                <div className="pop-label"><MonitorCheck size={13} /> {meU.shift ? `En turno · ${meU.shift} · ${since(meU.shiftAt)}` : 'Turno'}</div>
+                <div className="shift-chips">
+                  {shifts.map((sh) => (
+                    <button key={sh} className={`chip-btn ${meU.shift === sh ? 'on' : ''}`} onClick={() => setShift(meU.shift === sh ? null : sh)}>{sh}</button>
+                  ))}
+                </div>
+                {meU.shift && <button className="pop-item" onClick={() => { setShift(null); setMenu(null); }}>Salir de turno</button>}
+              </>
+            )}
             <div className="pop-sep" />
             <button className="pop-item" onClick={() => { office.set({ profileCard: me.id }); setMenu(null); }}>Ver mi perfil</button>
             <button className="pop-item" onClick={() => { office.set({ modal: { type: 'profile' } }); setMenu(null); }}>Editar perfil</button>

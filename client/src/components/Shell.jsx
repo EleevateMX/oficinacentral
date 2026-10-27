@@ -1,3 +1,5 @@
+import Whiteboard from './Whiteboard.jsx';
+import Notices from './Notices.jsx';
 import React, { useEffect } from 'react';
 import { office, useOffice } from '../lib/store.js';
 import Rail from './Rail.jsx';
@@ -59,6 +61,8 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'prefs' && <Preferences section={modal.section} />}
       {modal?.type === 'search' && <SearchPalette />}
       {modal?.type === 'event' && <EventModal event={modal.event} />}
+      {modal?.type === 'board' && <Whiteboard objectId={modal.objectId} />}
+      {modal?.type === 'notices' && <Notices />}
       <Toasts />
     </div>
   );

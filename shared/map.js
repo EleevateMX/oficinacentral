@@ -168,10 +168,10 @@ function templateMain() {
   b.area('comedor', 'Comedor', 64, 39, 14, 9);
 
   // Pared superior
-  b.o('painting', 7, 11); b.o('watercooler', 11, 12); b.o('coffee', 13, 12); b.o('fridge', 16, 12);
-  b.o('clock', 20, 11); b.o('plant', 24, 12); b.o('plant', 28, 12);
-  b.o('window', 31, 11); b.o('coatRack', 43, 12); b.o('easel', 45, 12); b.o('bookshelf', 48, 12);
-  b.o('plant', 52, 12); b.o('window', 55, 11); b.o('plant', 61, 12);
+  b.o('painting', 7, 11); b.o('watercooler', 11, 13); b.o('coffee', 13, 13); b.o('fridge', 16, 13);
+  b.o('clock', 20, 11); b.o('plant', 24, 13); b.o('plant', 28, 13);
+  b.o('window', 31, 11); b.o('coatRack', 43, 13); b.o('easel', 45, 13); b.o('bookshelf', 48, 13);
+  b.o('plant', 52, 13); b.o('window', 55, 11); b.o('plant', 61, 13);
 
   // Departamentos
   b.area('admin', 'Admin', 3, 15, 8, 10, { color: 'carpet' });
@@ -454,7 +454,7 @@ function templateHQ() {
   for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 45.25);
   b.o('neonLogo', 12.5, 9.15); b.o('wallBanner', 10.5, 10.1); b.o('wallBanner', 17.5, 10.1);
   for (const x0 of [43, 57]) { b.o('wallBanner', x0 + 1.5, 10.1); b.o('poster', x0 + 9.5, 10.1); }
-  b.o('neonLogo', 75, 9.15); b.o('wallBanner', 88.5, 10.1);
+  b.o('neonLogo', 75, 9.15); b.o('noticeBoard', 88, 10);
   b.o('fairyLights', 29.25, 10); b.o('fairyLights', 34.5, 10);
   b.o('floorLogo', 41, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
   b.o('flagPole', 39, 59); b.o('flagPole', 46, 59);

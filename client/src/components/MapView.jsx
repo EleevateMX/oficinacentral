@@ -1,18 +1,48 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Plus, Minus, Map as MapIcon, RotateCw, Trash2, Palette, Armchair, Brush } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
-import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace } from '@shared/map.js';
+import { TILE, isWalkable, findPath, deskAt, inRect, PROXIMITY_RADIUS, talkSpace, areaAt } from '@shared/map.js';
+import { videoFor, activeScreens } from '../lib/screens.js';
 import { CATALOG, COLORS, objSize } from '@shared/catalog.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand } from '../lib/render.js';
 import { mapBrand } from '../lib/themes.js';
 import * as editor from '../lib/editor.js';
 import { api } from '../lib/api.js';
 import ControlBar from './ControlBar.jsx';
-import VideoStrip from './VideoStrip.jsx';
+import VideoStrip, { ScreenStage } from './VideoStrip.jsx';
 import Decorator from './Decorator.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
+const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla' };
+
+// Objeto interactivo más cercano (pizarrón, tablero, pantalla) a menos de 2 casillas
+function nearInteractive(f, me) {
+  let best = null;
+  for (const o of f.objects) {
+    const kind = CATALOG[o.type]?.interactive;
+    if (!kind) continue;
+    const { w, h } = objSize(o);
+    const dx = Math.max(o.x - me.x, 0, me.x - (o.x + w - 1));
+    const dy = Math.max(o.y - me.y, 0, me.y - (o.y + h - 1));
+    const d = Math.max(dx, dy);
+    if (d <= 2 && (!best || d < best.d)) best = { o, kind, d };
+  }
+  return best;
+}
+
+export function interact(o) {
+  const kind = CATALOG[o.type]?.interactive;
+  if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
+  else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
+  else if (kind === 'screen') {
+    const st = office.state;
+    const sc = st.peers.find((p) => p.screen && st.talkingWith.includes(p.id));
+    if (sc) office.set({ stage: sc.id });
+    else if (st.media.screen) office.set({ stage: st.me.id });
+    else office.toast({ title: 'Nadie está compartiendo aquí. Usa el botón de compartir pantalla para proyectar la tuya.' });
+  }
+}
 const KEYS = {
   ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
 };
@@ -62,6 +92,7 @@ export default function MapView({ active }) {
   const [zoomPct, setZoomPct] = useState(150);
 
   const stateRef = useRef({});
+  const projRef = useRef([]);
   stateRef.current = { floor, me, users, editMode, ed, active };
 
   const config = useOffice((s) => s.config);
@@ -112,6 +143,12 @@ export default function MapView({ active }) {
     const down = (e) => {
       const { active: on, editMode: em } = stateRef.current;
       if (!on || isTyping()) return;
+      if (e.code === 'KeyX' && !em) {
+        const f = stateRef.current.floor;
+        const mine = office.players[stateRef.current.me.id];
+        const near = f && mine && nearInteractive(f, mine);
+        if (near) { e.preventDefault(); interact(near.o); return; }
+      }
       if (e.key === 'Escape') {
         if (em) office.set((st) => ({ editor: { ...st.editor, tool: 'select', placing: null, selected: null } }));
         return;
@@ -263,6 +300,38 @@ export default function MapView({ active }) {
       ctx.setTransform(s, 0, 0, s, Math.round((v.w / 2 - v.camX * v.zoom) * v.dpr), Math.round((v.h / 2 - v.camY * v.zoom) * v.dpr));
       if (staticRef.current) ctx.drawImage(staticRef.current, 0, 0);
 
+      // Proyección en vivo: la pantalla compartida aparece sobre las TV de tu sala
+      projRef.current = [];
+      const scr = activeScreens(office.state, office.media);
+      if (scr.length) {
+        const area = areaAt(f, mine.x, mine.y);
+        const shown = scr.find((sc) => sc.id === office.state.stage) || scr[0];
+        const vid = videoFor(shown.stream);
+        const tvs = f.objects.filter((o) => (o.type === 'bigScreen' || o.type === 'tv') && (area ? inRect(area, o.x, o.y) : Math.hypot(o.x - mine.x, o.y - mine.y) < 8));
+        for (const o of tvs) {
+          const { w: ow } = objSize(o);
+          const pw = (ow + 1) * T;
+          const ph = Math.round(pw * 9 / 16);
+          const px = o.x * T - T / 2;
+          const py = o.y * T + 6 - ph;
+          ctx.save();
+          ctx.shadowColor = themeColors().accent; ctx.shadowBlur = 14;
+          ctx.fillStyle = '#050506';
+          ctx.beginPath(); ctx.roundRect(px - 3, py - 3, pw + 6, ph + 6, 6); ctx.fill();
+          ctx.restore();
+          if (vid.videoWidth) {
+            const k = Math.min(pw / vid.videoWidth, ph / vid.videoHeight);
+            const vw = vid.videoWidth * k, vh = vid.videoHeight * k;
+            ctx.drawImage(vid, px + (pw - vw) / 2, py + (ph - vh) / 2, vw, vh);
+          }
+          ctx.fillStyle = '#e63946';
+          ctx.beginPath(); ctx.roundRect(px + 4, py + 4, 34, 11, 3); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.font = '700 7px "Public Sans", sans-serif'; ctx.textBaseline = 'middle';
+          ctx.fillText('EN VIVO', px + 7, py + 10);
+          projRef.current.push({ x: px / T, y: py / T, w: pw / T, h: ph / T, id: shown.id });
+        }
+      }
+
       // Espacio de conversación actual
       const space = talkSpace(f, mine.x, mine.y);
       if (space?.startsWith('desk:')) {
@@ -375,6 +444,8 @@ export default function MapView({ active }) {
       // Nombres de áreas
       if (v.zoom >= 0.3) {
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        const nowTs = Date.now();
+        const evs = office.state.events;
         for (const a of f.areas) {
           const p = worldToScreen(a.x + 0.3, a.y + 0.45);
           const label = a.private ? `🔒 ${a.name}` : `👥 ${a.name}`;
@@ -383,7 +454,38 @@ export default function MapView({ active }) {
           ctx.beginPath(); ctx.roundRect(p.x, p.y - 10, w, 20, 10); ctx.fill();
           ctx.fillStyle = rgba(themeColors().ink, .82);
           ctx.fillText(label, p.x + 7, p.y + 1);
+          // Reunión apartada en esta sala: ahora o en los próximos 30 minutos
+          const ev = evs.find((e) => (e.areaId === a.id) && e.endsAt > nowTs && e.startsAt - nowTs < 30 * 60e3);
+          if (ev) {
+            const busy = ev.startsAt <= nowTs;
+            const hhmm = (t) => new Date(t).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
+            const txt = busy ? `● Ocupada · ${ev.title} · hasta ${hhmm(ev.endsAt)}` : `◷ ${hhmm(ev.startsAt)} · ${ev.title}`;
+            const t2 = txt.length > 46 ? `${txt.slice(0, 45)}…` : txt;
+            const w2 = ctx.measureText(t2).width + 14;
+            ctx.fillStyle = busy ? 'rgba(230,57,70,.92)' : 'rgba(255,204,0,.95)';
+            ctx.beginPath(); ctx.roundRect(p.x, p.y + 13, w2, 20, 10); ctx.fill();
+            ctx.fillStyle = busy ? '#fff' : '#101010';
+            ctx.fillText(t2, p.x + 7, p.y + 24);
+          }
         }
+      }
+      // Pista "X para abrir" junto al objeto interactivo más cercano
+      const near = !em && mine ? nearInteractive(f, mine) : null;
+      if (near) {
+        if (office.pendingInteract === near.o.id) { office.pendingInteract = null; interact(near.o); }
+        const { w: ow } = objSize(near.o);
+        const hp = worldToScreen(near.o.x + ow / 2, near.o.y - 0.6);
+        const txt = INTERACT_LABELS[near.kind];
+        ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        const tw = ctx.measureText(txt).width + 34;
+        ctx.fillStyle = 'rgba(16,16,16,.88)';
+        ctx.beginPath(); ctx.roundRect(hp.x - tw / 2, hp.y - 22, tw, 22, 11); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.roundRect(hp.x - tw / 2 + 6, hp.y - 18, 16, 14, 3); ctx.fill();
+        ctx.fillStyle = '#101010'; ctx.font = '700 10px "Public Sans", sans-serif';
+        ctx.fillText('X', hp.x - tw / 2 + 10.5, hp.y - 10.5);
+        ctx.fillStyle = '#fff'; ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
+        ctx.fillText(txt, hp.x - tw / 2 + 27, hp.y - 10.5);
       }
       const now = performance.now();
       ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
@@ -391,7 +493,7 @@ export default function MapView({ active }) {
         const u = us[id];
         if (!u) continue;
         const sp = worldToScreen(p.rx + 0.5, p.ry);
-        const name = u.displayName;
+        const name = u.shift ? `🖥️ ${u.displayName}` : u.displayName;
         const w = ctx.measureText(name).width + 24;
         const y = sp.y - 34 * v.zoom / 1.5 + 4;
         const isMe = Number(id) === meU.id;
@@ -453,6 +555,10 @@ export default function MapView({ active }) {
     if (e.button !== 0 || !floor) return;
     const w = tileAt(e);
     const tx = Math.floor(w.x), ty = Math.floor(w.y);
+    if (!editMode) {
+      const pj = projRef.current.find((r) => inRect(r, w.x, w.y));
+      if (pj) { office.set({ stage: pj.id }); return; }
+    }
 
     if (editMode) {
       if (ed.placing) {
@@ -485,6 +591,14 @@ export default function MapView({ active }) {
         return;
       }
     }
+    // Clic en un objeto interactivo: abrirlo si estás cerca o caminar hasta él
+    const io = floor.objects.find((o) => CATALOG[o.type]?.interactive && inRect({ x: o.x, y: o.y - 0.5, ...objSize(o), h: objSize(o).h + 0.5 }, w.x, w.y));
+    if (io) {
+      const mine = office.players[me.id];
+      const near = mine && nearInteractive(floor, mine);
+      if (near?.o.id === io.id) { interact(io); return; }
+      office.pendingInteract = io.id;
+    } else office.pendingInteract = null;
     // Clic en el mapa → caminar hasta ahí
     office.pathTarget = { x: tx, y: ty };
   };
@@ -602,6 +716,7 @@ export default function MapView({ active }) {
       />
 
       <VideoStrip />
+      <ScreenStage />
 
       {hoverDesk && !editMode && (
         <div className="desk-tip" style={{ left: hoverDesk.x, top: hoverDesk.y - 46 }}>

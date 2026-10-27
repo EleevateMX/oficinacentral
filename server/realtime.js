@@ -3,6 +3,7 @@ import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId } from './world.js';
 import { isWalkable, nearestWalkable } from '../shared/map.js';
+import { initBoards } from './boards.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -119,6 +120,8 @@ export function initRealtime(httpServer) {
       const emoji = typeof r?.emoji === 'string' ? r.emoji.slice(0, 8) : null;
       if (emoji) io.emit('react', { id: userId, emoji });
     });
+
+    initBoards(io, socket, userId);
 
     // Señalización WebRTC: solo se reenvía a usuarios conectados
     socket.on('rtc', (msg) => {

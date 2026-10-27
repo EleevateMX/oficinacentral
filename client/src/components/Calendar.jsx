@@ -168,7 +168,8 @@ export function EventModal({ event }) {
     const startsAt = fromLocal(form.date, form.start);
     let endsAt = fromLocal(form.date, form.end);
     if (endsAt <= startsAt) endsAt += 864e5;
-    const body = { title: form.title, description: form.description, location: form.location, startsAt, endsAt, attendees: form.attendees };
+    const room = rooms.find((r) => r.name === form.location);
+    const body = { title: form.title, description: form.description, location: form.location, startsAt, endsAt, attendees: form.attendees, areaId: room?.id ?? null };
     try {
       if (isNew) await api.post('/events', body);
       else await api.patch(`/events/${event.id}`, body);
@@ -207,7 +208,7 @@ export function EventModal({ event }) {
         </div>
         <label className="field-label"><MapPin size={14} /> Lugar</label>
         <div className="row gap8">
-          <input list="rooms" placeholder="Sala de juntas, enlace de videollamada…" value={form.location} onChange={set('location')} disabled={!canEdit} className="flex1" />
+          <input list="rooms" placeholder="Elige una sala para apartarla en el mapa" value={form.location} onChange={set('location')} disabled={!canEdit} className="flex1" />
           <datalist id="rooms">{rooms.map((r) => <option key={r.id} value={r.name} />)}</datalist>
           {rooms.some((r) => r.name === form.location) && (
             <button type="button" className="btn" onClick={goRoom}><Navigation size={14} /> Ir</button>

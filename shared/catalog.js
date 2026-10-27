@@ -42,9 +42,10 @@ export const CATALOG = {
   bookshelf: f('Librero', 'muebles', 3, 1),
   shelf: f('Estante', 'muebles', 3, 1),
   cabinet: f('Archivero', 'muebles', 1, 1, { colorable: true, color: '#d0d4da' }),
-  whiteboard: f('Pizarrón', 'salas', 3, 1),
-  tv: f('Pantalla', 'salas', 3, 1),
-  easel: f('Rotafolio', 'salas', 1, 1),
+  whiteboard: f('Pizarrón', 'salas', 3, 1, { interactive: 'board' }),
+  noticeBoard: f('Tablero de anuncios', 'salas', 3, 1, { interactive: 'notices' }),
+  tv: f('Pantalla', 'salas', 3, 1, { interactive: 'screen' }),
+  easel: f('Rotafolio', 'salas', 1, 1, { interactive: 'board' }),
   fridge: f('Refrigerador', 'comida', 1, 1),
   counter: f('Barra de cocina', 'comida', 4, 1),
   coffee: f('Cafetera', 'comida', 2, 1),
@@ -75,7 +76,7 @@ export const CATALOG = {
   vending: f('Máquina de snacks', 'comida', 1, 1, { colorable: true, color: '#FE3377' }),
   planter: f('Jardinera', 'plantas', 3, 1, { colorable: true, color: '#c99c72' }),
   armchair: f('Sillón', 'muebles', 1, 1, { colorable: true, color: '#FFCC00', rotatable: true }),
-  bigScreen: f('Pantalla gigante', 'salas', 5, 1, { colorable: true, color: '#101010' }),
+  bigScreen: f('Pantalla gigante', 'salas', 5, 1, { colorable: true, color: '#101010', interactive: 'screen' }),
   flagPole: f('Asta con bandera', 'gtahub', 1, 1, { colorable: true, brand: true }),
 
   // Decoraciones de escritorio (no bloquean, posición libre)

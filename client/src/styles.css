@@ -713,3 +713,41 @@ input[type='color'] { width: 48px; height: 36px; padding: 2px; cursor: pointer; 
 .area-item .select { position: relative; flex: 1; min-width: 0; }
 .area-item .select select { width: 100%; }
 .area-item > .select { width: 100%; }
+
+/* Turnos */
+.pop-label { display: flex; align-items: center; gap: 6px; padding: 6px 10px 4px; font-size: 12px; color: var(--text-3); }
+.shift-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 10px 8px; max-width: 260px; }
+.name-shift { font-size: 10px; }
+
+/* Escenario de pantalla compartida */
+.screen-stage { position: absolute; inset: 12px 12px 84px; z-index: 30; background: #050506; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.45); display: flex; flex-direction: column; }
+.screen-stage video { flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #000; }
+.screen-stage:fullscreen { inset: 0; border-radius: 0; }
+.stage-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(20,20,24,.92); color: #fff; }
+.stage-bar .icon-btn { color: #fff; }
+.stage-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-switch { display: flex; gap: 4px; }
+.stage-switch button { padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,.1); color: #fff; font-size: 12.5px; }
+.stage-switch button.on { background: var(--accent); }
+.stage-vol { display: flex; align-items: center; gap: 6px; }
+.stage-vol input { width: 110px; accent-color: var(--accent); }
+
+/* Pizarrón */
+.board-modal .modal-body { display: flex; flex-direction: column; gap: 10px; }
+.board-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.board-canvas { width: 100%; aspect-ratio: 16 / 9; background: #fff; border-radius: 10px; border: 1px solid var(--border); touch-action: none; cursor: crosshair; }
+.dot-size { display: inline-block; border-radius: 50%; background: currentColor; }
+/* Tablero de anuncios */
+.notice-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.notice-form textarea { resize: vertical; }
+.notice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; max-height: 55vh; overflow: auto; padding: 4px; }
+.notice { position: relative; padding: 14px 14px 10px; border-radius: 6px; color: #1d1d22; box-shadow: 0 3px 10px rgba(0,0,0,.12); transform: rotate(-.6deg); display: flex; flex-direction: column; gap: 10px; }
+.notice:nth-child(2n) { transform: rotate(.7deg); }
+.notice.pinned { outline: 2px solid var(--accent); }
+.notice-pin { position: absolute; top: 6px; right: 8px; color: #e63946; }
+.notice-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.45; }
+.notice-foot { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #555; }
+.notice-foot .icon-btn { color: #555; width: 26px; height: 26px; }
+/* Pista de objeto interactivo */
+.interact-hint { position: absolute; z-index: 15; transform: translate(-50%, -100%); background: rgba(16,16,16,.88); color: #fff; font-size: 12px; padding: 4px 10px; border-radius: 10px; pointer-events: none; white-space: nowrap; }
+.interact-hint kbd { background: #fff; color: #101010; border-radius: 4px; padding: 0 5px; margin-right: 4px; font: 700 11px var(--font-mono, monospace); }

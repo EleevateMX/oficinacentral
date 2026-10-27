@@ -12,6 +12,7 @@ export const DEFAULT_PREFS = {
   calendar: { weekDays: 7, firstDay: 0 },
   audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true, notifVolume: 0.6, muteOnHidden: false },
   video: { hd: false, hideSelf: false },
+  screen: { quality: 'balanced', audio: true, volume: 1, autoOpen: true },
   meetings: { maxTiles: 9 },
   notifications: { remind5: true, remindStart: true, remindSound: true, chat: 'dms', chatSound: 'dms', desktop: false },
   performance: { mode: 'balanced' },
@@ -54,6 +55,7 @@ class Office {
       eventsVersion: 0,
       media: { mic: false, cam: false, screen: false },
       peers: [],
+      stage: null, // id de la persona cuya pantalla se ve en grande
       talkingWith: [],
       space: null,
       modal: null, // { type: 'prefs', section } | { type: 'profile' } | { type: 'invite' } ...
@@ -208,6 +210,11 @@ class Office {
       this.set((st) => ({ config: { ...st.config, ...c } }));
     });
     s.on('events', () => this.loadEvents());
+    s.on('notice', (n) => {
+      if (n.authorId === this.state.me.id) return;
+      const who = this.state.users[n.authorId]?.displayName || 'Alguien';
+      this.toast({ title: `📌 ${who}: ${n.text.length > 80 ? `${n.text.slice(0, 80)}…` : n.text}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'notices' } }) } });
+    });
     s.on('notification', (n) => {
       this.set((st) => ({ notifications: [n, ...st.notifications] }));
       const actor = this.state.users[n.actorId];
@@ -222,10 +229,11 @@ class Office {
   }
 
   applyMediaPrefs() {
-    const { audio, video, devices } = this.state.prefs;
+    const { audio, video, devices, screen } = this.state.prefs;
     this.media?.updateSettings({
       noiseSuppression: audio.noiseSuppression, echoCancellation: audio.echoCancellation, autoGainControl: audio.autoGainControl,
       hd: video.hd, micId: devices.micId, camId: devices.camId, speakerId: devices.speakerId,
+      screenQuality: screen.quality, screenAudio: screen.audio, screenVolume: screen.volume,
     });
   }
 

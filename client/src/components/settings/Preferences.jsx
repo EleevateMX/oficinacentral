@@ -1,3 +1,4 @@
+import { SCREEN_PRESETS } from '../../lib/media.js';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2,
@@ -16,7 +17,7 @@ const SECTIONS = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'calendar', label: 'Calendario', icon: Calendar },
   { id: 'audio', label: 'Audio', icon: Mic },
-  { id: 'video', label: 'Video', icon: Video },
+  { id: 'video', label: 'Pantalla y video', icon: Video },
   { id: 'meetings', label: 'Reuniones', icon: Users },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
   { id: 'privacy', label: 'Privacidad y actividad', icon: Shield },
@@ -199,13 +200,39 @@ function CamPreview({ camId, hd }) {
   return <div className="cam-preview">{err ? <span className="muted">{err}</span> : <video ref={ref} autoPlay playsInline muted className="mirror" />}</div>;
 }
 
+function ScreenPrefs() {
+  const [sc, set] = usePref('screen');
+  return (
+    <Section title="Pantalla compartida">
+      <div className="pref-title">Calidad al transmitir tu pantalla</div>
+      <div className="radios">
+        {Object.entries(SCREEN_PRESETS).map(([k, p]) => (
+          <Radio key={k} name="sq" value={k} current={sc.quality} onChange={(v) => set('quality', v)} label={p.label} desc={p.desc} />
+        ))}
+      </div>
+      <Row title="Compartir el audio de la PC" desc="Música, juegos o videos que suenan en tu equipo. En Chrome o Edge marca “Compartir audio” al elegir qué compartir.">
+        <Toggle checked={sc.audio} onChange={(v) => set('audio', v)} />
+      </Row>
+      <Row title="Abrir en grande cuando alguien comparte" desc="Si estás en su sala o junto a su escritorio">
+        <Toggle checked={sc.autoOpen} onChange={(v) => set('autoOpen', v)} />
+      </Row>
+      <Row title="Volumen de las pantallas de otros">
+        <input type="range" min="0" max="1" step="0.05" value={sc.volume} onChange={(e) => set('volume', Number(e.target.value))} />
+      </Row>
+      <div className="muted small">Los cambios de calidad se aplican la próxima vez que compartas.</div>
+    </Section>
+  );
+}
+
 function VideoPrefs() {
   const [v, set] = usePref('video');
   const [dev, setDev] = usePref('devices');
   const devices = useDevices();
   const [preview, setPreview] = useState(false);
   return (
-    <Section>
+    <>
+    <ScreenPrefs />
+    <Section title="Cámara">
       <Row title="Cámara">
         <Select value={dev.camId} onChange={(val) => { setDev('camId', val); office.media?.restartTracks(); }} options={devOpts(devices.cams, 'Predeterminada')} />
       </Row>
@@ -219,6 +246,7 @@ function VideoPrefs() {
         {preview ? <CamPreview camId={dev.camId} hd={v.hd} /> : <button className="btn" onClick={() => setPreview(true)}>Probar cámara</button>}
       </div>
     </Section>
+    </>
   );
 }
 
@@ -341,11 +369,11 @@ function Account() {
 }
 
 // ---------- Miembros e invitaciones ----------
-function CopyBtn({ text }) {
+function CopyBtn({ text, label = 'Copiar enlace' }) {
   const [ok, setOk] = useState(false);
   return (
     <button className="btn tiny" onClick={async () => { await navigator.clipboard.writeText(text).catch(() => {}); setOk(true); setTimeout(() => setOk(false), 1500); }}>
-      {ok ? <Check size={13} /> : <Copy size={13} />} {ok ? 'Copiado' : 'Copiar enlace'}
+      {ok ? <Check size={13} /> : <Copy size={13} />} {ok ? 'Copiado' : label}
     </button>
   );
 }
@@ -478,6 +506,7 @@ function Invites({ invites, reload }) {
         <input placeholder="Nota interna (ej. nombre de la persona)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={120} />
         <button className="btn primary">Crear enlace de invitación</button>
       </form>
+      <BulkInvites reload={reload} />
       {created && (
         <div className="invite-created">
           <div className="small">Comparte este enlace con la persona invitada:</div>
@@ -501,6 +530,83 @@ function Invites({ invites, reload }) {
         ))}
       </div>
     </>
+  );
+}
+
+// Invitar a muchas personas de una vez (pegar lista o subir CSV)
+function parseList(text) {
+  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const parts = line.split(/[,;\t]/).map((x) => x.trim());
+    const email = parts.find((x) => /@/.test(x)) || '';
+    const role = parts.some((x) => /^admin$/i.test(x)) ? 'admin' : 'member';
+    const name = parts.find((x) => x && x !== email && !/^(admin|miembro|member)$/i.test(x)) || email.split('@')[0];
+    return { name, email, role };
+  }).filter((r) => r.name && !/^(nombre|name)$/i.test(r.name));
+}
+
+function BulkInvites({ reload }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [result, setResult] = useState(null);
+  const fileRef = useRef(null);
+  const rows = parseList(text);
+  const link = (t) => `${window.location.origin}/invite/${t}`;
+
+  const create = async () => {
+    try {
+      const { invites } = await api.post('/admin/invites/batch', { rows, days: 14 });
+      setResult(invites);
+      setText('');
+      reload();
+    } catch (err) {
+      office.toast({ title: err.message, kind: 'error' });
+    }
+  };
+  const csv = () => {
+    const body = ['nombre,correo,rol,enlace', ...result.map((r) => [r.name, r.email, r.role, link(r.token)].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + body], { type: 'text/csv' }));
+    a.download = 'invitaciones.csv';
+    a.click();
+  };
+  const loadFile = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) setText(await f.text());
+  };
+
+  if (!open) return <button className="btn block" onClick={() => setOpen(true)}><Users size={15} /> Invitar a varias personas a la vez</button>;
+  return (
+    <div className="invite-form">
+      <div className="pref-title"><Users size={15} /> Invitar en lote</div>
+      {result ? (
+        <>
+          <p className="small">Listo: {result.length} enlaces (expiran en 14 días). Descarga la lista y manda a cada quien el suyo.</p>
+          <div className="bulk-list">
+            {result.map((r) => (
+              <div key={r.token} className="row gap8"><span className="flex1 ellipsis">{r.name}{r.role === 'admin' ? ' · Admin' : ''}</span><CopyBtn text={link(r.token)} /></div>
+            ))}
+          </div>
+          <div className="row gap8">
+            <button className="btn primary" onClick={csv}><Download size={15} /> Descargar CSV</button>
+            <CopyBtn text={result.map((r) => `${r.name}: ${link(r.token)}`).join('\n')} label="Copiar todo" />
+            <button className="btn" onClick={() => { setResult(null); setOpen(false); }}>Cerrar</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted small">Una persona por línea: <code>Nombre, correo, admin</code>. El correo y el rol son opcionales. También puedes subir un CSV exportado de Excel o Google Sheets.</p>
+          <textarea rows={6} placeholder={'Kevingare, kevin@gtahub.gg\nWodiw\nYamii, yamii@gtahub.gg, admin'} value={text} onChange={(e) => setText(e.target.value)} />
+          <div className="row gap8">
+            <button className="btn" type="button" onClick={() => fileRef.current.click()}><Upload size={15} /> Subir CSV</button>
+            <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" hidden onChange={loadFile} />
+            <span className="flex1 muted small">{rows.length ? `${rows.length} persona${rows.length > 1 ? 's' : ''}` : ''}</span>
+            <button className="btn" onClick={() => setOpen(false)}>Cancelar</button>
+            <button className="btn primary" disabled={!rows.length} onClick={create}>Crear {rows.length || ''} enlaces</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -654,6 +760,34 @@ function BrandAdmin() {
         </Row>
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
+      <ShiftsAdmin shifts={config.shifts || []} save={save} />
     </>
+  );
+}
+
+// Turnos o servidores donde la gente marca "En turno"
+function ShiftsAdmin({ shifts, save }) {
+  const [v, setV] = useState('');
+  const add = (e) => {
+    e.preventDefault();
+    const name = v.trim();
+    if (!name || shifts.includes(name)) return;
+    save({ shifts: [...shifts, name] });
+    setV('');
+  };
+  return (
+    <Section title="Turnos">
+      <Row title="Turnos o servidores" desc="Cada quien marca en cuál está desde su avatar (abajo a la izquierda). Se ve en la lista de personas y en el mapa.">
+        <div className="leader-chips">
+          {shifts.map((sh) => (
+            <span key={sh} className="chip">{sh}<button type="button" aria-label={`Quitar ${sh}`} onClick={() => save({ shifts: shifts.filter((x) => x !== sh) })}>×</button></span>
+          ))}
+        </div>
+      </Row>
+      <form className="row gap8" onSubmit={add}>
+        <input placeholder="Ej. Andromeda" value={v} onChange={(e) => setV(e.target.value)} maxLength={30} />
+        <button className="btn" type="submit" disabled={!v.trim()}>Añadir turno</button>
+      </form>
+    </Section>
   );
 }

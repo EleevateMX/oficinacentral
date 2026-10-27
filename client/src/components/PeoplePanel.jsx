@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { ChevronDown, PanelLeftClose, Layers, UserPlus } from 'lucide-react';
+import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, Kbd } from './ui.jsx';
 
@@ -23,7 +24,7 @@ export default function PeoplePanel() {
   const config = useOffice((s) => s.config);
   useOffice((s) => s.presenceVersion);
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState({ online: true, offline: true });
+  const [open, setOpen] = useState({ shift: true, online: true, offline: true });
   const [floorMenu, setFloorMenu] = useState(false);
   const searchRef = useRef(null);
 
@@ -38,14 +39,19 @@ export default function PeoplePanel() {
     return () => window.removeEventListener('keydown', k);
   }, []);
 
-  const { online, offline } = useMemo(() => {
+  const { onShift, online, offline } = useMemo(() => {
     const s = q.trim().toLowerCase();
     const list = Object.values(users).filter((u) => !u.disabled && (!s || u.displayName.toLowerCase().includes(s) || u.username.toLowerCase().includes(s)));
     const byName = (a, b) => a.displayName.localeCompare(b.displayName, 'es');
-    return { online: list.filter((u) => u.online).sort(byName), offline: list.filter((u) => !u.online).sort(byName) };
+    return {
+      onShift: list.filter((u) => u.online && u.shift).sort(byName),
+      online: list.filter((u) => u.online && !u.shift).sort(byName),
+      offline: list.filter((u) => !u.online).sort(byName),
+    };
   }, [users, q]);
 
   const sub = (u) => {
+    if (u.shift) return `🖥️ En turno ${u.shift} · ${since(u.shiftAt)}`;
     const status = STATUS[u.status || 'active'].label;
     const where = u.floorId && floors.length > 1 && u.floorId !== floor?.id ? ` · ${floors.find((f) => f.id === u.floorId)?.name || ''}` : '';
     return u.statusText ? `${u.statusText}${where}` : `${status}${where}`;
@@ -74,6 +80,16 @@ export default function PeoplePanel() {
         <span className="search-kbd"><Kbd>⌘</Kbd><Kbd>F</Kbd></span>
       </div>
       <div className="panel-scroll">
+        {onShift.length > 0 && (
+          <>
+            <button className="group-head" onClick={() => setOpen({ ...open, shift: !open.shift })}>
+              En turno ({onShift.length}) <ChevronDown size={14} className={open.shift ? '' : 'rot'} />
+            </button>
+            {open.shift && onShift.map((u) => (
+              <PersonRow key={u.id} u={u} sub={sub(u)} onClick={() => office.set({ profileCard: u.id })} />
+            ))}
+          </>
+        )}
         <button className="group-head" onClick={() => setOpen({ ...open, online: !open.online })}>
           En línea ({online.length}) <ChevronDown size={14} className={open.online ? '' : 'rot'} />
         </button>

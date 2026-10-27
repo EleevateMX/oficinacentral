@@ -1,3 +1,12 @@
+// Calidad de pantalla compartida
+export const SCREEN_PRESETS = {
+  text: { label: 'Texto nítido', desc: 'Código, documentos y diseño. 1080p a 15 fps.', fps: 15, hint: 'detail', bitrate: 2_500_000, degrade: 'maintain-resolution' },
+  balanced: { label: 'Equilibrada', desc: 'Uso general. 1080p a 30 fps.', fps: 30, hint: 'detail', bitrate: 4_000_000, degrade: 'balanced' },
+  motion: { label: 'Juegos y video', desc: 'Movimiento fluido. Hasta 60 fps.', fps: 60, hint: 'motion', bitrate: 6_000_000, degrade: 'maintain-framerate' },
+};
+// Subida total que se reparte entre quienes ven tu pantalla (malla P2P)
+const UPLOAD_BUDGET = 14_000_000;
+
 // Audio/video por proximidad con WebRTC (malla P2P).
 // Cada par de personas que "pueden hablar" (mismo escritorio, misma sala privada,
 // o cerca en el pasillo) abre una RTCPeerConnection. Se usa el patrón
@@ -15,7 +24,11 @@ export class MediaManager extends EventTarget {
     this.audioTrack = null;
     this.videoTrack = null;
     this.screenTrack = null;
-    this.settings = { noiseSuppression: true, echoCancellation: true, autoGainControl: true, hd: false, micId: '', camId: '', speakerId: '' };
+    this.screenAudioTrack = null;
+    this.settings = {
+      noiseSuppression: true, echoCancellation: true, autoGainControl: true, hd: false, micId: '', camId: '', speakerId: '',
+      screenQuality: 'balanced', screenAudio: true, screenVolume: 1,
+    };
     this.closeTimers = new Map();
     this.onSignal = ({ from, data }) => this.handleSignal(from, data);
     socket.on('rtc', this.onSignal);
@@ -26,12 +39,16 @@ export class MediaManager extends EventTarget {
   }
 
   get state() {
-    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack };
+    return { mic: !!this.audioTrack, cam: !!this.videoTrack, screen: !!this.screenTrack, screenAudio: !!this.screenAudioTrack };
   }
 
   updateSettings(s) {
     Object.assign(this.settings, s);
-    for (const p of this.peers.values()) if (this.settings.speakerId && p.audio.setSinkId) p.audio.setSinkId(this.settings.speakerId).catch(() => {});
+    for (const p of this.peers.values()) {
+      for (const el of [p.audio, p.screenAudio]) if (this.settings.speakerId && el.setSinkId) el.setSinkId(this.settings.speakerId).catch(() => {});
+      p.screenAudio.volume = this.settings.screenVolume;
+    }
+    this.applyBitrates();
   }
 
   // ---------- Medios locales ----------
@@ -78,18 +95,49 @@ export class MediaManager extends EventTarget {
 
   async setScreen(on) {
     if (on && !this.screenTrack) {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+      const preset = SCREEN_PRESETS[this.settings.screenQuality] || SCREEN_PRESETS.balanced;
+      const s = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: preset.fps, max: preset.fps } },
+        // Audio del sistema o de la pestaña (Chrome/Edge; en Windows también de toda la pantalla)
+        audio: this.settings.screenAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+        systemAudio: this.settings.screenAudio ? 'include' : 'exclude',
+        selfBrowserSurface: 'exclude',
+        surfaceSwitching: 'include',
+      });
       this.screenStream = s;
       this.screenTrack = s.getVideoTracks()[0];
+      try { this.screenTrack.contentHint = preset.hint; } catch { /* no soportado */ }
+      this.screenAudioTrack = s.getAudioTracks()[0] || null;
       this.screenTrack.addEventListener('ended', () => this.setScreen(false));
       for (const id of this.peers.keys()) this.send(id, { meta: { screen: s.id } });
     } else if (!on && this.screenTrack) {
       this.screenTrack.stop();
+      this.screenAudioTrack?.stop();
       this.screenTrack = null;
+      this.screenAudioTrack = null;
       this.screenStream = null;
     }
     this.syncSenders();
     this.emit('local', this.state);
+  }
+
+  // Reparte la subida entre quienes ven tu pantalla para que no se trabe
+  applyBitrates() {
+    const preset = SCREEN_PRESETS[this.settings.screenQuality] || SCREEN_PRESETS.balanced;
+    const viewers = Math.max(1, [...this.peers.values()].filter((p) => p.senders.screen).length);
+    const max = Math.max(600_000, Math.min(preset.bitrate, Math.floor(UPLOAD_BUDGET / viewers)));
+    for (const p of this.peers.values()) {
+      const sender = p.senders.screen;
+      if (!sender) continue;
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings?.length) params.encodings = [{}];
+        params.encodings[0].maxBitrate = max;
+        params.encodings[0].maxFramerate = preset.fps;
+        params.degradationPreference = preset.degrade;
+        sender.setParameters(params).catch(() => {});
+      } catch { /* la conexión aún no negocia */ }
+    }
   }
 
   async restartTracks() {
@@ -100,15 +148,16 @@ export class MediaManager extends EventTarget {
 
   syncSenders() {
     for (const p of this.peers.values()) this.attachTracks(p);
+    this.applyBitrates();
   }
 
   attachTracks(p) {
-    const wanted = { audio: this.audioTrack, video: this.videoTrack, screen: this.screenTrack };
-    for (const kind of ['audio', 'video', 'screen']) {
+    const wanted = { audio: this.audioTrack, video: this.videoTrack, screen: this.screenTrack, screenAudio: this.screenAudioTrack };
+    for (const kind of ['audio', 'video', 'screen', 'screenAudio']) {
       const track = wanted[kind];
       const sender = p.senders[kind];
       if (track && !sender) {
-        p.senders[kind] = p.pc.addTrack(track, kind === 'screen' ? this.screenStream : this.localStream);
+        p.senders[kind] = p.pc.addTrack(track, kind === 'screen' || kind === 'screenAudio' ? this.screenStream : this.localStream);
       } else if (sender && sender.track !== track) {
         if (track) sender.replaceTrack(track).catch(() => {});
         else {
@@ -143,8 +192,13 @@ export class MediaManager extends EventTarget {
     const audio = new Audio();
     audio.autoplay = true;
     if (this.settings.speakerId && audio.setSinkId) audio.setSinkId(this.settings.speakerId).catch(() => {});
+    // El audio de la pantalla compartida va aparte para poder bajarle el volumen
+    const screenAudio = new Audio();
+    screenAudio.autoplay = true;
+    screenAudio.volume = this.settings.screenVolume;
+    if (this.settings.speakerId && screenAudio.setSinkId) screenAudio.setSinkId(this.settings.speakerId).catch(() => {});
     const p = {
-      id, pc, audio,
+      id, pc, audio, screenAudio,
       polite: this.myId > id,
       makingOffer: false,
       ignoreOffer: false,
@@ -186,6 +240,7 @@ export class MediaManager extends EventTarget {
 
     if (this.screenStream) this.send(id, { meta: { screen: this.screenStream.id } });
     this.attachTracks(p);
+    this.applyBitrates();
     this.emit('peers', this.peerList());
     return p;
   }
@@ -201,6 +256,9 @@ export class MediaManager extends EventTarget {
     p.screen = screen && screen.getVideoTracks().some((t) => t.readyState === 'live') ? screen : null;
     if (p.audio.srcObject !== p.stream) p.audio.srcObject = p.stream;
     p.audio.play?.().catch(() => {});
+    const sa = p.screen && p.screen.getAudioTracks().length ? p.screen : null;
+    if (p.screenAudio.srcObject !== sa) p.screenAudio.srcObject = sa;
+    if (sa) p.screenAudio.play?.().catch(() => {});
     this.emit('peers', this.peerList());
   }
 
@@ -210,6 +268,7 @@ export class MediaManager extends EventTarget {
     if (notify) this.send(id, { bye: true });
     p.pc.close();
     p.audio.srcObject = null;
+    p.screenAudio.srcObject = null;
     this.peers.delete(id);
     this.emit('peers', this.peerList());
   }
@@ -276,6 +335,7 @@ export class MediaManager extends EventTarget {
     this.audioTrack?.stop();
     this.videoTrack?.stop();
     this.screenTrack?.stop();
+    this.screenAudioTrack?.stop();
   }
 }
 

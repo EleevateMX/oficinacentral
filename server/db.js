@@ -163,7 +163,25 @@ function addColumn(table, col, def) {
   if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
 addColumn('areas', 'shape', "TEXT NOT NULL DEFAULT 'soft'");
+addColumn('users', 'shift', 'TEXT');
+addColumn('users', 'shift_at', 'INTEGER');
+addColumn('events', 'area_id', 'INTEGER');
 addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
+db.exec(`
+CREATE TABLE IF NOT EXISTS boards (
+  object_id INTEGER PRIMARY KEY REFERENCES objects(id) ON DELETE CASCADE,
+  strokes TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  text TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT 'yellow',
+  pinned INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+`);
 db.exec(`
 CREATE TABLE IF NOT EXISTS area_leaders (
   area_id INTEGER NOT NULL REFERENCES areas(id) ON DELETE CASCADE,

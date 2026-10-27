@@ -391,6 +391,14 @@ D.cabinet = (ctx, x, y, w, h, o, c) => {
   R(ctx, shade(col, -0.15), x + 6, y + 12, w - 12, 1);
   R(ctx, '#666', x + 14, y + 5, 4, 2); R(ctx, '#666', x + 14, y + 15, 4, 2);
 };
+D.noticeBoard = (ctx, x, y, w, h) => {
+  R(ctx, 'rgba(0,0,0,.15)', x + 4, y + h - 2, w - 6, 4);
+  R(ctx, '#7a4a2b', x + 2, y - 14, w - 4, h + 8);
+  R(ctx, '#c99c72', x + 4, y - 12, w - 8, h + 4);
+  const notes = [['#fff3a8', 8, -10], ['#ffc9de', 26, -8], ['#c9e4ff', 46, -11], ['#c9f2d4', 64, -7], ['#fff3a8', 16, 4], ['#ffffff', 52, 3]];
+  for (const [c, dx, dy] of notes) if (dx + 14 < w - 4) { R(ctx, c, x + dx, y + dy, 13, 11); circle(ctx, '#e63946', x + dx + 6.5, y + dy + 1.5, 1.6); }
+  R(ctx, '#5a3820', x + 6, y + h - 6, 2, 8); R(ctx, '#5a3820', x + w - 8, y + h - 6, 2, 8);
+};
 D.whiteboard = (ctx, x, y, w, h) => {
   R(ctx, '#9aa3ad', x + 2, y - 14, w - 4, h + 6);
   R(ctx, '#ffffff', x + 4, y - 12, w - 8, h + 2);

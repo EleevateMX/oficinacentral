@@ -40,6 +40,8 @@ export function publicUser(u) {
     photoUrl: u.photo ? `/api/users/${u.id}/photo?v=${u.photo_v}` : null,
     timezone: u.timezone,
     statusText: u.status_text || '',
+    shift: u.shift || null,
+    shiftAt: u.shift_at || null,
     disabled: !!u.disabled,
     lastActive: u.last_active,
     createdAt: u.created_at,
@@ -97,8 +99,12 @@ function officeConfig() {
     theme: getSetting('theme') || process.env.OFFICE_THEME || 'nuvora',
     accent: getSetting('accent') || null,
     logoUrl: getSetting('logo') ? `/api/office/logo?v=${logoV}` : null,
+    shifts: parseJSON(getSetting('shifts'), DEFAULT_SHIFTS),
   };
 }
+
+// Turnos: servidores o guardias donde alguien puede estar "En turno"
+const DEFAULT_SHIFTS = ['Andromeda', 'Soporte', 'Moderación', 'Eventos'];
 
 api.get('/config', (req, res) => {
   res.json(officeConfig());
@@ -163,7 +169,7 @@ api.get('/invites/:token', (req, res) => {
   const inv = validInvite(req.params.token);
   if (!inv) return fail(res, 404, 'La invitación no es válida o ya expiró.');
   const by = inv.created_by ? getUser(inv.created_by) : null;
-  res.json({ email: inv.email, role: inv.role, invitedBy: by?.display_name || null, expiresAt: inv.expires_at });
+  res.json({ email: inv.email, name: inv.note || '', role: inv.role, invitedBy: by?.display_name || null, expiresAt: inv.expires_at });
 });
 
 api.post('/invites/:token/accept', wrap((req, res) => {
@@ -235,6 +241,16 @@ api.patch('/me', wrap((req, res) => {
     .run(displayName, timezone, statusText, JSON.stringify(avatar), email, u.id);
   broadcastUser(u.id);
   res.json({ user: publicUser(getUser(u.id)) });
+}));
+
+// Entrar o salir de turno
+api.put('/me/shift', wrap((req, res) => {
+  const raw = req.body?.shift;
+  const shift = raw == null || raw === '' ? null : String(raw).trim().slice(0, 30);
+  if (shift && !officeConfig().shifts.includes(shift)) return fail(res, 400, 'Ese turno no existe');
+  db.prepare('UPDATE users SET shift = ?, shift_at = ? WHERE id = ?').run(shift, shift ? now() : null, req.user.id);
+  broadcastUser(req.user.id);
+  res.json({ user: publicUser(getUser(req.user.id)) });
 }));
 
 api.put('/me/photo', wrap((req, res) => {
@@ -353,6 +369,11 @@ admin.patch('/office', (req, res) => {
     if (b.accent !== null && !/^#[0-9a-fA-F]{6}$/.test(b.accent)) return fail(res, 400, 'Color inválido');
     setSetting('accent', b.accent);
   }
+  if (b.shifts !== undefined) {
+    if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');
+    const list = [...new Set(b.shifts.map((x) => String(x).trim().slice(0, 30)).filter(Boolean))].slice(0, 30);
+    setSetting('shifts', JSON.stringify(list));
+  }
   emitAll('office', officeConfig());
   res.json(officeConfig());
 });
@@ -387,6 +408,23 @@ admin.post('/invites', (req, res) => {
     .run(token, email, role, note, req.user.id, now(), now() + days * 864e5);
   res.json({ invite: inviteRow(db.prepare('SELECT * FROM invites WHERE token = ?').get(token)) });
 });
+
+// Invitaciones en lote: una por persona (nombre, correo opcional, rol opcional)
+admin.post('/invites/batch', wrap((req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 300) : [];
+  if (!rows.length) return fail(res, 400, 'La lista está vacía');
+  const days = Math.min(30, Math.max(1, Number(req.body?.days) || 14));
+  const ins = db.prepare('INSERT INTO invites (token, email, role, note, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const out = tx(() => rows.map((r) => {
+    const name = String(r?.name || '').trim().slice(0, 40);
+    const email = String(r?.email || '').trim().toLowerCase().slice(0, 120);
+    const role = r?.role === 'admin' ? 'admin' : 'member';
+    const token = randomToken(24);
+    ins.run(token, email, role, name, req.user.id, now(), now() + days * 864e5);
+    return { name, email, role, token };
+  }));
+  res.json({ invites: out });
+}));
 
 admin.delete('/invites/:token', (req, res) => {
   db.prepare('UPDATE invites SET revoked = 1 WHERE token = ? AND used_by IS NULL').run(req.params.token);
@@ -548,7 +586,7 @@ api.post('/notifications/read', (req, res) => {
 // ---------- Calendario ----------
 const eventRow = (r) => ({
   id: r.id, title: r.title, description: r.description, location: r.location,
-  startsAt: r.starts_at, endsAt: r.ends_at, createdBy: r.created_by,
+  startsAt: r.starts_at, endsAt: r.ends_at, createdBy: r.created_by, areaId: r.area_id ?? null,
   attendees: db.prepare('SELECT user_id FROM event_attendees WHERE event_id = ?').all(r.id).map((a) => a.user_id),
 });
 
@@ -570,6 +608,7 @@ function readEventBody(b) {
     title, startsAt, endsAt, attendees,
     description: String(b?.description || '').slice(0, 2000),
     location: String(b?.location || '').slice(0, 120),
+    areaId: b?.areaId && db.prepare('SELECT 1 FROM areas WHERE id = ?').get(Number(b.areaId)) ? Number(b.areaId) : null,
   };
 }
 
@@ -577,8 +616,8 @@ api.post('/events', wrap((req, res) => {
   const e = readEventBody(req.body);
   if (e.error) return fail(res, 400, e.error);
   const id = tx(() => {
-    const eid = Number(db.prepare('INSERT INTO events (title, description, location, starts_at, ends_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(e.title, e.description, e.location, e.startsAt, e.endsAt, req.user.id, now()).lastInsertRowid);
+    const eid = Number(db.prepare('INSERT INTO events (title, description, location, starts_at, ends_at, created_by, created_at, area_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(e.title, e.description, e.location, e.startsAt, e.endsAt, req.user.id, now(), e.areaId).lastInsertRowid);
     for (const a of e.attendees) db.prepare('INSERT OR IGNORE INTO event_attendees (event_id, user_id) VALUES (?, ?)').run(eid, a);
     return eid;
   });
@@ -594,8 +633,8 @@ api.patch('/events/:id', wrap((req, res) => {
   const e = readEventBody({ ...eventRow(row), ...req.body });
   if (e.error) return fail(res, 400, e.error);
   tx(() => {
-    db.prepare('UPDATE events SET title = ?, description = ?, location = ?, starts_at = ?, ends_at = ? WHERE id = ?')
-      .run(e.title, e.description, e.location, e.startsAt, e.endsAt, row.id);
+    db.prepare('UPDATE events SET title = ?, description = ?, location = ?, starts_at = ?, ends_at = ?, area_id = ? WHERE id = ?')
+      .run(e.title, e.description, e.location, e.startsAt, e.endsAt, e.areaId, row.id);
     db.prepare('DELETE FROM event_attendees WHERE event_id = ?').run(row.id);
     for (const a of e.attendees) db.prepare('INSERT OR IGNORE INTO event_attendees (event_id, user_id) VALUES (?, ?)').run(row.id, a);
   });
@@ -611,6 +650,53 @@ api.delete('/events/:id', (req, res) => {
   emitAll('events', {});
   res.json({ ok: true });
 });
+
+// ---------- Tablero de anuncios ----------
+const NOTE_COLORS = ['yellow', 'pink', 'blue', 'green', 'white'];
+const noticeRow = (r) => ({ id: r.id, authorId: r.author_id, text: r.text, color: r.color, pinned: !!r.pinned, createdAt: r.created_at });
+
+api.get('/notices', (req, res) => {
+  const rows = db.prepare('SELECT * FROM notices ORDER BY pinned DESC, created_at DESC LIMIT 60').all();
+  res.json({ notices: rows.map(noticeRow) });
+});
+
+api.post('/notices', wrap((req, res) => {
+  const text = String(req.body?.text || '').trim().slice(0, 500);
+  if (!text) return fail(res, 400, 'Escribe el anuncio');
+  const color = NOTE_COLORS.includes(req.body?.color) ? req.body.color : 'yellow';
+  const id = Number(db.prepare('INSERT INTO notices (author_id, text, color, created_at) VALUES (?, ?, ?, ?)').run(req.user.id, text, color, now()).lastInsertRowid);
+  // Más de 200 anuncios: se borran los más viejos sin fijar
+  db.prepare('DELETE FROM notices WHERE pinned = 0 AND id NOT IN (SELECT id FROM notices ORDER BY created_at DESC LIMIT 200)').run();
+  const row = noticeRow(db.prepare('SELECT * FROM notices WHERE id = ?').get(id));
+  emitAll('notice', row);
+  res.json({ notice: row });
+}));
+
+function ownNotice(req, res) {
+  const r = db.prepare('SELECT * FROM notices WHERE id = ?').get(Number(req.params.id));
+  if (!r) { fail(res, 404, 'Anuncio no encontrado'); return null; }
+  if (r.author_id !== req.user.id && req.user.role !== 'admin') { fail(res, 403, 'Solo quien lo publicó o un admin'); return null; }
+  return r;
+}
+
+api.patch('/notices/:id', wrap((req, res) => {
+  const r = ownNotice(req, res);
+  if (!r) return;
+  if (req.body?.pinned !== undefined) {
+    if (req.user.role !== 'admin') return fail(res, 403, 'Solo un admin puede fijar anuncios');
+    db.prepare('UPDATE notices SET pinned = ? WHERE id = ?').run(req.body.pinned ? 1 : 0, r.id);
+  }
+  emitAll('notices', {});
+  res.json({ ok: true });
+}));
+
+api.delete('/notices/:id', wrap((req, res) => {
+  const r = ownNotice(req, res);
+  if (!r) return;
+  db.prepare('DELETE FROM notices WHERE id = ?').run(r.id);
+  emitAll('notices', {});
+  res.json({ ok: true });
+}));
 
 // ---------- Mundo: pisos, objetos, áreas, escritorios ----------
 api.get('/floors', (req, res) => res.json({ floors: world.listFloors() }));
