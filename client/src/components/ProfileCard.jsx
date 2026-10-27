@@ -9,6 +9,7 @@ import { office, useOffice } from '../lib/store.js';
 import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
 import { fmtTime, sameDay, tzDiffLabel } from '../lib/time.js';
 import { api } from '../lib/api.js';
+import { BadgeRow } from './Achievements.jsx';
 
 export default function ProfileCard({ userId }) {
   const u = useOffice((s) => s.users[userId]);
@@ -126,6 +127,7 @@ export default function ProfileCard({ userId }) {
       {!isMe && u.online && (room || desk) && (
         <div className="pc-sub pc-where"><MapPin size={12} /> {room ? `${room.name}${room.closed ? ' · cerrada 🔒' : ''}` : 'En su escritorio'}</div>
       )}
+      <BadgeRow userId={u.id} />
       <div className="pc-section">
         <div className="pc-label">Avatar</div>
         <div className="pc-avatar"><AvatarCanvas avatar={u.avatar} width={60} height={76} /></div>

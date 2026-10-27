@@ -20,6 +20,8 @@ import { addScore, topScores, SCORE_GAMES } from './games.js';
 import { activeSeason, SEASON_SETTINGS } from '../shared/seasons.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 import { notesConfig, stopAllNotes } from './notes.js';
+import { registerStatsRoutes } from './stats.js';
+import { registerAchievementRoutes } from './achievements.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -825,7 +827,9 @@ admin.patch('/feedback/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+registerStatsRoutes(admin);
 api.use('/admin', admin);
+registerAchievementRoutes(api);
 
 // ---------- Chat ----------
 const dmKey = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);

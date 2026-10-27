@@ -1,8 +1,9 @@
 import { SCREEN_PRESETS } from '../../lib/media.js';
 import { FeedbackAdmin } from '../Feedback.jsx';
+import StatsAdmin from './StatsAdmin.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart,
+  X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart, BarChart3,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
@@ -36,6 +37,7 @@ const SECTIONS = [
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
   { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
   { id: 'feedback', label: 'Comentarios', icon: MessageSquareHeart, admin: true },
+  { id: 'stats', label: 'Estadísticas', icon: BarChart3, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -84,6 +86,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'brand' && <BrandAdmin />}
             {cur === 'security' && <SecurityAdmin />}
             {cur === 'feedback' && <FeedbackAdmin api={api} />}
+            {cur === 'stats' && <StatsAdmin />}
           </div>
         </section>
       </div>

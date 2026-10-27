@@ -10,6 +10,7 @@ import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
 import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes.js';
 import { DANCES } from './emoteFx.js';
 import { bindNotes } from './notes.js';
+import { onAchievementNotification, forgetBadges } from './achievements.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -337,8 +338,9 @@ class Office {
       } else if (n.type === 'birthday') {
         this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
-      }
+      } else if (n.type === 'achievement') onAchievementNotification(this, n);
     });
+    s.on('achievement', (m) => forgetBadges(m.userId));
   }
 
   applyMediaPrefs() {

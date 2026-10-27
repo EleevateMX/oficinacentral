@@ -13,6 +13,7 @@
 import webpush from 'web-push';
 import { db, now, getSetting, setSetting } from './db.js';
 import { presence } from './realtime.js';
+import { ACHIEVEMENT_BY_ID, tierLabel } from '../shared/achievements.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -143,6 +144,13 @@ export function pushNotification(userId, type, actorId, data = {}) {
     }
     if (type === 'birthday') {
       pushLater(userId, { title: `🎂 ${who} te felicitó por tu cumpleaños`, body: clip(data.text || '¡Feliz cumpleaños!'), tag: `bday-${actorId}`, url: '/?view=birthdays' });
+      return;
+    }
+    if (type === 'achievement') {
+      const a = ACHIEVEMENT_BY_ID[data.id];
+      if (!a) return;
+      const lvl = tierLabel(a, data.tier);
+      pushLater(userId, { title: `${a.emoji} ¡Nuevo logro: ${a.name}${lvl ? ` (${lvl})` : ''}!`, body: data.count > 1 ? `Y ${data.count - 1} más. Toca para ver tus logros` : a.desc, tag: `achievement-${a.id}`, url: '/?view=achievements' });
       return;
     }
     if (type === 'wave') {
