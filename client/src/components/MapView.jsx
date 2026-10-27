@@ -27,6 +27,8 @@ import RoomChat from './RoomChat.jsx';
 import Minimap from './Minimap.jsx';
 import Decorator from './Decorator.jsx';
 import { drawPet } from '../lib/pets.js';
+import { petStep, drawPetFxUnder, drawPetFxOver, petClick } from '../lib/petFx.js';
+import PetPanel from './PetPanel.jsx';
 import { pose, drawFxUnder, drawFxOver } from '../lib/fx.js';
 import { Avatar } from './ui.jsx';
 import { stageAt } from '@shared/stage.js';
@@ -619,16 +621,19 @@ export default function MapView({ active }) {
         const pet = u?.avatar?.pet;
         if (pet && pet !== 'none') {
           const back = { up: [0.7, 0.6], down: [-0.7, -0.3], left: [0.8, 0.2], right: [-0.8, 0.2] }[p.dir] || [0.7, 0.2];
-          const tx = p.rx + back[0];
-          const ty = p.ry + back[1];
-          if (p.petX == null || Math.hypot(tx - p.petX, ty - p.petY) > 4) { p.petX = tx; p.petY = ty; }
-          const k = Math.min(1, Math.min(0.1, (t - (p.petT || t)) / 1000) * 5);
+          const pf = petStep(id, p, t); // comer, pelota, caricias, trucos (lib/petFx.js)
+          const tx = pf?.tx ?? p.rx + back[0];
+          const ty = pf?.ty ?? p.ry + back[1];
+          if (p.petX == null || Math.hypot(tx - p.petX, ty - p.petY) > (pf ? 9 : 4)) { p.petX = tx; p.petY = ty; }
+          const k = Math.min(1, Math.min(0.1, (t - (p.petT || t)) / 1000) * (pf?.speed || 5));
           p.petT = t;
           const pdx = (tx - p.petX) * k;
           p.petX += pdx; p.petY += (ty - p.petY) * k;
           if (Math.abs(pdx) > 0.003) p.petFace = pdx > 0 ? 1 : -1;
-          const petMoving = Math.hypot(tx - p.petX, ty - p.petY) > 0.08;
-          drawPet(ctx, pet, u.avatar.petColor, (p.petX + 0.5) * T, (p.petY + 1) * T - 3, p.petFace || 1, t / 1000, petMoving);
+          const petMoving = pf?.moving || Math.hypot(tx - p.petX, ty - p.petY) > 0.08;
+          drawPetFxUnder(ctx, id, p, t);
+          drawPet(ctx, pet, u.avatar.petColor, (p.petX + 0.5) * T, (p.petY + 1) * T - 3, (petMoving ? null : pf?.face) || p.petFace || 1, t / 1000, petMoving, pf?.fx);
+          drawPetFxOver(ctx, id, p, t, p.petFace || 1);
         }
         // Parpadeo cada pocos segundos (cada quien a su ritmo) y saltito al reaccionar
         const blink = !p.moving && (t + Number(id) * 1337) % 4200 < 140;
@@ -995,6 +1000,8 @@ export default function MapView({ active }) {
       return;
     }
 
+    // Clic en una mascota (o lanzar la pelota) → lib/petFx.js
+    if (petClick(floor.id, w)) return;
     // Clic en una persona → tarjeta de perfil
     for (const [id, p] of Object.entries(office.players)) {
       if (p.floorId !== floor.id) continue;
@@ -1159,6 +1166,7 @@ export default function MapView({ active }) {
       <VideoStrip />
       <RoomChat />
       <ScreenStage />
+      <PetPanel />
 
       {hoverDesk && !editMode && (
         <div className="desk-tip" ref={tipRef} style={{ left: hoverDesk.x, top: hoverDesk.y }}

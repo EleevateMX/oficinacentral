@@ -75,6 +75,7 @@ export default function ControlBar({ compact = false }) {
             <button className="pop-item" onClick={() => { office.set({ modal: { type: 'profile' } }); setMenu(null); }}>Editar perfil</button>
             <button className="pop-item" onClick={() => { office.set({ modal: { type: 'profile', step: 'avatar', tab: 'pet' } }); setMenu(null); }}>🐾 Mi mascota</button>
             <button className="pop-item" onClick={() => { office.set({ modal: { type: 'achievements' } }); setMenu(null); }}>🏅 Mis logros</button>
+            {meU?.avatar?.pet && meU.avatar.pet !== 'none' && <button className="pop-item" onClick={() => { office.set({ petPanel: me.id }); setMenu(null); }}>🎾 Jugar con mi mascota</button>}
             <button className="pop-item" onClick={() => { office.set({ onboarding: true }); setMenu(null); }}>✨ Primeros pasos</button>
           </div>
         )}

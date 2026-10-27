@@ -1269,3 +1269,28 @@ body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
 .stage-queue .btn.primary { background: #FE3377; border-color: #FE3377; }
 .stage-queue .btn.ghost { background: transparent; color: #c9c9cf; border-color: rgba(255,255,255,.18); }
 .shell.mobile .stage-pill, .shell.mobile .stage-panel { top: auto; bottom: 108px; right: 8px; }
+/* ===== Mascotas interactivas ===== */
+.petp {
+  position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); z-index: 35; width: 340px; max-width: calc(100% - 32px);
+  background: var(--panel); color: var(--text); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px 14px;
+  display: flex; flex-direction: column; gap: 10px; animation: petp-in .18s ease-out;
+}
+@keyframes petp-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.petp-x { position: absolute; top: 8px; right: 8px; }
+.petp-head { display: flex; gap: 12px; align-items: center; }
+.petp-portrait { width: 80px; height: 60px; border-radius: 12px; background: var(--panel-2); image-rendering: pixelated; flex: none; }
+.petp-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-right: 24px; }
+.petp-id b { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.petp-id > span { font-size: 12px; color: var(--text-2); }
+.petp-mood { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.petp-mood small { font-size: 11.5px; color: var(--text-2); }
+.petp-bar { height: 8px; border-radius: 99px; background: var(--panel-2); overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
+.petp-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #FFCC00, #FE3377); transition: width .5s ease; }
+.petp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.petp-actions .btn { justify-content: center; font-size: 13px; }
+.petp-actions .btn.on { border-color: #FE3377; color: #FE3377; }
+.petp-tricks { display: flex; gap: 6px; flex-wrap: wrap; }
+.petp-tricks .chip-btn { flex: 1; }
+.petp-note { font-size: 12px; color: var(--text-2); text-align: center; }
+body.pet-aiming canvas { cursor: crosshair !important; }
+@media (max-width: 600px) { .petp { bottom: 84px; } }

@@ -12,6 +12,7 @@ import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes
 import { DANCES } from './emoteFx.js';
 import { bindNotes } from './notes.js';
 import { onAchievementNotification, forgetBadges } from './achievements.js';
+import { initPetSocket } from './petFx.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -163,6 +164,7 @@ class Office {
     const s = io({ withCredentials: true });
     this.socket = s;
     initStageClient(this, s); // escenario: fila de manos levantadas
+    initPetSocket(this, s); // mascotas interactivas
     s.on('connect', () => {
       this.set({ connected: true });
       s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push

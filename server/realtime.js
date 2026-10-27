@@ -7,6 +7,7 @@ import { initGames } from './games.js';
 import { EMOTES, PAIR_RANGE, cleanVariant } from '../shared/emotes.js';
 import { initBoards } from './boards.js';
 import { initNotes, startNotesTimer } from './notes.js';
+import { initPets } from './pets.js';
 import { onConnect as shiftOnConnect, closeShift } from './shifts.js';
 import { APP_VERSION } from './version.js';
 import { trackConnect, trackArea, trackDisconnect, bumpCounter } from './stats.js';
@@ -234,6 +235,7 @@ export function initRealtime(httpServer) {
     initGames(io, socket, userId);
     initNotes(io, socket, userId);
     initStage(socket, userId);
+    initPets(io, socket, userId, presence);
 
     // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
     let roomMsgTimes = [];
