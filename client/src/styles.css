@@ -952,3 +952,15 @@ canvas.annot.drawing { pointer-events: auto; cursor: crosshair; touch-action: no
 .pc-pet img { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; }
 .pc-pet div { display: flex; flex-direction: column; font-size: 13px; }
 .pc-pet span { font-size: 12px; color: var(--muted, #888); }
+
+/* Minimapa */
+.minimap { position: absolute; left: 12px; bottom: 66px; z-index: 18; padding: 8px; border-radius: 14px; background: rgba(16,16,20,.9); box-shadow: 0 10px 30px rgba(0,0,0,.3); color: #fff; }
+.minimap canvas { display: block; border-radius: 8px; cursor: pointer; background: #2b2f2c; }
+.minimap-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
+.minimap-foot > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-muted { color: #a9acb5; }
+.mm-online { display: flex; align-items: center; gap: 5px; color: #a9acb5; white-space: nowrap; }
+.mm-dot { width: 7px; height: 7px; border-radius: 50%; background: #3ddc84; }
+.minimap .mm-close { color: #a9acb5; width: 24px; height: 24px; }
+.minimap-btn { position: absolute; left: 12px; bottom: 66px; z-index: 18; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgba(16,16,20,.9); color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+@media (max-width: 720px) { .minimap { display: none; } .minimap-btn { display: none; } }
