@@ -37,6 +37,7 @@
 import { Scene, BoundsRecorder, shade } from './art/iso.js';
 import { FLOOR, DEFAULT_COLOR } from './art/floor.js';
 import { WALL, WALL_PERIOD, wallFallback } from './art/wall.js';
+import { LINE_FLOOR, LINE_WALL, LINE_PERIOD, LINE_DEFAULT_COLOR } from './art/lines/index.js';
 
 const normRot = (r) => (r === 2 || r === 4 || r === 6 ? r : 0);
 
@@ -46,7 +47,7 @@ export function rotFacing(rot) { return { ...FACING[normRot(rot)] }; }
 function colorOf(def, item) {
   const c = item && item.color;
   if (typeof c === 'string' && /^#[0-9a-f]{3,6}$/i.test(c)) return c;
-  return def.colors?.[0] || DEFAULT_COLOR[def.id] || '#9aa3ad';
+  return def.colors?.[0] || DEFAULT_COLOR[def.id] || LINE_DEFAULT_COLOR[def.id] || '#9aa3ad';
 }
 function stateOf(def, item) {
   const n = Math.max(1, def.states || 1);
@@ -62,18 +63,18 @@ function periodOf(def, st) {
     case 'desk_pc': return st === 1 ? 500 : 0;
     case 'teleport': return st === 1 ? 70 : 0;
     case 'dice': return st === 0 ? 90 : 0;
-    default: return 0;
+    default: return LINE_PERIOD[def.id] ? LINE_PERIOD[def.id](st) || 0 : 0;
   }
 }
 const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 function renderFloor(ctx, def, rot, c, st, t) {
   const s = new Scene(def.w || 1, def.l || 1, rot);
-  (FLOOR[def.id] || FLOOR._fallback)(s, { c, st, t, def });
+  (FLOOR[def.id] || LINE_FLOOR[def.id] || FLOOR._fallback)(s, { c, st, t, def });
   s.draw(ctx);
 }
 function renderWall(ctx, def, c, st, now) {
-  (WALL[def.id] || wallFallback)(ctx, { c, st, def, now });
+  (WALL[def.id] || LINE_WALL[def.id] || wallFallback)(ctx, { c, st, def, now });
 }
 
 // ---------- Límites ----------

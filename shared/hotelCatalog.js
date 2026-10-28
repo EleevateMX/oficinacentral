@@ -1,3 +1,4 @@
+import { HOTEL_LINES, LINE_FURNI } from './hotelLines/index.js';
 // Catálogo de furnis del Hotel (contrato compartido).
 //   kind: 'floor' | 'wall'
 //   w, l: huella en casillas con rot 0 (en rot 2/6 se intercambian)
@@ -77,6 +78,10 @@ export const HOTEL_FURNI = [
   F('teleport', 'Teletransportador', 'diversion', { h: 2.2, rots: [0, 2, 4, 6], interact: 'teleport', states: 2 }),
   F('gate', 'Rejita', 'diversion', { h: 1, rots: [0, 2], interact: 'gate', states: 2 }),
 ];
+
+// Catálogo ampliado por líneas (ver shared/hotelLines/)
+HOTEL_FURNI.push(...LINE_FURNI);
+export { HOTEL_LINES };
 
 export const FURNI_BY_ID = Object.fromEntries(HOTEL_FURNI.map((f) => [f.id, f]));
 
