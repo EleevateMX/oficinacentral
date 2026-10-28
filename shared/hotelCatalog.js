@@ -92,3 +92,10 @@ export function footprint(def, rot = 0) {
 
 // Furnis con los que empieza una sala nueva (para que no se vea vacía) y regalo de bienvenida al inventario
 export const STARTER_INVENTORY = ['chair_basic', 'chair_basic', 'table_small', 'sofa_2', 'lamp_floor', 'plant_big', 'rug_round', 'poster_gtahub', 'bed_single', 'tv'];
+
+// Exclusivos HUB: solo los admins los obtienen (o los regalan). price = créditos HUB (por ahora solo se muestra).
+//   Campos opcionales de cada def: exclusive: true, price: número, line: 'id de línea' (ver HOTEL_LINES si existe).
+export const HOTEL_EXCLUSIVE_PRICES = { throne: 5000, gtahub_car: 3000, gtahub_statue: 2000, gtahub_rug: 1000 };
+for (const f of HOTEL_FURNI) {
+  if (f.cat === 'gtahub' || HOTEL_EXCLUSIVE_PRICES[f.id] != null) { f.exclusive = true; f.price ??= HOTEL_EXCLUSIVE_PRICES[f.id] ?? 500; }
+}

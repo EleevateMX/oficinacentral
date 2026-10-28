@@ -15,6 +15,7 @@ const TEXT = {
   call: (n) => `📞 ${n} te llamó`,
   achievement: (n, c, d) => `Conseguiste el logro «${badgeTitle(d?.id, d?.tier)}»${d?.count > 1 ? ` y ${d.count - 1} más` : ''}`,
   santa: () => '',
+  hotel_gift: (n, c, d) => `🎁 ${n} te regaló «${d?.name || 'un furni'}» para el Hotel`,
 };
 const TITLE = { wave: 'Saludo de', mention: 'Mención de', event: 'Invitación de', birthday: 'Felicitación de', call: 'Llamada de' };
 
@@ -50,6 +51,7 @@ export default function ActivityPanel() {
       office.set({ modal: { type: 'santa' } });
       return;
     }
+    if (g.type === 'hotel_gift') { office.set({ view: 'hotel' }); return; } // Hotel: regalo de furni
     if (g.type === 'event') {
       office.set({ view: 'calendar' });
       return;

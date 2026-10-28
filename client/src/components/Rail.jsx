@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Search, Map, MessageCircle, Calendar, Bell, Settings, MessageSquareHeart, Cake } from 'lucide-react';
+import { Search, Map, MessageCircle, Calendar, Bell, Settings, MessageSquareHeart, Cake, Building2 } from 'lucide-react';
 import { isBirthday } from '../lib/birthdays.js';
 import { office, useOffice } from '../lib/store.js';
 import { Kbd } from './ui.jsx';
@@ -51,6 +51,7 @@ export default function Rail() {
       <div className="rail-kbd"><Kbd>⌘</Kbd><Kbd>K</Kbd></div>
       <div className="rail-gap" />
       {item('map', Map, 'Mapa')}
+      {item('hotel', Building2, 'Hotel')}
       {item('chat', MessageCircle, 'Chat', unreadChat)}
       {item('calendar', Calendar, 'Calendario')}
       {item('activity', Bell, 'Actividad', unreadNotif)}

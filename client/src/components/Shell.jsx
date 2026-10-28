@@ -28,6 +28,8 @@ import Onboarding, { Loader } from './Onboarding.jsx';
 import AppBanner from './AppBanner.jsx';
 import { setupAutoPip } from '../lib/pip.js';
 
+const HotelView = React.lazy(() => import('../hotel/HotelView.jsx')); // Hotel: se carga solo al abrirlo
+
 export default function Shell({ session, onLogout }) {
   const ready = useOffice((s) => s.ready);
   const view = useOffice((s) => s.view);
@@ -68,9 +70,9 @@ export default function Shell({ session, onLogout }) {
   const mainChat = view === 'chat' || view === 'activity';
 
   return (
-    <div className={`shell ${mobile ? `mobile pane-${view === 'calendar' ? 'main' : view === 'map' ? 'map' : mobilePane}` : ''}`}>
+    <div className={`shell ${mobile ? `mobile pane-${view === 'calendar' || view === 'hotel' ? 'main' : view === 'map' ? 'map' : mobilePane}` : ''}`}>
       <Rail />
-      {!(collapsed && view === 'map') && (
+      {!(collapsed && view === 'map') && view !== 'hotel' && (
         <aside className="sidebar">
           <div className="sidebar-content">{panel}</div>
           {view !== 'map' && <MiniWidget />}
@@ -81,6 +83,7 @@ export default function Shell({ session, onLogout }) {
         <MapView active={view === 'map'} />
         {mainChat && <ChatView />}
         {view === 'calendar' && <CalendarView />}
+        {view === 'hotel' && <React.Suspense fallback={null}><HotelView /></React.Suspense>}
       </main>
       {profileCard && <ProfileCard userId={profileCard} />}
       {modal?.type === 'profile' && <EditProfile />}

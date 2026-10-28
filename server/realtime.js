@@ -14,6 +14,7 @@ import { APP_VERSION } from './version.js';
 import { trackConnect, trackArea, trackDisconnect, bumpCounter } from './stats.js';
 import { checkAchievements } from './achievements.js';
 import { initStage, initStageIO, stageCleanup } from './stage.js';
+import { initHotel } from './hotel.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -238,6 +239,7 @@ export function initRealtime(httpServer) {
     initStage(socket, userId);
     initPets(io, socket, userId, presence);
     initJukebox(io, socket, userId);
+    initHotel(io, socket, userId); // Hotel: salas isométricas (capa aparte de la oficina)
 
     // Chat de la sala: le llega solo a quienes te oyen ahora (misma sala, escritorio o cerca)
     let roomMsgTimes = [];
