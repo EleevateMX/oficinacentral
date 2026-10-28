@@ -53,6 +53,7 @@ export const CATALOG = {
   watercooler: f('Garrafón', 'comida', 1, 1),
   arcade: f('Arcade', 'deco', 1, 1, { colorable: true, color: '#2bb673', interactive: 'game' }),
   jukebox: f('Rocola', 'deco', 2, 1, { colorable: true, color: '#FE3377', interactive: 'jukebox', animated: true }),
+  hotelElevator: f('Elevador al Hotel', 'gtahub', 2, 1, { interactive: 'hotel', brand: true, animated: true }), // sube al Hotel (salas isométricas)
   foosball: f('Futbolito', 'deco', 3, 2, { interactive: 'game' }),
   drum: f('Tambor', 'deco', 1, 1),
   plant: f('Planta', 'plantas', 1, 1),

@@ -870,6 +870,34 @@ D.wavingFlag = (ctx, x, y, w, h, o) => {
   if (!im) { ctx.fillStyle = '#fff'; hexPath(ctx, px + 1.5 + FW / 2, top + 2 + FH / 2 - 2 + wave(N / 2), 6); ctx.fill(); }
 };
 
+// Elevador al Hotel: marco de acero, puertas con el logo y flecha que parpadea
+D.hotelElevator = (ctx, x, y, w, h, o) => {
+  const { p } = brandCols(o);
+  const top = y - 30, H = h + 30;
+  R(ctx, 'rgba(0,0,0,.25)', x + 2, y + h - 3, w - 4, 4);
+  RR(ctx, '#1c1c22', x + 1, top, w - 2, H - 1, 4);
+  RR(ctx, '#3b3c46', x + 3, top + 2, w - 6, 11, 3);
+  // Indicador: flecha hacia arriba que parpadea y puntitos de piso
+  const on = Math.floor(ANIM_T / 600) % 2 === 0;
+  ctx.fillStyle = on ? '#FFCC00' : '#6b5a1a';
+  ctx.beginPath(); ctx.moveTo(x + w / 2, top + 4); ctx.lineTo(x + w / 2 + 5, top + 10); ctx.lineTo(x + w / 2 - 5, top + 10); ctx.closePath(); ctx.fill();
+  for (let k = 0; k < 3; k++) circle(ctx, k === Math.floor(ANIM_T / 700) % 3 ? p : '#5a5b66', x + 8 + k * 4, top + 7.5, 1.3);
+  R(ctx, p, x + 3, top + 14, w - 6, 1.5);
+  // Puertas de acero cepillado
+  const dy = top + 17, dh = H - 20;
+  const g = ctx.createLinearGradient(x + 4, 0, x + w - 4, 0);
+  g.addColorStop(0, '#80838f'); g.addColorStop(0.25, '#c9ccd6'); g.addColorStop(0.5, '#8d909c'); g.addColorStop(0.75, '#c9ccd6'); g.addColorStop(1, '#80838f');
+  ctx.fillStyle = g; ctx.fillRect(x + 4, dy, w - 8, dh);
+  R(ctx, '#4a4c56', x + w / 2 - 0.5, dy, 1, dh);
+  R(ctx, 'rgba(255,255,255,.35)', x + 6, dy + 2, 1, dh - 4);
+  // Logo al centro de las puertas
+  if (!drawLogo(ctx, x + w / 2, dy + dh / 2 - 2, 16)) { ctx.fillStyle = p; hexPath(ctx, x + w / 2, dy + dh / 2 - 2, 6); ctx.fill(); }
+  // Botón de llamar
+  RR(ctx, '#2a2b33', x + w - 9, dy + dh / 2 + 6, 4, 8, 1.5);
+  circle(ctx, on ? '#FFCC00' : '#8a7a2a', x + w - 7, dy + dh / 2 + 10, 1.2);
+  R(ctx, '#121216', x + 3, y + h - 3, w - 6, 2);
+};
+
 // Rocola (ver jukeboxDraw.js): brilla y se anima mientras suena
 D.jukebox = (ctx, x, y, w, h, o, c) => drawJukebox(ctx, x, y, w, h, o.color || c.color, ANIM_T, jukeboxPlaying.has(o.id));
 

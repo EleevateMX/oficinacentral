@@ -23,6 +23,7 @@ import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
 import { notesConfig, stopAllNotes } from './notes.js';
 import { registerStatsRoutes } from './stats.js';
 import { registerAchievementRoutes } from './achievements.js';
+import { registerHotelRoutes } from './hotel.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -1007,6 +1008,7 @@ api.post('/call/:userId/answer', wrap((req, res) => {
 // ---------- Notificaciones ----------
 registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push/test
 registerSantaRoutes(api, { fail, notify, requireAdmin, wrap }); // /santa… (amigo secreto)
+registerHotelRoutes(api, { fail, wrap, notify }); // /hotel… (salas isométricas)
 
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);

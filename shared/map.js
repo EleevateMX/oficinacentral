@@ -428,6 +428,7 @@ function templateHQ() {
   b.o('reception', 40.5, 49);
   b.o('officeChair', 42.5, 48, { rot: 2 });
   b.o('cubeLogo', 42.75, 49.1); b.o('hexLamp', 40.7, 48.9); b.o('monitor', 44, 48.9);
+  b.o('hotelElevator', HOTEL_ELEVATOR_SPOT.x, HOTEL_ELEVATOR_SPOT.y); // elevador al Hotel
   b.o('sofaSmall', 36, 51, { rot: 1, color: '#FE3377' }); b.o('sofaSmall', 49, 51, { rot: 3, color: '#FE3377' });
   b.o('tallPlant', 35, 47); b.o('tallPlant', 50, 47); b.o('plant', 36, 56); b.o('plant', 49, 56);
   b.area('recepcion', 'Recepción', 35, 47, 16, 11, { color: 'none' });
@@ -571,6 +572,9 @@ export const RECEPTION_EXTRAS = [
 
 // Escenario de Staff / Orgs (arriba del área, asomado al pasillo). También se agrega una vez
 // a las oficinas ya creadas si el lugar está libre (server/world.js).
+// Elevador al Hotel en la recepción (también se agrega una vez a oficinas ya creadas, ver server/world.js)
+export const HOTEL_ELEVATOR_SPOT = { x: 38, y: 46 };
+
 export const STAGE_EXTRAS = [
   ['stage', 72, 22, {}],
 ];

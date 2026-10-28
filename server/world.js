@@ -1,6 +1,6 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx, getSetting, setSetting } from './db.js';
-import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, STAGE_EXTRAS, areaAt } from '../shared/map.js';
+import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, STAGE_EXTRAS, HOTEL_ELEVATOR_SPOT, areaAt } from '../shared/map.js';
 import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 import { AREA_SHAPES } from '../shared/map.js';
 
@@ -85,7 +85,7 @@ export function furnishDesks(floorId) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Piso 1', 'hq'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1']) setSetting(k, '1'); return; }
+  if (!rows.length) { createFloor('Piso 1', 'hq'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1']) setSetting(k, '1'); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
@@ -119,7 +119,24 @@ export function loadWorld() {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) addJukebox(r.id);
     setSetting('migr_jukebox_v1', '1');
   }
+  // Una vez: elevador al Hotel en la recepción de oficinas ya creadas (si el lugar está libre)
+  if (!getSetting('migr_hotel_elevator_v1')) {
+    for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) addHotelElevator(r.id);
+    setSetting('migr_hotel_elevator_v1', '1');
+  }
   for (const r of rows) rebuild(r.id);
+}
+
+function addHotelElevator(floorId) {
+  const objects = db.prepare('SELECT type, x, y, w, h, rot FROM objects WHERE floor_id = ?').all(floorId);
+  if (objects.some((o) => o.type === 'hotelElevator')) return;
+  const f = composeFloor({ template: 'hq', objects });
+  const { x, y } = HOTEL_ELEVATOR_SPOT;
+  const { w, h } = objSize({ type: 'hotelElevator' });
+  for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (f.solid[j]?.[i] !== false) return;
+  // Tampoco encima de decoración que no bloquea (tapetes, letreros)
+  if (objects.some((o) => { const s = objSize(o); return o.x < x + w && x < o.x + s.w && o.y < y + h && y < o.y + s.h; })) return;
+  db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 0, NULL, ?)').run(floorId, 'hotelElevator', x, y, now());
 }
 
 const JUKEBOX_SPOT = { x: 66, y: 47 };

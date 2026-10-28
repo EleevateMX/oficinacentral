@@ -343,6 +343,7 @@ class Office {
         this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
       } else if (n.type === 'achievement') onAchievementNotification(this, n);
+      else if (n.type === 'hotel_gift') this.toast({ title: n.data.text || '🎁 Te regalaron un furni', action: { label: 'Ver', run: () => this.set({ view: 'hotel' }) }, duration: 9000 }); // Hotel
       else if (n.type === 'santa') {
         this.toast({ title: n.data.text || '🎁 Amigo secreto', action: { label: 'Ver', run: () => this.set({ modal: { type: 'santa' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
@@ -570,6 +571,8 @@ class Office {
     const f = this.state.floor;
     const me = this.myPlayer;
     if (!f || !me || !this.media) return;
+    // En el Hotel no se oye la oficina (al volver se reconecta solo)
+    if (this.state.view === 'hotel') { this.media.setPeers([], []); if (this.state.talkingWith.length) this.set({ talkingWith: [] }); return; }
     const space = talkSpace(f, me.x, me.y);
     const ids = [];
     for (const [id, p] of Object.entries(this.players)) {
