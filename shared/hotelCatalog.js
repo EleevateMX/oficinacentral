@@ -97,5 +97,5 @@ export const STARTER_INVENTORY = ['chair_basic', 'chair_basic', 'table_small', '
 //   Campos opcionales de cada def: exclusive: true, price: número, line: 'id de línea' (ver HOTEL_LINES si existe).
 export const HOTEL_EXCLUSIVE_PRICES = { throne: 5000, gtahub_car: 3000, gtahub_statue: 2000, gtahub_rug: 1000 };
 for (const f of HOTEL_FURNI) {
-  if (f.cat === 'gtahub' || HOTEL_EXCLUSIVE_PRICES[f.id] != null) { f.exclusive = true; f.price ??= HOTEL_EXCLUSIVE_PRICES[f.id] ?? 500; }
+  if ((!f.line && f.cat === 'gtahub') || HOTEL_EXCLUSIVE_PRICES[f.id] != null) { f.exclusive = true; f.price ??= HOTEL_EXCLUSIVE_PRICES[f.id] ?? 500; }
 }
