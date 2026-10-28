@@ -204,7 +204,7 @@ export function drawFurni(ctx, def, item = {}, opts = {}) {
 export function drawWallItem(ctx, def, item = {}, opts = {}) {
   if (!def) return;
   const c = colorOf(def, item), st = stateOf(def, item);
-  const p = WALL_PERIOD[def.id] || 0;
+  const p = WALL_PERIOD[def.id] || LINE_PERIOD[def.id]?.(st) || 0;
   const now = Date.now(), frame = p ? Math.floor(now / p) : null;
   if (!canMake || opts.direct) {
     ctx.save();
