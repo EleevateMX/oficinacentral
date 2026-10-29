@@ -175,3 +175,12 @@ export function topScores(game, limit = 10) {
     : 'SELECT user_id AS userId, COUNT(*) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score DESC LIMIT ?';
   return db.prepare(sql).all(game, limit);
 }
+
+// Tu mejor marca y tu lugar en la tabla (juegos de puntos); null si aún no tienes
+export function bestOf(userId, game) {
+  if (!POINT_GAMES.includes(game) || !userId) return null;
+  const r = db.prepare('SELECT MAX(score) AS score FROM game_scores WHERE game = ? AND user_id = ?').get(game, userId);
+  if (r?.score == null) return null;
+  const above = db.prepare('SELECT COUNT(*) AS n FROM (SELECT MAX(score) AS s FROM game_scores WHERE game = ? GROUP BY user_id) WHERE s > ?').get(game, r.score);
+  return { score: r.score, rank: (above?.n || 0) + 1 };
+}

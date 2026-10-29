@@ -1079,7 +1079,7 @@ body.pip-body { margin: 0; background: #1d1f25; overflow: hidden; }
 .game-tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,.12); }
 .game-watch { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: .8; }
 .game-stage { position: relative; display: flex; justify-content: center; align-items: center; background: #0b0a10; min-height: 0; flex: 1; }
-.game-stage canvas { display: block; width: 100%; height: auto; max-height: calc(100vh - 140px); object-fit: contain; outline: none; touch-action: none; }
+.game-stage > canvas { display: block; width: 100%; height: auto; max-height: calc(100vh - 140px); object-fit: contain; outline: none; touch-action: none; }
 .game-loading { position: absolute; inset: 0; display: grid; place-items: center; opacity: .7; }
 .game-banner { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 99px; background: #FFCC00; color: #1a1300; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.4); animation: ic-in .25s ease-out; white-space: nowrap; }
 .game-top { position: absolute; top: 12px; right: 12px; width: 260px; max-width: calc(100% - 24px); background: rgba(18,17,26,.96); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
@@ -1481,8 +1481,16 @@ body.pet-aiming canvas { cursor: crosshair !important; }
 
 /* ===== Zombies en la oficina (juego 3D) ===== */
 .game-modal.game-wide { width: min(1320px, calc(100vw - 16px)); }
-.game-wide .game-stage canvas { max-height: none; object-fit: fill; cursor: crosshair; }
+.game-wide .game-stage > canvas { max-height: none; object-fit: fill; cursor: crosshair; }
 .game-back { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.1); color: inherit; border: 0; }
 .game-back:hover { background: rgba(255,255,255,.18); }
 .pc-game { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 .pc-game .btn { flex: none; }
+
+/* ---------- Zombies en la oficina: toda la ventana (el resto vive en games/zombies/menu.css) ---------- */
+.game-backdrop.game-full { padding: 0; z-index: 9000; background: #05060a; }
+.game-full .game-modal.game-wide { width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; border: 0; box-shadow: none; }
+.game-full .game-head { padding-top: 6px; padding-bottom: 6px; }
+.game-full .game-stage { overflow: hidden; }
+.game-full .game-head b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 560px) { .game-full .game-back { display: none; } }

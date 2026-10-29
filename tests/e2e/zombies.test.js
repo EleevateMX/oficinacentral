@@ -1,5 +1,6 @@
-// Zombies en la oficina en el navegador: abrir la máquina con X, jugar, matar zombis, llegar al jefe,
-// tienda y fin de partida, sin errores de página. Usa el gancho de pruebas window.__zombies.
+// Zombies en la oficina en el navegador: abrir la máquina con X (pantalla completa, menú principal),
+// opciones, "Jugar solo", matar zombis, jefe, tienda, fin de partida y revancha, sin errores de página
+// y sin que la oficina de abajo se mueva. Usa el gancho de pruebas window.__zombies.
 // Requiere `npm run build` y Playwright con Chromium (WebGL por software: va lento, por eso se adelanta la simulación).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,9 +45,36 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
     .catch(async (e) => { throw new Error(`${e.message} · modal=${JSON.stringify(await page.evaluate(() => window.__office.state.modal))} · ${errors.join(' | ')}`); });
   assert.equal(await page.evaluate(() => window.__office.state.modal?.game), 'zombies');
   const Z = (fn, ...a) => page.evaluate(([f, args]) => window.__zombies[f](...args), [fn, a]);
+  const myPos = () => page.evaluate(() => { const p = window.__office.players[window.__office.state.me.id]; return { x: p.x, y: p.y }; });
+  const officeAt = await myPos();
   let st = await Z('state');
   assert.equal(st.host, true);
   assert.equal(st.phase, 'intro');
+  // el juego ocupa toda la ventana y empieza en el menú principal (sala)
+  const box = await page.locator('.game-backdrop.game-full .game-modal').boundingBox();
+  assert.ok(box.width >= 1090 && box.height >= 690, `pantalla completa (${box.width}x${box.height})`);
+  await page.waitForSelector('.zm-main .zm-title', { timeout: 20000 });
+  assert.equal(st.screen, 'main');
+  assert.equal(st.lobby, true);
+  // en la sala no corre nada
+  await Z('advance', 6);
+  assert.equal((await Z('state')).phase, 'intro');
+  // opciones: se guardan en este navegador
+  await page.click('.zm-item:has-text("Opciones")');
+  await page.waitForSelector('.zm-p-options');
+  await page.click('.zm-orow:has-text("minimapa") .zm-toggle');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('zombies.opts')).minimap), false);
+  assert.equal((await Z('opts')).minimap, false);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.zm-p-options', { state: 'detached' });
+  // controles y récords se abren
+  await page.click('.zm-item:has-text("Controles")');
+  await page.waitForSelector('.zm-kb');
+  await page.click('.zm-item:has-text("Récords")');
+  await page.waitForSelector('.zm-p-records');
+  // Jugar solo
+  await page.click('.zm-item:has-text("Jugar solo")');
+  await page.waitForFunction(() => window.__zombies.state().lobby === false, null, { timeout: 10000 });
   // jugar: llega la horda 1
   await Z('play');
   await Z('god', true);
@@ -74,12 +102,16 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
   await Z('advance', 5);
   st = await Z('state');
   assert.equal(st.boss, 'El Gerente Regional');
-  // descanso y tienda
+  // descanso y tienda (tarjetas; 1-6 compran)
   await Z('breakNow'); await Z('advance', 1);
   assert.equal((await Z('state')).phase, 'break');
   await Z('points', 1000);
   await Z('shop', true);
-  await Z('buy', 'cafetera');
+  await page.waitForSelector('.zm-card[data-buy="cafetera"].can');
+  const ptsBefore = (await Z('state')).pts;
+  await page.keyboard.press('Digit4');
+  await page.waitForFunction((p) => window.__zombies.state().pts < p, ptsBefore, { timeout: 10000 });
+  await page.waitForSelector('.zm-card[data-buy="cafetera"].owned');
   st = await Z('state');
   assert.ok(st.shopOpen);
   // fin: sin protección y con un golpe
@@ -90,10 +122,24 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
   await Z('advance', 30);
   st = await Z('state');
   assert.equal(st.phase, 'over');
+  // pantalla final con estadísticas
+  await page.waitForSelector('.zm-over .zm-res.me', { timeout: 20000 });
   // la puntuación quedó en la tabla
   await page.waitForTimeout(1500);
   const top = await page.evaluate(() => fetch('/api/games/zombies/top').then((r) => r.json()));
   assert.ok(top.top.length >= 1, 'puntuación guardada');
+  assert.equal(top.me.rank, 1);
+  await page.waitForSelector('.zm-badge.gold', { timeout: 10000 });
+  // clics y teclas dentro del juego no movieron a tu personaje en la oficina
+  const canvas = page.locator('.game-stage > canvas');
+  await canvas.click({ position: { x: 300, y: 300 }, force: true }).catch(() => {});
+  await page.mouse.move(500, 400); await page.mouse.down(); await page.mouse.move(700, 300); await page.mouse.up();
+  await page.keyboard.down('KeyD'); await page.waitForTimeout(600); await page.keyboard.up('KeyD');
+  assert.deepEqual(await myPos(), officeAt, 'la oficina no se movió');
+  // revancha: de vuelta a la sala con el mismo escuadrón
+  await page.click('.zm-item:has-text("Revancha")');
+  await page.waitForFunction(() => window.__zombies.state().lobby === true && window.__zombies.state().phase === 'intro', null, { timeout: 10000 });
+  await page.waitForSelector('.zm-main');
   // volver a la oficina
   await page.click('.game-back');
   await page.waitForTimeout(500);

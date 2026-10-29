@@ -16,12 +16,16 @@ import { buildWorld } from './world.js';
 import { Horde, bossModel, animateBoss, rememberBossMaterials, voxelAvatar, animateAvatar, weaponModel, armsModel } from './models.js';
 import { Particles, Splats, Rings, Tracers, Projectiles, Pickups, flashSprite } from './fx.js';
 import { Hud } from './hud.js';
+import { ZMenu } from './menu.js';
+import { MenuScene } from './menuScene.js';
+import { loadOpts, saveOpts } from './options.js';
 import { SnapBuffer, gameLoop, stamp } from '../netSync.js';
-import { playSpatial, playSound } from '../../lib/sounds.js';
+import { playSound } from '../../lib/sounds.js';
+import { ZAudio } from './audio.js';
 
 export const meta = {
   w: 1280, h: 720, wide: true, persistent: true, maxSeats: 4,
-  help: 'WASD moverte · mouse apuntar · clic disparar · 1-3 arma · R recargar · Shift correr · E levantar · B tienda · Esc pausa',
+  help: '', // los controles están en el menú (Controles)
 };
 
 const S = TILE_M;
@@ -35,6 +39,7 @@ export function create(canvas, ctx) {
   const on = (el, ev, fn, opts) => { el.addEventListener(ev, fn, opts); cleanups.push(() => el.removeEventListener(ev, fn, opts)); };
   const touchDevice = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   let quality = store('zombies.quality') || (touchDevice ? 'baja' : 'alta');
+  const opts = loadOpts();
 
   // HUD encima del 3D
   const stage = canvas.parentElement;
@@ -73,13 +78,13 @@ export function create(canvas, ctx) {
   const vmFlashLight = new THREE.PointLight('#ffd27a', 0, 3, 2); vmFlashLight.position.set(0.2, -0.1, -0.7); vmScene.add(vmFlashLight);
   const worldFlash = new THREE.PointLight('#ffcf70', 0, 9, 1.6); scene.add(worldFlash);
 
-  // Tamaño: 16:9 dentro del escenario del modal
+  // Tamaño
   let cssW = 1280, cssH = 720;
+  // El juego ocupa toda la ventana: el lienzo llena el escenario (cualquier proporción)
   function fit() {
-    const avW = stage.clientWidth || 960;
-    const avH = Math.max(240, (window.innerHeight || 800) - 150);
-    cssW = Math.floor(Math.min(avW, (avH * 16) / 9));
-    cssH = Math.floor((cssW * 9) / 16);
+    const head = stage.parentElement?.querySelector('.game-head')?.offsetHeight ?? 44;
+    cssW = Math.max(240, Math.floor(stage.clientWidth || window.innerWidth || 960));
+    cssH = Math.max(180, Math.floor(stage.clientHeight || (window.innerHeight || 800) - head));
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
     const dpr = window.devicePixelRatio || 1;
@@ -90,9 +95,36 @@ export function create(canvas, ctx) {
     hudCanvas.width = Math.round(cssW * dpr); hudCanvas.height = Math.round(cssH * dpr);
     hudCanvas.style.width = `${cssW}px`; hudCanvas.style.height = `${cssH}px`;
     hudCanvas.style.left = `${canvas.offsetLeft}px`; hudCanvas.style.top = `${canvas.offsetTop}px`;
+    ui.layout(canvas.offsetLeft, canvas.offsetTop, cssW, cssH);
     camera.aspect = vmCam.aspect = cssW / cssH;
     camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
   }
+  const za = new ZAudio();
+  cleanups.push(() => za.dispose());
+  let stepT = 0, groanT = 2;
+  // Menús en HTML encima del juego
+  const ui = new ZMenu(stage, {
+    me: ctx.me,
+    touch: touchDevice,
+    avatarOf: (uid) => office.state.users[uid]?.avatar || {},
+    nameOf: (uid) => office.state.users[uid]?.displayName || 'Alguien',
+    actions: {
+      start: () => startMatch(true),
+      ready: () => setReady(!myReadyNow()),
+      enter: () => { entered = true; if (mySeat >= 0) resumePlay(true); },
+      resume: () => resumePlay(fresh),
+      leave: () => ctx.close?.(),
+      restart: () => restartGame(),
+      sit: () => ctx.sit?.(),
+      joinMatch: (g) => office.set({ modal: { type: 'game', objectId: g.objectId, game: 'zombies', floorId: g.floorId } }),
+      buy: (id) => buy(id),
+      closeShop: () => toggleShop(false),
+      shopReady: () => setReady(!ready),
+      setOpt: (k, v) => setOpt(k, v),
+      sound: (n) => playSound(n, volUi() * 0.12),
+    },
+  });
+  cleanups.push(() => ui.destroy());
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
   ro?.observe(stage);
   on(window, 'resize', fit);
@@ -117,10 +149,12 @@ export function create(canvas, ctx) {
   const L = newLoadout();
   let menu = true, shopOpen = false, ready = false, watchSeat = 0;
   let summary = null, submitted = false;
-  let banner = null;
+  // Sala (antes de empezar): el anfitrión decide cuándo arranca; los demás lo ven en el estado (lb)
+  let lobby = true, lobbyT = null, entered = false, fresh = false, lastLobby = true;
+  let menuScene = null;
   const popups = [], feed = [];
   let hurt = 0, hurtDir = null, hitT = 0, hitKill = false, hitHead = false, shake = 0, recoil = 0, flashT = 0, swayT = 0, bob = 0, switchAnim = 0;
-  let time = 0, fps = 0, fpsAcc = 0, fpsN = 0;
+  let time = 0, fps = 0, fpsAcc = 0, fpsN = 0, frames = 0;
   const keys = new Set();
   let firing = false;
   const touch = touchDevice ? { sx: 0, sy: 0, stickId: null, lookId: null, lx: 0, ly: 0, fire: false } : null;
@@ -169,6 +203,8 @@ export function create(canvas, ctx) {
     scene.fog = new THREE.Fog('#14161d', quality === 'alta' ? 9 : 6, quality === 'alta' ? 40 : 28);
     renderer.shadowMap.enabled = quality === 'alta';
     horde = new Horde(scene);
+    menuScene = new MenuScene(scene, level, avatarOf(myId));
+    camera.fov = opts.fov; camera.updateProjectionMatrix();
     fx.particles = new Particles(scene); fx.splats = new Splats(scene); fx.rings = new Rings(scene); fx.tracers = new Tracers(scene);
     fx.proj = new Projectiles(scene); fx.drops = new Pickups(scene);
     if (isHost) startSim();
@@ -181,6 +217,27 @@ export function create(canvas, ctx) {
     Sim = sim.createSim(level, { seats: seatsBool() });
     if (Sim.players[mySeat]) Object.assign(Sim.players[mySeat], { x: me.x, y: me.y });
     lastPhase = null;
+    lobby = true; lobbyT = null;
+  }
+  const lobbyNow = () => (isHost ? lobby : latest ? !!latest.lb : true);
+  // El anfitrión arranca la partida (solo, "Comenzar" o la cuenta regresiva de la sala)
+  function startMatch(byClick = false) {
+    if (!isHost || !Sim || !lobby) return;
+    lobby = false; lobbyT = null; entered = true;
+    for (const p of Sim.players) if (p) p.ready = false;
+    ready = false;
+    menu = true; fresh = true;
+    if (byClick) resumePlay(true);
+  }
+  function lobbyTick(dt) {
+    const guests = Sim.players.filter((p, i) => p && room.seats[i] && i !== mySeat);
+    if (guests.length && guests.every((p) => p.ready)) { lobbyT = lobbyT == null ? 6 : lobbyT - dt; if (lobbyT <= 0) startMatch(false); }
+    else lobbyT = null;
+  }
+  function myReadyNow() {
+    if (isHost && Sim) return !!Sim.players[mySeat]?.ready;
+    const p = latest && sim.unpackPlayers(latest)[mySeat];
+    return !!p?.ready;
   }
 
   // ---------- Red ----------
@@ -203,12 +260,16 @@ export function create(canvas, ctx) {
     if (d.ev?.length) handleEvents(d.ev);
     const myP = d.P?.[mySeat];
     if (myP) { const o = myP[12]; L.owned = [!!(o & 1), !!(o & 2), !!(o & 4)]; if (!L.owned[L.cur]) L.cur = 0; }
+    const lb = !!d.lb;
+    // la sala arrancó: a jugar (hay que hacer clic para tomar el mouse)
+    if (lastLobby && !lb && d.ph === 'intro' && mySeat >= 0) { entered = true; menu = true; fresh = true; ready = false; }
+    lastLobby = lb;
     phaseWatch(d.ph, d.w);
   });
   ctx.onEvent((seat, d) => {
     if (!d) return;
     if (d.k === 'grant' && d.s === mySeat && !isHost) applyGrant(d);
-    if (d.k === 'nope' && d.s === mySeat) popup(d.why || 'No se pudo', '#ff8080');
+    if (d.k === 'nope' && d.s === mySeat) { popup(d.why || 'No se pudo', '#ff8080'); if (d.id) ui.nope(d.id); }
     if (!isHost || !Sim) return;
     if (d.k === 'shots' && Array.isArray(d.list)) {
       for (const sh of d.list.slice(0, 30)) {
@@ -218,7 +279,7 @@ export function create(canvas, ctx) {
       }
     } else if (d.k === 'buy') {
       const r = sim.buy(Sim, seat, String(d.id));
-      if (!r.ok) ctx.sendEvent({ k: 'nope', s: seat, why: r.why });
+      if (!r.ok) ctx.sendEvent({ k: 'nope', s: seat, why: r.why, id: String(d.id).slice(0, 20) });
     } else if (d.k === 'ready') { if (Sim.players[seat]) Sim.players[seat].ready = !!d.on; }
     else if (d.k === 'restart' && Sim.phase === 'over') restartGame();
   });
@@ -231,6 +292,7 @@ export function create(canvas, ctx) {
     if (hostNow && !isHost && level) {
       // migración: sigo yo con lo último que vi
       Sim = latest ? sim.restoreSim(level, latest) : sim.createSim(level, { seats: seatsBool() });
+      lobby = latest ? !!latest.lb : true; lobbyT = null;
       isHost = true;
       for (let i = 0; i < 4; i++) if (!r.seats[i] && Sim.players[i]) Sim.players[i] = null;
       feedAdd('Ahora tú llevas la partida', '#9fe3ff');
@@ -253,21 +315,28 @@ export function create(canvas, ctx) {
     if (ph === 'break') { ready = false; }
     if (ph === 'fight') { shopOpen = false; }
     if (ph === 'over' && mySeat >= 0) finish(wave);
-    if (ph === 'intro' && !prev) banner = { title: 'ZOMBIES EN LA OFICINA', sub: 'Sobrevive a las hordas · cada 5, un jefe', color: '#7CFF4F', t: 3, dur: 3 };
   }
   function finish(wave) {
     const P = myState();
-    summary = { wave, kills: P?.kills || 0, score: P?.earned || 0 };
-    playSound('gameover', vol());
-    if (!submitted && summary.score > 0) {
+    const S0 = { wave, kills: P?.kills || 0, score: P?.earned || 0 };
+    summary = S0;
+    snd('gameover', volUi());
+    if (!submitted && S0.score > 0) {
       submitted = true;
-      Promise.resolve(ctx.submitScore?.(summary.score, 'zombies')).then((r) => { if (r?.top?.[0]?.userId === myId && r.top[0].score === summary.score) summary.best = true; }).catch(() => {});
+      const prev = ui.records?.me?.score ?? 0;
+      Promise.resolve(ctx.submitScore?.(S0.score, 'zombies')).then((r) => {
+        if (!r) return;
+        ui.setRecords(r);
+        if (summary !== S0) return;
+        summary = { ...S0, rank: r.me?.rank || null, newRecord: S0.score > prev && r.me?.score === S0.score };
+      }).catch(() => {});
     }
     shopOpen = false;
     if (document.pointerLockElement === canvas) document.exitPointerLock?.();
   }
+  // Revancha: todos vuelven a la sala con el mismo escuadrón
   function restartGame() {
-    if (isHost) { startSim(); resetLoadout(); summary = null; submitted = false; fx.splats?.clear(); }
+    if (isHost) { startSim(); resetLoadout(); summary = null; submitted = false; fx.splats?.clear(); ready = false; }
     else ctx.sendEvent({ k: 'restart' });
   }
 
@@ -275,6 +344,7 @@ export function create(canvas, ctx) {
   function hostStep(dt) {
     if (!isHost || !Sim || destroyed) return;
     const seated = room.seats.filter(Boolean).length;
+    if (lobby) { lobbyTick(dt); sendSnap(dt); return; } // en la sala no corre nada
     if (menu && seated <= 1 && Sim.phase !== 'over') return; // solo: la pausa detiene todo
     const P = Sim.players[mySeat];
     if (P) { if (P.alive) { P.x = me.x; P.y = me.y; } P.a = me.a; P.p = me.p; P.w = L.cur; P.mv = me.mv; P.rv = me.rv; }
@@ -283,14 +353,17 @@ export function create(canvas, ctx) {
     if (evs.length) { handleEvents(evs); pendingEv.push(...evs); }
     for (const g of Sim.grants.splice(0)) { if (g.s === mySeat) applyGrant(g); else ctx.sendEvent({ k: 'grant', ...g }); }
     phaseWatch(Sim.phase, Sim.wave);
+    sendSnap(dt);
+  }
+  function sendSnap(dt) {
     snapAcc += dt;
-    if (snapAcc >= 0.05) {
-      snapAcc = 0;
-      const d = sim.pack(Sim);
-      d.ev = pendingEv.splice(0).slice(-80);
-      latest = d;
-      if (room.seats.filter(Boolean).length > 1 || room.watchers?.length) ctx.sendState(stamp(d));
-    }
+    if (snapAcc < 0.05) return;
+    snapAcc = 0;
+    const d = sim.pack(Sim);
+    d.ev = pendingEv.splice(0).slice(-80);
+    if (lobby) { d.lb = 1; if (lobbyT != null) d.lt = Math.round(lobbyT * 10) / 10; }
+    latest = d;
+    if (room.seats.filter(Boolean).length > 1 || room.watchers?.length) ctx.sendState(stamp(d));
   }
 
   function applyGrant(g) {
@@ -303,13 +376,15 @@ export function create(canvas, ctx) {
   }
 
   // ---------- Eventos (sonidos y efectos) ----------
-  const vol = () => Math.max(0.2, ctx.volume ?? 0.6);
+  // volumen general × efectos (disparos, golpes, zombis); los avisos solo usan el general
+  const volUi = () => Math.max(0.2, ctx.volume ?? 0.6) * (opts.master / 100);
+  const vol = () => volUi() * (opts.effects / 100);
+  // Sonido en 3D desde (x, y) en casillas (PannerNode: dirección y distancia)
   function spatial(name, x, y, v = 1) {
-    if (x == null) { playSound(name, vol() * v); return; }
-    const dx = x - me.x, dy = y - me.y, d = Math.hypot(dx, dy);
-    const ang = Math.atan2(dy, dx) - me.a;
-    playSpatial(name, vol() * v * Math.max(0.08, 1 - d / 22), Math.sin(ang));
+    if (x == null) { snd(name, vol() * v); return; }
+    za.play(name, { x: x * S, z: y * S, vol: vol() * v });
   }
+  const snd = (name, v) => za.play(name, { vol: v });
   function popup(text, color, big = false) { popups.push({ text, color, big, t: 1 }); if (popups.length > 5) popups.shift(); }
   function feedAdd(text, color) { feed.push({ text, color, t: 5 }); if (feed.length > 6) feed.shift(); }
   const zombieAt = (id) => (isHost ? Sim?.zombies.find((z) => z.id === id) : null);
@@ -321,7 +396,7 @@ export function create(canvas, ctx) {
         case 'hit': {
           if (e.s === mySeat && !isHost) break; // ya se dibujó al disparar
           fx.particles?.burst(e.x * S, e.h, e.y * S, e.hd ? 10 : 6, { colors: ['#7CFF4F', '#4fbf3a', '#b6ff6a'], speed: 2.5, size: 0.035 });
-          if (e.s === mySeat) { hitT = 0.22; hitHead = !!e.hd; hitKill = false; playSound('hitmark', vol() * 0.8); }
+          if (e.s === mySeat) { hitT = 0.22; hitHead = !!e.hd; hitKill = false; snd('hitmark', vol() * 0.8); }
           break;
         }
         case 'kill': {
@@ -329,7 +404,7 @@ export function create(canvas, ctx) {
           fx.splats?.add(e.x * S, e.y * S, e.boss ? 2.6 : 0.9 + Math.random() * 0.5);
           spatial(e.boss ? 'bossdie' : 'splat', e.x, e.y, e.boss ? 1.2 : 0.8);
           if (e.s === mySeat) { hitT = 0.3; hitKill = true; popup(`+${e.pts}`, '#FFCC00', !!e.boss); }
-          if (e.boss) { banner = { title: '¡JEFE DERROTADO!', sub: e.s >= 0 ? `Golpe final de ${nameOfSeat(e.s)}` : '', color: '#FFCC00', t: 3, dur: 3 }; shake = Math.max(shake, 0.6); }
+          if (e.boss) { ui.banner({ title: '¡Jefe derrotado!', sub: e.s >= 0 ? `Golpe final de ${nameOfSeat(e.s)}` : '', tone: 'gold', dur: 3 }); shake = Math.max(shake, 0.6); }
           break;
         }
         case 'spawn':
@@ -338,22 +413,22 @@ export function create(canvas, ctx) {
           break;
         case 'wave': {
           const boss = e.boss ? BOSSES[e.boss] : null;
-          banner = boss ? { title: '¡JEFE!', sub: `Horda ${e.n} · ${boss.name}`, color: '#ff4a4a', boss: true, t: 3.4, dur: 3.4 } : { title: `HORDA ${e.n}`, sub: e.n === 1 ? '¡Ahí vienen!' : 'Más rápidos, más hambrientos', color: '#FFCC00', t: 2.6, dur: 2.6 };
-          playSound(boss ? 'roar' : 'horn', vol());
+          ui.banner(boss ? { kind: 'boss', boss: e.boss, wave: e.n, dur: 3.4 } : { kind: 'wave', wave: e.n, sub: e.n === 1 ? '¡Ahí vienen!' : 'Más rápidos, más hambrientos', dur: 2.4 });
+          snd(boss ? 'roar' : 'horn', volUi());
           ready = false;
           break;
         }
-        case 'clear': banner = { title: '¡HORDA SUPERADA!', sub: `+${e.bonus} puntos · descanso y tienda (B)`, color: '#7CFF4F', t: 3, dur: 3 }; playSound('clear', vol()); break;
-        case 'boss': { const b = BOSSES[e.b]; feedAdd(`☠ ${b?.name}: ${b?.title}`, '#ff8080'); playSound('roar', vol()); shake = Math.max(shake, 0.5); break; }
+        case 'clear': ui.banner({ title: '¡Horda superada!', sub: `+${e.bonus} puntos · descanso y tienda (${touchDevice ? '🛒' : 'B'})`, tone: 'good', dur: 2.8 }); snd('clear', volUi()); break;
+        case 'boss': { const b = BOSSES[e.b]; feedAdd(`☠ ${b?.name}: ${b?.title}`, '#ff8080'); snd('roar', vol()); shake = Math.max(shake, 0.5); break; }
         case 'hurt':
           if (e.s === mySeat) {
             hurt = Math.min(1, hurt + 0.35 + e.d / 60); shake = Math.max(shake, 0.25 + e.d / 80);
             if (e.fx || e.fy) hurtDir = Math.atan2(e.fy - me.y, e.fx - me.x) - me.a + Math.PI / 2;
-            playSound('hurt', vol());
+            snd('hurt', vol());
           }
           break;
-        case 'down': feedAdd(`${nameOfSeat(e.s)} ${e.rv ? 'cayó · ¡levántalo con E!' : 'quedó fuera'}`, '#ff8080'); if (e.s === mySeat) banner = { title: '¡CAÍSTE!', sub: e.rv ? 'Un compañero puede levantarte' : '', color: '#ff4a4a', t: 2.5, dur: 2.5 }; break;
-        case 'revive': feedAdd(`${nameOfSeat(e.by)} levantó a ${nameOfSeat(e.s)}`, '#7CFF4F'); if (e.s === mySeat || e.by === mySeat) playSound('pick', vol()); break;
+        case 'down': feedAdd(`${nameOfSeat(e.s)} ${e.rv ? 'cayó · ¡levántalo con E!' : 'quedó fuera'}`, '#ff8080'); if (e.s === mySeat) ui.banner({ title: '¡Caíste!', sub: e.rv ? 'Un compañero puede levantarte' : '', tone: 'bad', dur: 2.4 }); break;
+        case 'revive': feedAdd(`${nameOfSeat(e.by)} levantó a ${nameOfSeat(e.s)}`, '#7CFF4F'); if (e.s === mySeat || e.by === mySeat) snd('pick', vol()); break;
         case 'dead': feedAdd(`${nameOfSeat(e.s)} quedó fuera hasta el descanso`, '#ffb3b3'); break;
         case 'swing': if (Math.random() < 0.3) { const z = zombieAt(e.id); spatial('groan', z?.x, z?.y, 0.6); } break;
         case 'spit': { const z = zombieAt(e.id); spatial(e.p === 'paper' ? 'paper' : 'spit', z?.x, z?.y, 0.7); break; }
@@ -368,8 +443,8 @@ export function create(canvas, ctx) {
         case 'thud': spatial('slam', e.x, e.y, 0.7); if (Math.hypot(e.x - me.x, e.y - me.y) < 6) shake = Math.max(shake, 0.4); break;
         case 'summon': feedAdd('¡El Gerente llamó a junta! Llegan refuerzos', '#ff8080'); break;
         case 'jam': feedAdd('¡Atasco de papel! Cúbrete', '#ff8080'); break;
-        case 'pick': if (e.s === mySeat) { popup(DROP_NAMES[e.d] || '+', e.d === 'health' ? '#ff7ab6' : '#FFCC00'); playSound('pick', vol()); } break;
-        case 'buy': if (e.s === mySeat) { const it = SHOP.find((x) => x.id === e.id); popup(`✓ ${it?.name || 'Comprado'}`, '#7CFF4F'); playSound('buy', vol()); } break;
+        case 'pick': if (e.s === mySeat) { popup(DROP_NAMES[e.d] || '+', e.d === 'health' ? '#ff7ab6' : '#FFCC00'); snd('pick', vol()); } break;
+        case 'buy': if (e.s === mySeat) { const it = SHOP.find((x) => x.id === e.id); popup(`✓ ${it?.name || 'Comprado'}`, '#7CFF4F'); snd('buy', volUi()); ui.bought(e.id); } break;
         case 'join': feedAdd(`${nameOfSeat(e.s)} se unió a la partida`, '#9fe3ff'); break;
         case 'left': feedAdd(`${nameOfSeat(e.s)} volvió a la oficina`, '#bbb'); break;
         default: break;
@@ -395,7 +470,7 @@ export function create(canvas, ctx) {
   }
 
   // ---------- Armas ----------
-  const canAct = () => level && mySeat >= 0 && !menu && !shopOpen && myAlive() && latestPhase() !== 'over';
+  const canAct = () => level && mySeat >= 0 && !menu && !shopOpen && entered && !lobbyNow() && myAlive() && latestPhase() !== 'over';
   function switchTo(i) {
     if (!L.owned[i] || i === L.cur) return;
     L.cur = i; L.reloadT = 0; L.switchT = 0.35; switchAnim = 1;
@@ -404,17 +479,17 @@ export function create(canvas, ctx) {
     const W = WEAPONS[L.cur];
     if (L.reloadT > 0 || L.mag[L.cur] >= W.mag || L.res[L.cur] <= 0) return;
     L.reloadT = W.reload;
-    playSound('reload', vol() * 0.8);
+    snd('reload', vol() * 0.8);
   }
   function tryFire() {
     if (!canAct()) return;
     const W = WEAPONS[L.cur];
     if (L.reloadT > 0 || L.switchT > 0 || L.cd > 0) return;
-    if (L.mag[L.cur] <= 0) { if (L.res[L.cur] > 0) startReload(); else { playSound('empty', vol()); L.cd = 0.25; } return; }
+    if (L.mag[L.cur] <= 0) { if (L.res[L.cur] > 0) startReload(); else { snd('empty', vol()); L.cd = 0.25; } return; }
     L.mag[L.cur]--; L.cd = W.every;
     const shot = { x: me.x, y: me.y, a: me.a, p: me.p, w: L.cur, seed: (Math.random() * 2 ** 31) | 0 };
     recoil = Math.min(1.6, recoil + W.kick); flashT = 0.06; shake = Math.max(shake, W.pellets > 1 ? 0.28 : 0.06);
-    playSound(['stapler', 'shotgun', 'nail'][L.cur], vol() * 0.9);
+    snd(['stapler', 'shotgun', 'nail'][L.cur], vol() * 0.9);
     let results;
     if (isHost && Sim) results = sim.fire(Sim, mySeat, shot);
     else {
@@ -444,6 +519,9 @@ export function create(canvas, ctx) {
   const isTyping = () => { const el = document.activeElement; return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); };
   on(window, 'keydown', (e) => {
     if (isTyping()) return;
+    if (e.code === 'KeyF' && !e.repeat && !e.ctrlKey && !e.metaKey) { e.preventDefault(); ctx.fullscreen?.toggle?.(); return; }
+    const scr = uiScreen();
+    if (scr && scr !== 'shop' && ui.handleKey(e)) { keys.clear(); firing = false; return; }
     const k = e.code;
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight'].includes(k)) e.preventDefault();
     keys.add(k);
@@ -453,10 +531,10 @@ export function create(canvas, ctx) {
     if (k === 'KeyR') startReload();
     if (k === 'KeyQ' || k === 'Tab') { e.preventDefault(); cycleWeapon(1); }
     if (k === 'KeyB' && latestPhase() === 'break' && mySeat >= 0) toggleShop();
-    if (k === 'Enter' || k === 'KeyG') { if (latestPhase() === 'over') restartGame(); else if (latestPhase() === 'break') setReady(!ready); }
+    if ((k === 'Enter' || k === 'KeyG') && latestPhase() === 'break') setReady(!ready);
     if (k === 'Escape') { if (shopOpen) toggleShop(false); else menu = !menu; }
     if (k === 'KeyC') setQuality(quality === 'alta' ? 'baja' : 'alta');
-    if (k === 'Space' && mySeat >= 0 && !menu) firing = firing || { used: false };
+    if (k === 'Space' && mySeat >= 0 && !menu && !shopOpen) firing = firing || { used: false };
   });
   on(window, 'keyup', (e) => { keys.delete(e.code); if (e.code === 'Space' && !mouseDown) firing = false; });
   on(window, 'blur', () => { keys.clear(); firing = false; mouseDown = false; });
@@ -464,9 +542,9 @@ export function create(canvas, ctx) {
   const rectPt = (e) => { const r = hudCanvas.getBoundingClientRect(); const k = hudCanvas.width / (r.width || 1); return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k, cx: e.clientX - r.left, cy: e.clientY - r.top }; };
   on(canvas, 'mousemove', (e) => {
     if (document.pointerLockElement === canvas) {
-      const sens = 0.0022;
+      const sens = 0.0022 * opts.sens;
       me.a += e.movementX * sens;
-      me.p = Math.max(-1.35, Math.min(1.35, me.p - e.movementY * sens));
+      me.p = Math.max(-1.35, Math.min(1.35, me.p - e.movementY * sens * (opts.invertY ? -1 : 1)));
     }
     const p = rectPt(e); const k = (window.devicePixelRatio || 1) * (hud.k || 1); hud.hover = { x: p.x / k, y: p.y / k };
   });
@@ -484,11 +562,11 @@ export function create(canvas, ctx) {
   on(canvas, 'contextmenu', (e) => e.preventDefault());
   on(document, 'pointerlockchange', () => {
     const locked = document.pointerLockElement === canvas;
-    if (locked) menu = false;
+    if (locked) { menu = false; fresh = false; }
     else if (!shopOpen && latestPhase() !== 'over') { menu = true; firing = false; mouseDown = false; }
   });
   function lockPointer() {
-    try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => { menu = false; }); } catch { menu = false; }
+    try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => { menu = false; fresh = false; }); } catch { menu = false; fresh = false; }
     audioUnlock();
   }
   function audioUnlock() { playSound('tick', 0.001); }
@@ -504,6 +582,19 @@ export function create(canvas, ctx) {
     if (isHost && Sim) { const r = sim.buy(Sim, mySeat, id); if (!r.ok) popup(r.why, '#ff8080'); }
     else ctx.sendEvent({ k: 'buy', id });
   }
+  // Volver a jugar (siempre tras un clic o una tecla): pantalla completa si se puede y capturar el mouse
+  // fs: al empezar o entrar a una partida, también pantalla completa (si el navegador deja)
+  function resumePlay(fs = false) {
+    audioUnlock();
+    if (touchDevice) { menu = false; fresh = false; } else { menu = true; lockPointer(); }
+    if (fs) ctx.fullscreen?.enter?.();
+  }
+  function setOpt(k, v) {
+    if (k === 'quality') { if (v !== quality) setQuality(v); return; }
+    opts[k] = v;
+    saveOpts(opts);
+    if (k === 'fov') { camera.fov = v; camera.updateProjectionMatrix(); }
+  }
   function setQuality(q) {
     quality = q; store('zombies.quality', q);
     if (!level) return;
@@ -517,7 +608,7 @@ export function create(canvas, ctx) {
   }
   function uiAction(id) {
     audioUnlock();
-    if (id === 'resume') { if (touchDevice) menu = false; else lockPointer(); }
+    if (id === 'resume') resumePlay();
     else if (id === 'leave') ctx.close?.();
     else if (id === 'quality') setQuality(quality === 'alta' ? 'baja' : 'alta');
     else if (id === 'restart') restartGame();
@@ -549,7 +640,7 @@ export function create(canvas, ctx) {
       for (const t of e.changedTouches) {
         const p = rectPt(t);
         if (t.identifier === touch.stickId) { touch.sx = Math.max(-1, Math.min(1, (p.cx - touch.ox) / 50)); touch.sy = Math.max(-1, Math.min(1, (p.cy - touch.oy) / 50)); }
-        if (t.identifier === touch.lookId) { me.a += (p.cx - touch.lx) * 0.006; me.p = Math.max(-1.3, Math.min(1.3, me.p - (p.cy - touch.ly) * 0.006)); touch.lx = p.cx; touch.ly = p.cy; }
+        if (t.identifier === touch.lookId) { me.a += (p.cx - touch.lx) * 0.006 * opts.sens; me.p = Math.max(-1.3, Math.min(1.3, me.p - (p.cy - touch.ly) * 0.006 * opts.sens * (opts.invertY ? -1 : 1))); touch.lx = p.cx; touch.ly = p.cy; }
       }
     }, { passive: false });
     const end = (e) => {
@@ -629,7 +720,7 @@ export function create(canvas, ctx) {
   // ---------- Cuadro ----------
   function frame(dt) {
     if (destroyed || !level) return;
-    time += dt;
+    time += dt; frames++;
     const nowT = performance.now();
     fpsN++;
     if (!fpsAcc) fpsAcc = nowT;
@@ -637,13 +728,19 @@ export function create(canvas, ctx) {
     buildView();
     const P = myState();
     me.alive = P ? P.alive : true;
+    // ¿qué menú se ve? (al cambiar, el lienzo puede cambiar de tamaño en celular)
+    const scr = uiScreen();
+    const msOn = scr === 'main';
+    const inLobby = lobbyNow();
+    menuScene.setActive(msOn);
     // moverme
     if (mySeat >= 0 && level) {
+      const still = menu || shopOpen || !!scr;
       const turn = (keys.has('ArrowLeft') ? -1 : 0) + (keys.has('ArrowRight') ? 1 : 0);
-      if (!menu) me.a += turn * 2.4 * dt;
-      const f = menu || shopOpen ? 0 : (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (touch?.sy || 0);
-      const s = menu || shopOpen ? 0 : (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + (touch?.sx || 0);
-      if (!touch) me.rv = !menu && keys.has('KeyE') ? 1 : 0;
+      if (!still) me.a += turn * 2.4 * dt;
+      const f = still ? 0 : (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (touch?.sy || 0);
+      const s = still ? 0 : (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + (touch?.sx || 0);
+      if (!touch) me.rv = !still && keys.has('KeyE') ? 1 : 0;
       const sprint = keys.has('ShiftLeft') || keys.has('ShiftRight');
       if (me.alive && latestPhase() !== 'over') sim.movePlayer(level, me, { f, s, sprint }, dt, viewZombies);
       else me.mv = 0;
@@ -682,7 +779,8 @@ export function create(canvas, ctx) {
       a.g.rotation.y = Math.PI / 2 - p.a;
       a.fireT = Math.max(0, a.fireT - dt);
       animateAvatar(a.g, { speed: Math.min(1.5, sp / 3), dt, alive: p.alive || p.down, pitch: p.p || 0, fire: a.fireT > 0 ? 1 : 0 });
-      if (!p.alive && !p.down) a.g.visible = false; else a.g.visible = true;
+      // en la sala todos están junto a la cámara del menú: no se dibujan
+      a.g.visible = !(msOn && inLobby) && (p.alive || p.down);
     }
     // zombis
     const list = [];
@@ -697,6 +795,8 @@ export function create(canvas, ctx) {
       list.push({ id: z.id, kind: z.kind, x: z.x * S, z: z.y * S, a: z.a, st: z.st, t: z.t, flash: z.flash > 0 ? 1 : 0, walk: ph, h: z.h });
     }
     if (walkPh.size > 300) { walkPh.clear(); lastPos.clear(); }
+    // menú principal: la cámara recorre la oficina de noche y unos zombis deambulan a lo lejos
+    if (msOn) { const deco = menuScene.update(dt, time, camera); if (inLobby) list.push(...deco); }
     horde.update(list, time);
     if (bossZ) {
       if (!bossObj || bossObj.zid !== bossZ.id) {
@@ -715,7 +815,16 @@ export function create(canvas, ctx) {
     fx.drops.update(viewDrops.map((d) => ({ ...d, x: d.x * S, z: d.y * S })), time);
     fx.particles.update(dt); fx.tracers.update(dt); fx.rings.update(dt);
     const bossWave = isBossWave(isHost && Sim ? Sim.wave : latest?.w || 0) && latestPhase() === 'fight';
-    world.update(dt, time, bossWave);
+    const night = msOn && inLobby;
+    world.update(dt, time, bossWave, night);
+    if (night !== nightOn) {
+      nightOn = night;
+      const c = night ? '#05070b' : '#14161d';
+      scene.background.set(c); scene.fog.color.set(c);
+      scene.fog.near = night ? 3 : quality === 'alta' ? 9 : 6; scene.fog.far = night ? 26 : quality === 'alta' ? 40 : 28;
+    }
+    const fov = msOn ? 62 : opts.fov;
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
     // cámara
     hurt = Math.max(0, hurt - dt * 0.9); shake = Math.max(0, shake - dt * 2.2); hitT = Math.max(0, hitT - dt);
@@ -725,18 +834,81 @@ export function create(canvas, ctx) {
     const sh = shake * 0.08;
     camera.position.set(eye.x * S + (Math.random() - 0.5) * sh, eyeAlive ? EYE_H + by + (Math.random() - 0.5) * sh : 0.45, eye.y * S + (Math.random() - 0.5) * sh);
     camera.rotation.set((eye.p || 0) + recoil * 0.02, -(eye.a || 0) - Math.PI / 2, eyeAlive ? 0 : 0.22);
+    if (msOn) menuScene.update(0, time, camera);
+    // oído en la cámara, pasos, quejidos sueltos y fondo (zumbido; latido con jefe)
+    za.listener(camera.position.x, camera.position.z, msOn ? menuScene.a : eye.a || 0);
+    za.update(dt, { on: true, boss: bossWave, vol: volUi() });
+    if (!msOn && eyeSeat === mySeat && me.mv && me.alive) { stepT -= dt; if (stepT <= 0) { stepT = me.mv === 2 ? 0.29 : 0.42; snd('step', vol() * 0.55); } } else stepT = 0.05;
+    groanT -= dt;
+    if (groanT <= 0) {
+      groanT = rnd(1.4, 3.6);
+      const near = viewZombies.filter((z) => z.st !== 'dead' && z.kind !== 'boss' && Math.hypot(z.x - eye.x, z.y - eye.y) < 16);
+      const z = near[(Math.random() * near.length) | 0];
+      if (z) spatial('groan', z.x, z.y, 0.8);
+      else if (msOn && inLobby) { const d = menuScene.zombies[(Math.random() * menuScene.zombies.length) | 0]; if (d) za.play('groan', { x: d.x0 * S, z: d.y0 * S, vol: volUi() * 0.5 }); }
+    }
     worldFlash.position.copy(camera.position);
-    worldFlash.intensity = flashT > 0 ? 25 : 0;
+    worldFlash.intensity = flashT > 0 && !msOn ? 25 : 0;
     // arma en primera persona
     updateViewModel(dt, eyeSeat, eye, eyeAlive);
 
     renderer.clear();
     renderer.render(scene, camera);
     renderer.clearDepth();
-    if (eyeAlive && !(menu && mySeat >= 0 && latestPhase() === 'intro')) renderer.render(vmScene, vmCam);
-    drawHud(dt, P, eye, eyeSeat);
+    if (eyeAlive && !msOn && scr !== 'over' && !(menu && mySeat >= 0 && latestPhase() === 'intro')) renderer.render(vmScene, vmCam);
+    drawHud(dt, P, eye, eyeSeat, scr);
+    ui.update(uiModel(scr));
+  }
+  let nightOn = false;
+
+  // Qué pantalla de menú toca: sala/menú principal, fin, tienda, pausa o ninguna (jugando)
+  function uiScreen() {
+    if (!level) return null;
+    if (lobbyNow()) return 'main';
+    if (latestPhase() === 'over') return 'over';
+    if (!entered) return 'main';
+    if (mySeat < 0) return null;
+    if (shopOpen) return 'shop';
+    if (menu) return 'pause';
+    return null;
+  }
+  // Lo que necesitan los menús para dibujarse
+  function uiModel(scr) {
+    if (!scr) return { screen: null };
+    const src = isHost && Sim ? Sim.players : latest ? sim.unpackPlayers(latest) : [];
+    const squad = [0, 1, 2, 3].map((i) => {
+      const uid = room.seats[i];
+      if (!uid) return null;
+      const p = src[i];
+      return { seat: i, uid, name: nameOfSeat(i), host: room.host === uid, me: uid === myId, ready: !!p?.ready, alive: p ? p.alive : true, down: !!p?.down, hp: p?.hp ?? 100, kills: p?.kills || 0, dealt: p?.dealt || 0, revives: p?.revives || 0, earned: p?.earned || 0 };
+    });
+    const count = squad.filter(Boolean).length;
+    const guests = squad.filter((q) => q && !q.host);
+    const inLobby = lobbyNow();
+    const users = office.state.users;
+    const live = (office.state.liveGames || []).filter((g) => g.objectId !== ctx.objectId)
+      .map((g) => ({ objectId: g.objectId, floorId: g.floorId, players: g.players, max: g.max, hostName: users[g.players[0]]?.displayName?.split(' ')[0] || 'alguien' }));
+    const P = myState();
+    const lt = isHost ? lobbyT : latest?.lt ?? null;
+    return {
+      screen: scr,
+      mode: mySeat < 0 ? 'watch' : inLobby ? 'lobby' : 'live',
+      isHost, count, solo: count <= 1, squad, live,
+      allReady: guests.length > 0 && guests.every((q) => q.ready),
+      myReady: !!squad[mySeat]?.ready,
+      lobbyT: inLobby && lt != null ? Math.max(0, lt) : null,
+      wave: isHost && Sim ? Sim.wave : latest?.w || 0,
+      pt: isHost && Sim ? Sim.pt : latest?.pt || 0,
+      fresh, ready, joinable: mySeat < 0 && count < 4 && !!ctx.sit,
+      me: P ? { pts: P.pts, owned: P.owned, dmgLvl: P.dmgLvl } : null,
+      opts: { ...opts, quality },
+      canRestart: mySeat >= 0,
+      results: scr === 'over' ? squad.filter(Boolean) : null,
+      summary: scr === 'over' ? { wave: isHost && Sim ? Sim.wave : latest?.w, ...(summary || {}) } : null,
+    };
   }
   const r3 = (v) => Math.round(v * 1000) / 1000;
+  const rnd = (a, b) => a + Math.random() * (b - a);
 
   function updateViewModel(dt, eyeSeat, eye, alive) {
     const uid = room.seats[eyeSeat] ?? myId;
@@ -781,10 +953,14 @@ export function create(canvas, ctx) {
     vmFlashLight.intensity = flashT > 0 ? 6 : 0;
   }
 
-  function drawHud(dt, P, eye, eyeSeat) {
+  function drawHud(dt, P, eye, eyeSeat, scr) {
     for (let i = popups.length - 1; i >= 0; i--) { popups[i].t -= dt * 0.9; if (popups[i].t <= 0) popups.splice(i, 1); }
     for (let i = feed.length - 1; i >= 0; i--) { feed[i].t -= dt; if (feed[i].t <= 0) feed.splice(i, 1); }
-    if (banner) { banner.t -= dt; if (banner.t <= 0) banner = null; }
+    // menú principal y fin: sin HUD (se oculta el lienzo; así tampoco queda "pegado" bajo el desenfoque)
+    const hideHud = scr === 'main' || scr === 'over';
+    const vis = hideHud ? 'hidden' : 'visible';
+    if (hudCanvas.style.visibility !== vis) hudCanvas.style.visibility = vis;
+    if (hideHud) { hud.buttons = []; return; }
     const phase = latestPhase();
     const team = [];
     const src = isHost && Sim ? Sim.players : latest ? sim.unpackPlayers(latest) : [];
@@ -805,13 +981,12 @@ export function create(canvas, ctx) {
       left: isHost && Sim ? sim.remaining(Sim) : latest?.left || 0, bossWave: isBossWave(isHost && Sim ? Sim.wave : latest?.w || 0),
       boss: viewBoss, me: mySeat >= 0 ? (P ? { ...P, hp: P.hp } : { hp: 100, armor: 0, alive: true, pts: 500, owned: L.owned, dmgLvl: 0 }) : null,
       watchPts: watched?.pts, loadout: mySeat >= 0 ? L : null, team, level, zombies: viewZombies.filter((z) => z.st !== 'dead'),
-      hurt, hurtDir, hitT, hitKill, hitHead, spread: Math.min(1, recoil * 0.5 + (me.mv ? 0.25 : 0)), popups, feed, banner: shopOpen || phase === 'over' ? null : banner,
-      menu: menu && phase !== 'over' && (mySeat >= 0 || false), shopOpen, ready, summary: summary || (phase === 'over' ? { wave: latest?.w } : null),
+      hurt, hurtDir, hitT, hitKill, hitHead, spread: Math.min(1, recoil * 0.5 + (me.mv ? 0.25 : 0)), popups, feed,
+      menu: !!scr, shopOpen, ready, cross: { style: opts.cross, color: opts.crossColor }, showMinimap: opts.minimap,
       canRestart: mySeat >= 0, lowHp: P && P.alive && P.hp < 30, prot: P?.prot > 0, revivePrompt, quality, fps, solo: room.seats.filter(Boolean).length <= 1,
       watching: mySeat < 0 ? nameOfSeat(eyeSeat) : null, joinable: mySeat < 0 && room.seats.filter(Boolean).length < 4 && !!ctx.sit,
       touch: touch ? { sx: touch.sx, sy: touch.sy } : null,
     };
-    if (mySeat < 0) st.menu = false;
     const dpr = window.devicePixelRatio || 1;
     hg.setTransform(dpr, 0, 0, dpr, 0, 0);
     hud.draw(hg, cssW, cssH, st);
@@ -823,8 +998,13 @@ export function create(canvas, ctx) {
 
   // ---------- Pruebas automáticas (inofensivo en producción) ----------
   const debug = {
-    state: () => ({ phase: latestPhase(), wave: isHost && Sim ? Sim.wave : latest?.w || 0, left: isHost && Sim ? sim.remaining(Sim) : latest?.left, hp: myState()?.hp, alive: myAlive(), kills: myState()?.kills || 0, score: myState()?.earned || 0, pts: myState()?.pts, zombies: (isHost && Sim ? Sim.zombies : viewZombies).filter((z) => z.st !== 'dead').length, boss: (isHost && Sim ? (Sim.bossId && BOSSES[Sim.zombies.find((z) => z.id === Sim.bossId)?.boss]?.name) : viewBoss?.name) || null, seat: mySeat, host: isHost, players: room.seats.filter(Boolean).length, fps, menu, shopOpen, ready: !!level, quality, x: me.x, y: me.y }),
-    play: () => { menu = false; },
+    state: () => ({ phase: latestPhase(), wave: isHost && Sim ? Sim.wave : latest?.w || 0, left: isHost && Sim ? sim.remaining(Sim) : latest?.left, hp: myState()?.hp, alive: myAlive(), kills: myState()?.kills || 0, score: myState()?.earned || 0, pts: myState()?.pts, zombies: (isHost && Sim ? Sim.zombies : viewZombies).filter((z) => z.st !== 'dead').length, boss: (isHost && Sim ? (Sim.bossId && BOSSES[Sim.zombies.find((z) => z.id === Sim.bossId)?.boss]?.name) : viewBoss?.name) || null, seat: mySeat, host: isHost, players: room.seats.filter(Boolean).length, fps, frames, menu, shopOpen, screen: uiScreen(), lobby: lobbyNow(), ready: !!level, quality, x: me.x, y: me.y }),
+    // jugar ya: arranca la sala (si hace falta) y suelta el menú
+    play: () => { if (isHost && lobby) startMatch(false); entered = true; menu = false; fresh = false; },
+    start: () => startMatch(false),
+    screen: () => uiScreen(),
+    lobby: () => lobbyNow(),
+    opts: () => ({ ...opts, quality }),
     // adelanta la simulación (las pruebas en navegador sin GPU van a pocos cuadros por segundo)
     advance: (sec) => { for (let i = 0; i < sec * 60; i++) hostStep(1 / 60); return latestPhase(); },
     skipTo: (n) => { if (!isHost || !Sim) return false; Sim.zombies = []; Sim.roster = []; Sim.bossPending = 0; Sim.bossId = 0; sim.startWave(Sim, n); return true; },
@@ -844,6 +1024,7 @@ export function create(canvas, ctx) {
       return bd;
     },
     face: (x, y) => { me.a = Math.atan2(y - me.y, x - me.x); me.p = 0; },
+    look: (p) => { me.p = p; },
     shoot: () => { L.cd = 0; L.switchT = 0; if (L.mag[L.cur] <= 0) L.mag[L.cur] = WEAPONS[L.cur].mag; tryFire(); },
     give: (w) => { if (isHost && Sim?.players[mySeat]) Sim.players[mySeat].owned[w] = true; applyGrant({ weapon: w }); },
     shop: (v = true) => toggleShop(v),
@@ -868,6 +1049,7 @@ export function create(canvas, ctx) {
       if (!submitted && mySeat >= 0 && P?.earned > 0 && latestPhase() !== 'intro') { submitted = true; ctx.submitScore?.(P.earned, 'zombies'); }
       for (const c of cleanups) c();
       world?.dispose();
+      menuScene?.dispose();
       scene.traverse((o) => { o.geometry?.dispose?.(); });
       renderer.dispose();
       renderer.forceContextLoss?.();

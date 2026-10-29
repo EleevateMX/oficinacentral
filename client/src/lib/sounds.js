@@ -149,3 +149,20 @@ export function playSpatial(name, volume = 0.6, pan = 0) {
     proc(c, g, c.currentTime);
   } catch { /* sin audio */ }
 }
+
+// Receta procedural hacia un nodo cualquiera (p. ej. un PannerNode de los juegos en 3D).
+// Devuelve false si no hay receta con ese nombre.
+export function playSoundTo(name, volume = 0.6, dest = null) {
+  if (!volume) return true;
+  const c = audioCtx();
+  const proc = PROC[name] || PROC[ALIAS[name]];
+  if (!c || !proc) return false;
+  try {
+    const g = c.createGain();
+    g.gain.value = 0.3 * volume;
+    g.connect(dest || c.destination);
+    proc(c, g, c.currentTime);
+  } catch { /* sin audio */ }
+  return true;
+}
+

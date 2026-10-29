@@ -45,12 +45,15 @@ describe('Zombies: servidor', () => {
     const r = await ana.post('/games/zombies/score', { score: 800 });
     assert.equal(r.status, 200);
     assert.equal(r.data.top.find((t) => t.userId === ana.user.id).score, 1200, 'cuenta la mejor');
+    assert.deepEqual(r.data.me, { score: 1200, rank: 1 }, 'tu mejor marca y tu lugar');
     assert.equal((await admin.post('/games/zombies/score', { score: -5 })).status, 400);
     assert.equal((await admin.post('/games/pong/score', { score: 10 })).status, 404, 'las mesas no tienen puntos');
     assert.equal((await admin.post('/games/arcade/score', { score: 10 })).status, 200, 'el arcade sigue igual');
     const top = (await admin.get('/games/zombies/top')).data.top;
     assert.equal(top[0].userId, ana.user.id);
     assert.equal(top[0].score, 1200);
+    assert.equal((await admin.get('/games/zombies/top')).data.me, null, 'sin récord todavía');
+    assert.equal((await ana.get('/games/zombies/top')).data.me.rank, 1);
   });
 
   test('hasta 4 jugadores; el quinto mira y se sienta cuando hay lugar; el anfitrión pasa al siguiente', async () => {

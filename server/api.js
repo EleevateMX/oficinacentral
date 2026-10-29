@@ -16,7 +16,7 @@ import { openShift, shiftReport } from './shifts.js';
 import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
-import { addScore, topScores, SCORE_GAMES, POINT_GAMES, liveMatches } from './games.js';
+import { addScore, topScores, SCORE_GAMES, POINT_GAMES, liveMatches, bestOf } from './games.js';
 import { activeSeason, SEASON_SETTINGS, validMD } from '../shared/seasons.js';
 import { registerSantaRoutes } from './santa.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
@@ -514,7 +514,7 @@ api.post('/birthdays/:userId/wish', perUser('wish', 10, 60e3), wrap((req, res) =
 api.get('/games/live', (req, res) => res.json({ live: liveMatches() }));
 api.get('/games/:game/top', (req, res) => {
   if (!SCORE_GAMES.includes(req.params.game)) return fail(res, 404, 'No existe');
-  res.json({ top: topScores(req.params.game) });
+  res.json({ top: topScores(req.params.game), me: bestOf(req.user?.id, req.params.game) });
 });
 
 let scoreTimes = new Map();
@@ -528,7 +528,7 @@ api.post('/games/:game/score', wrap((req, res) => {
   if (t - (scoreTimes.get(req.user.id) || 0) < 5000) return fail(res, 429, 'Espera un momento');
   scoreTimes.set(req.user.id, t);
   addScore(req.user.id, game, score);
-  res.json({ ok: true, top: topScores(game) });
+  res.json({ ok: true, top: topScores(game), me: bestOf(req.user.id, game) });
 }));
 
 // Entrar o salir de turno

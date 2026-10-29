@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Trophy, Users, LogOut } from 'lucide-react';
+import { X, Trophy, Users, LogOut, Maximize2, Minimize2 } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { playSound } from '../lib/sounds.js';
 import { api } from '../lib/api.js';
@@ -20,11 +20,26 @@ export default function GameModal({ objectId, game, floorId }) {
   const [top, setTop] = useState(null);
   const [banner, setBanner] = useState(null);
   const canvasRef = useRef(null);
+  const backRef = useRef(null);
+  const [isFs, setIsFs] = useState(false);
+  // Zombies ocupa toda la ventana (y puede pasar a pantalla completa de verdad)
+  const full = !!def.full;
   const handlers = useRef({ input: [], state: [], event: [], room: [] });
   const roomRef = useRef(null);
   const close = () => office.set({ modal: null });
 
   useEffect(() => { def.load().then(setMod); }, [def]);
+
+  // Pantalla completa del navegador (botón, tecla F o al empezar la partida)
+  const fsEl = () => backRef.current;
+  const enterFs = () => { const el = fsEl(); if (!el || document.fullscreenElement) return; try { el.requestFullscreen?.()?.catch?.(() => {}); } catch { /* no se pudo */ } };
+  const exitFs = () => { if (document.fullscreenElement) { try { document.exitFullscreen?.()?.catch?.(() => {}); } catch { /* ya salió */ } } };
+  const toggleFs = () => (document.fullscreenElement ? exitFs() : enterFs());
+  useEffect(() => {
+    const onFs = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => { document.removeEventListener('fullscreenchange', onFs); if (document.fullscreenElement && document.fullscreenElement === backRef.current) exitFs(); };
+  }, []);
 
   // Entrar y salir de la mesa
   useEffect(() => {
@@ -84,6 +99,7 @@ export default function GameModal({ objectId, game, floorId }) {
       volume: Math.max(0.25, vol),
       onRoom: (f) => handlers.current.room.push(f),
       close,
+      fullscreen: { enter: enterFs, toggle: toggleFs, active: () => !!document.fullscreenElement },
       sit: () => s.emit('game:sit', objectId),
       sendInput: (data) => s.emit('game:input', { objectId, data }),
       sendState: (data) => s.emit('game:state', { objectId, data }),
@@ -93,7 +109,7 @@ export default function GameModal({ objectId, game, floorId }) {
       onEvent: (f) => handlers.current.event.push(f),
       sound: (name) => playSound(name, Math.max(0.25, vol)),
       status: setStatus,
-      submitScore: (n) => api.post(`/games/${POINT_GAMES.includes(game) ? game : 'arcade'}/score`, { score: n }).then((r) => { setTop(r.top); return r; }).catch(() => {}),
+      submitScore: (n) => api.post(`/games/${POINT_GAMES.includes(game) ? game : 'arcade'}/score`, { score: n }).then((r) => { if (!persistent) setTop(r.top); return r; }).catch(() => {}),
     };
     setStatus('');
     const inst = mod.create(canvasRef.current, ctx);
@@ -105,20 +121,20 @@ export default function GameModal({ objectId, game, floorId }) {
   const watchers = room?.watchers || [];
   const vs = game === 'arcade'
     ? (players[0] ? `Juega ${players[0].name}` : '')
-    : game === 'zombies'
-      ? `Equipo (${players.filter(Boolean).length}/${seats.length}): ${players.filter(Boolean).map((p) => p.name).join(', ')}`
-      : `${players[0]?.name || '…'} vs ${players[1]?.name || 'la computadora 🤖'}`;
+    : `${players[0]?.name || '…'} vs ${players[1]?.name || 'la computadora 🤖'}`;
 
   return (
-    <div className="modal-backdrop game-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !persistent && close()}>
-      <div className={`game-modal${mod?.meta?.wide ? ' game-wide' : ''}`} role="dialog" aria-modal="true" aria-label={def.name}>
+    <div ref={backRef} className={`modal-backdrop game-backdrop${full ? ' game-full' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && !persistent && close()}>
+      <div className={`game-modal${mod?.meta?.wide || full ? ' game-wide' : ''}`} role="dialog" aria-modal="true" aria-label={def.name}>
         <div className="game-head">
           <b>{def.emoji} {def.name}</b>
-          <span className="game-vs">{vs}</span>
-          {seat < 0 && room && <span className="game-tag">Estás mirando</span>}
+          {/* Zombies: el escuadrón, los récords y los controles están en su propio menú */}
+          {!persistent && <span className="game-vs">{vs}</span>}
+          {!persistent && seat < 0 && room && <span className="game-tag">Estás mirando</span>}
           <span className="flex1" />
-          {watchers.length > 0 && <span className="game-watch" title={watchers.map((id) => users[id]?.displayName).join(', ')}><Users size={14} /> {watchers.length}</span>}
-          <button className="icon-btn" onClick={loadTop} title="Mejores jugadores"><Trophy size={17} /></button>
+          {watchers.length > 0 && <span className="game-watch" title={watchers.map((id) => users[id]?.displayName).join(', ')}><Users size={14} /> {watchers.length}{persistent ? ' mirando' : ''}</span>}
+          {!persistent && <button className="icon-btn" onClick={loadTop} title="Mejores jugadores"><Trophy size={17} /></button>}
+          {full && <button className="icon-btn game-fs" onClick={toggleFs} title={isFs ? 'Salir de pantalla completa (F)' : 'Pantalla completa (F)'} aria-label="Pantalla completa">{isFs ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>}
           {persistent && <button className="btn small game-back" onClick={close}><LogOut size={14} /> Volver a la oficina</button>}
           <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={18} /></button>
         </div>
@@ -139,10 +155,12 @@ export default function GameModal({ objectId, game, floorId }) {
             </div>
           )}
         </div>
-        <div className="game-foot">
-          <span className="game-status">{status}</span>
-          <span className="game-help">{meta.help}</span>
-        </div>
+        {!persistent && (
+          <div className="game-foot">
+            <span className="game-status">{status}</span>
+            <span className="game-help">{meta.help}</span>
+          </div>
+        )}
       </div>
     </div>
   );

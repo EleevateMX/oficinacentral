@@ -33,6 +33,7 @@ export function newPlayer(seat, level) {
     seat, x, y, a: level.startA ?? Math.PI / 2, p: 0, down: false, downT: 0, rv: 0, revive: 0, prot: 0,
     hp: 100, maxHp: 100, armor: 0, alive: true, pts: 500, earned: 0, kills: 0, dmgLvl: 0, owned: [true, false, false], w: 0,
     ready: false, streak: 0, streakT: 0, hurtT: 0, mv: 0,
+    dealt: 0, revives: 0, // estadísticas para la pantalla final
   };
 }
 
@@ -128,7 +129,7 @@ export function traceShot(level, zombies, shot, maxD = 40) {
   let d = wall.t;
   let h = EYE_H + tp * d * TILE_M;
   if (h < 0) { d = -EYE_H / tp / TILE_M; h = 0; }
-  else if (h > 2.7) { d = (2.7 - EYE_H) / tp / TILE_M; h = 2.7; }
+  else if (h > WALL_H) { d = (WALL_H - EYE_H) / tp / TILE_M; h = WALL_H; }
   return { hit: null, d, h, x: shot.x + ca * d, y: shot.y + sa * d };
 }
 
@@ -162,6 +163,8 @@ export function fire(S, seat, shot) {
 
 export function damageZombie(S, z, dmg, seat, ang, head, h) {
   if (z.st === 'dead') return;
+  const P0 = S.players[seat];
+  if (P0) P0.dealt += Math.max(0, Math.min(dmg, z.hp));
   z.hp -= dmg;
   z.flash = 0.12;
   const kb = z.kind === 'boss' ? 0.4 : z.kind === 'tank' ? 0.9 : 2.2;
@@ -340,6 +343,7 @@ function updateDowned(S, dt) {
       D.revive += dt / 2.5;
       if (D.revive >= 1) {
         D.down = false; D.alive = true; D.hp = 40; D.prot = 2; D.revive = 0;
+        helper.revives++;
         S.ev.push({ k: 'revive', s: D.seat, by: helper.seat });
       }
     } else D.revive = Math.max(0, D.revive - dt * 0.5);
@@ -631,7 +635,7 @@ export function pack(S) {
   const boss = S.bossId ? S.zombies.find((z) => z.id === S.bossId) : null;
   return {
     ph: S.phase, pt: Math.round(S.pt * 10) / 10, w: S.wave, left: remaining(S), k: S.kills, fl: S.flicker > 0 ? 1 : 0,
-    P: S.players.map((p) => p && [q2(p.x), q2(p.y), Math.round(p.a * 1000), Math.round(p.p * 1000), Math.ceil(p.hp), Math.ceil(p.armor), p.alive ? 1 : 0, p.w, p.pts, p.earned, p.kills, p.dmgLvl, (p.owned[0] ? 1 : 0) | (p.owned[1] ? 2 : 0) | (p.owned[2] ? 4 : 0), p.ready ? 1 : 0, p.mv || 0, p.hurtT > 0 ? 1 : 0, p.down ? 1 : 0, Math.round(p.revive * 100), Math.ceil(p.downT), p.prot > 0 ? 1 : 0]),
+    P: S.players.map((p) => p && [q2(p.x), q2(p.y), Math.round(p.a * 1000), Math.round(p.p * 1000), Math.ceil(p.hp), Math.ceil(p.armor), p.alive ? 1 : 0, p.w, p.pts, p.earned, p.kills, p.dmgLvl, (p.owned[0] ? 1 : 0) | (p.owned[1] ? 2 : 0) | (p.owned[2] ? 4 : 0), p.ready ? 1 : 0, p.mv || 0, p.hurtT > 0 ? 1 : 0, p.down ? 1 : 0, Math.round(p.revive * 100), Math.ceil(p.downT), p.prot > 0 ? 1 : 0, Math.round(p.dealt), p.revives]),
     Z: S.zombies.map((z) => [z.id, KINDS.indexOf(z.kind), z.boss ? BOSS_ORDER.indexOf(z.boss) : -1, q2(z.x), q2(z.y), Math.round(z.a * 100), Math.round((z.hp / z.max) * 100), ZSTATES.indexOf(z.st), Math.round(z.t * 100), z.flash > 0 ? 1 : 0, z.minion ? 1 : 0]),
     J: S.shots.map((q) => [q.id, PROJ.indexOf(q.kind), q2(q.x), q2(q.y), q2(q.h)]),
     K: S.drops.map((d) => [d.id, DROP_KINDS.indexOf(d.kind), q2(d.x), q2(d.y)]),
@@ -644,7 +648,7 @@ export function pack(S) {
 export function unpackPlayers(d) {
   return (d.P || []).map((p, seat) => p && ({
     seat, x: p[0] / 100, y: p[1] / 100, a: p[2] / 1000, p: p[3] / 1000, hp: p[4], armor: p[5], alive: !!p[6], w: p[7], pts: p[8], earned: p[9], kills: p[10], dmgLvl: p[11],
-    owned: [!!(p[12] & 1), !!(p[12] & 2), !!(p[12] & 4)], ready: !!p[13], mv: p[14], hurt: !!p[15], down: !!p[16], revive: (p[17] || 0) / 100, downT: p[18] || 0, prot: !!p[19], maxHp: 100,
+    owned: [!!(p[12] & 1), !!(p[12] & 2), !!(p[12] & 4)], ready: !!p[13], mv: p[14], hurt: !!p[15], down: !!p[16], revive: (p[17] || 0) / 100, downT: p[18] || 0, prot: !!p[19], dealt: p[20] || 0, revives: p[21] || 0, maxHp: 100,
   }));
 }
 export function unpackZombie(z) {
@@ -661,7 +665,7 @@ export function restoreSim(level, d, { seed = (Math.random() * 2 ** 31) | 0 } = 
   const ps = unpackPlayers(d);
   ps.forEach((p, i) => {
     if (!p) return;
-    S.players[i] = { ...newPlayer(i, level), x: p.x, y: p.y, a: p.a, p: p.p, hp: p.hp, armor: p.armor, alive: p.alive, w: p.w, pts: p.pts, earned: p.earned, kills: p.kills, dmgLvl: p.dmgLvl, owned: p.owned, ready: p.ready, down: p.down, downT: p.downT, revive: p.revive, prot: 2 };
+    S.players[i] = { ...newPlayer(i, level), x: p.x, y: p.y, a: p.a, p: p.p, hp: p.hp, armor: p.armor, alive: p.alive, w: p.w, pts: p.pts, earned: p.earned, kills: p.kills, dmgLvl: p.dmgLvl, owned: p.owned, ready: p.ready, down: p.down, downT: p.downT, revive: p.revive, prot: 2, dealt: p.dealt, revives: p.revives };
   });
   if (S.wave) { S.spec = waveSpec(S.wave, ps.filter(Boolean).length); }
   let maxId = 1;
