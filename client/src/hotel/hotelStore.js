@@ -101,9 +101,10 @@ class Hotel {
   bump(k) { this.set((st) => ({ [k]: st[k] + 1 })); }
 
   // ---------- Navegador ----------
-  async refreshRooms(tab = this.state.navTab || 'official', q = '') {
+  async refreshRooms(tab = this.state.navTab || 'official', q = '', category = this.state.navCat || '') {
     try {
-      const r = await api.get(`/hotel/rooms?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+      // B: navegador social (/hotel/nav: eventos, favoritas, búsqueda owner:/#etiqueta, categorías)
+      const r = await api.get(`/hotel/nav?tab=${tab === 'all' ? 'search' : tab}${q ? `&q=${encodeURIComponent(q)}` : ''}${category ? `&category=${category}` : ''}`);
       this.set({ rooms: r.rooms, navTab: tab, myRooms: r.mine, maxRooms: r.maxRooms });
     } catch (e) { office.toast({ title: e.message, kind: 'error' }); }
   }

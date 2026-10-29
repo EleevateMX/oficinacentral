@@ -6,8 +6,11 @@ import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
 import { hotel, useHotel } from './hotelStore.js';
 import { HotelEngine } from './engine.js';
 import Navigator from './Navigator.jsx';
-import { InventoryPanel, CatalogPanel, SettingsPanel, ChatLogPanel, ItemCard, UserCard } from './Panels.jsx';
+import { InventoryPanel, CatalogPanel, SettingsPanel, ChatLogPanel, ItemCard } from './Panels.jsx';
 import './hotel.css';
+import ConsolePanel, { ConsoleButton } from './social/Console.jsx'; // B: social
+import PersonCard from './social/PersonCard.jsx'; // B: social
+import { RoomSocialBar, EventBanner } from './social/RoomSocial.jsx'; // B: social
 
 const isTyping = () => { const a = document.activeElement; return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable); };
 
@@ -38,6 +41,7 @@ export default function HotelView() {
   return (
     <div className="hotel">
       {screen === 'room' ? <RoomView onExit={exit} /> : <Navigator onExit={exit} />}
+      <ConsolePanel />
       {riding && (
         <div className="ht-elevator">
           <div className="ht-elev-doors"><span /><span /></div>
@@ -104,10 +108,12 @@ function RoomView({ onExit }) {
           <b>{room.name}</b>
           <span>{room.official ? 'Sala oficial GTAHUB' : `de ${owner?.displayName || room.ownerName}`}</span>
         </div>
+        <RoomSocialBar />
       </div>
       <div className="ht-sidebar">
         <button className={`ht-tool ${panel === 'inventory' ? 'on' : ''}`} onClick={() => togglePanel('inventory')} title="Inventario"><Package size={20} /><span>Inventario</span></button>
         <button className={`ht-tool ${panel === 'catalog' ? 'on' : ''}`} onClick={() => togglePanel('catalog')} title="Tienda"><ShoppingBag size={20} /><span>Tienda</span></button>
+        <ConsoleButton />
         <button className={`ht-tool ${panel === 'log' ? 'on' : ''}`} onClick={() => togglePanel('log')} title="Historial del chat"><MessageSquare size={20} /><span>Chat</span></button>
         {(isOwner || admin) && <button className={`ht-tool ${panel === 'settings' ? 'on' : ''}`} onClick={() => togglePanel('settings')} title="Ajustes de la sala"><Settings size={20} /><span>Ajustes</span></button>}
         <div className="ht-tool-sep" />
@@ -115,6 +121,7 @@ function RoomView({ onExit }) {
         <button className="ht-tool sm" onClick={() => engineRef.current?.zoomAt(0.8)} title="Alejar"><ZoomOut size={18} /></button>
         <button className="ht-tool sm" onClick={() => { const e = engineRef.current; if (e && hotel.live.grid) e.center(hotel.live.grid); }} title="Centrar"><LocateFixed size={18} /></button>
       </div>
+      <EventBanner />
       {bells.length > 0 && (
         <div className="ht-bells">
           {bells.map((b) => (
@@ -141,7 +148,7 @@ function RoomView({ onExit }) {
       </div>
       <div className="ht-cards">
         {sel && <ItemCard key={`i${sel.id}`} item={sel} />}
-        {selected?.userId && <UserCard key={`u${selected.userId}`} userId={selected.userId} />}
+        {selected?.userId && <PersonCard key={`u${selected.userId}`} userId={selected.userId} />}
       </div>
       <ChatBar />
     </div>

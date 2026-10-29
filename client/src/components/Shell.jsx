@@ -28,6 +28,7 @@ import Onboarding, { Loader } from './Onboarding.jsx';
 import AppBanner from './AppBanner.jsx';
 import { setupAutoPip } from '../lib/pip.js';
 
+import '../hotel/social/socialStore.js'; // Hotel: consola (mensajes e invitaciones llegan también en la oficina)
 const HotelView = React.lazy(() => import('../hotel/HotelView.jsx')); // Hotel: se carga solo al abrirlo
 
 export default function Shell({ session, onLogout }) {

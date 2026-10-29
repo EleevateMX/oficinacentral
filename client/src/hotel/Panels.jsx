@@ -9,6 +9,7 @@ import { ACCESS, MAX_INVENTORY } from '@shared/hotel.js';
 import { hotel, useHotel } from './hotelStore.js';
 import { drawFurniIcon, DEFAULT_FLOOR, DEFAULT_WALL } from './engine.js';
 import { ACCESS_LABEL, ACCESS_DESC, AccessIcon } from './Navigator.jsx';
+import { RoomSocialSettings } from './social/RoomSocial.jsx'; // B: categoría y etiquetas
 
 const { HOTEL_CATS, HOTEL_FURNI, FURNI_BY_ID } = HC;
 const fmt = (n) => Number(n || 0).toLocaleString('es-MX');
@@ -236,6 +237,7 @@ export function SettingsPanel() {
       </div>
       {access === 'password' && <label className="ht-field"><span>Contraseña {room.hasPassword && <i>(déjala vacía para no cambiarla)</i>}</span><input className="ht-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>}
       <button className="ht-btn primary" disabled={busy || !name.trim()} onClick={save}>Guardar</button>
+      <RoomSocialSettings key={`soc${room.id}`} />
       <div className="ht-field"><span>Color de pared</span>
         <div className="ht-swatches">{WALLS.map((c) => <button key={c} className={`ht-swatch ${(room.wallColor || DEFAULT_WALL) === c ? 'on' : ''}`} style={{ background: c }} onClick={() => patch({ wallColor: c })} aria-label={c} />)}
           <input type="color" className="ht-color" value={room.wallColor || DEFAULT_WALL} onChange={(e) => patch({ wallColor: e.target.value })} /></div>

@@ -3,6 +3,7 @@
 // Orden de dibujo: oscuridad de la puerta → casilla de la puerta → paredes → cuadros de pared →
 // piso → resaltado → furnis y personajes ordenados por profundidad (orden topológico de cajas) → etiquetas → globitos.
 import { TILE_W, TILE_H, Z_PX, WALL_H, toScreen, fromScreen } from '@shared/hotel.js';
+import { drawSocialFx } from './social/fx.js'; // B: respeto y lema
 import { FURNI_BY_ID, footprint } from '@shared/hotelCatalog.js';
 import { buildRoom, canPlace, canPlaceWall, tileInfo, wallTiles, wallBase, maxFloorHeight, floorAt, ROT_VEC, WALL_ITEM_MAX_H } from '@shared/hotelRoom.js';
 import { drawFurni, furniBounds, drawWallItem, wallBounds } from './furniArt.js';
@@ -450,6 +451,7 @@ export class HotelEngine {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const a of avs) this.drawTags(ctx, a, t);
     this.drawBubbles(ctx, t);
+    drawSocialFx(ctx, this, avs, t); // B: respeto y lema
   }
 
   // Rombo de una casilla (a la altura donde uno se pararía)

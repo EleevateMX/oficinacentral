@@ -11,6 +11,7 @@ import { FURNI_BY_ID, STARTER_INVENTORY } from '../shared/hotelCatalog.js';
 import { buildRoom, tileInfo, findPath, canPlace, canPlaceWall, roomAddItem, roomRemoveItem, wallBase, dirOf } from '../shared/hotelRoom.js';
 import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8 } from '../shared/hotelWalk.js';
 import { layHeadTile } from '../shared/hotelSeat.js';
+import { initHotelSocial, registerHotelSocialRoutes, roomSocialOut, userSocialOut, saveRoomSocial } from './hotelSocial.js'; // B: social
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS hotel_rooms (
@@ -88,6 +89,7 @@ function roomOut(r, uid) {
     users: L ? L.users.size : 0, capacity: capOf(r), isOwner: r.owner_id === uid,
     hasPassword: !!r.password_hash, updatedAt: r.updated_at,
     official: !!r.official, officialKey: r.official_key || null,
+    ...roomSocialOut(r, uid), // B: categoría, etiquetas, likes, favorita, evento
   };
 }
 const roomRow = (id) => db.prepare('SELECT * FROM hotel_rooms WHERE id = ?').get(Number(id));
@@ -162,6 +164,7 @@ function userOut(U) {
   const t = Date.now();
   const p = logical(U, t);
   const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null };
+  Object.assign(out, userSocialOut(U.id)); // B: motto, badges, respects
   // Quien llega a media caminata la ve en el mismo paso: desde la casilla del paso en curso y cuándo empezó
   if (U.path && p.moving) Object.assign(out, { path: U.path.slice(p.i), from: [p.x, p.y, p.z], t0: U.t0 + p.i * STEP_MS, n0: (U.n0 || 0) + p.i, now: t });
   else out.path = null;
@@ -620,6 +623,7 @@ export function initHotel(io, socket, userId) {
     if (w?.socket === socket) leaveRoom(userId);
     if (pendingBell.get(userId)?.socket === socket) pendingBell.delete(userId);
   });
+  initHotelSocial(io, socket, userId); // B: consola, seguir/invitar, respetos
 }
 
 // Avisar a la sala que cambió algo de sus ajustes
@@ -633,6 +637,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   const roomLimiter = new Map();
   const buyTimes = new Map();
   setImmediate(ensureOfficialRooms); // al arrancar (después de crear el primer admin)
+  registerHotelSocialRoutes(api, { fail, wrap }); // B: /hotel/social…
   const MINE = 'SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ? AND official = 0';
   const officialFirst = (a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (a.official && b.official ? a.official - b.official : 0);
 
@@ -706,6 +711,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     const o = v.out;
     const id = Number(db.prepare(`INSERT INTO hotel_rooms (owner_id, name, description, model, access, password_hash, wall_color, floor_color, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(uid, o.name, o.description || '', o.model, o.access, o.password_hash || null, o.wall_color || null, o.floor_color || null, now(), now()).lastInsertRowid);
+    saveRoomSocial(id, req.body || {}); // B: categoría y etiquetas
     res.json({ room: roomOut(roomRow(id), uid) });
   }));
 
@@ -726,6 +732,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     if (o.access && o.access !== 'password') o.password_hash = null;
     const cols = Object.keys(o);
     if (cols.length) db.prepare(`UPDATE hotel_rooms SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((c) => o[c]), now(), r.id);
+    saveRoomSocial(r.id, req.body || {}, { partial: true }); // B: categoría y etiquetas
     const R = live.get(r.id);
     if (R) { R.row = roomRow(r.id); broadcastRoom(R); }
     res.json({ room: roomOut(roomRow(r.id), req.user.id) });
@@ -812,6 +819,9 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     res.json({ items });
   }));
 }
+
+// Contexto para los módulos de la parte 2 (cada quien solo AGREGA llaves)
+export const hotelCtx = { live, where, roomRow, roomOut, canEdit, isAdmin, isBanned, capOf, broadcastRoom, getUser, cleanText, key };
 
 // Para pruebas
 export const _hotel = { live, where, seedOfficialRooms };
