@@ -11,6 +11,11 @@ import { FURNI_BY_ID, STARTER_INVENTORY } from '../shared/hotelCatalog.js';
 import { buildRoom, tileInfo, findPath, canPlace, canPlaceWall, roomAddItem, roomRemoveItem, wallBase, dirOf } from '../shared/hotelRoom.js';
 import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8 } from '../shared/hotelWalk.js';
 import { layHeadTile } from '../shared/hotelSeat.js';
+import { initHotelSocial, registerHotelSocialRoutes, roomSocialOut, userSocialOut, saveRoomSocial } from './hotelSocial.js'; // B: social
+import { initHotelEconomy, registerEconomyRoutes } from './hotelEconomy.js'; // créditos, tienda, intercambios, regalos (agente A)
+import { initHotelMechanics } from './hotelMechanics.js';
+import { initHotelAvatar } from './hotelAvatar.js';
+import { registerHotelLanding } from './hotelLanding.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS hotel_rooms (
@@ -88,6 +93,7 @@ function roomOut(r, uid) {
     users: L ? L.users.size : 0, capacity: capOf(r), isOwner: r.owner_id === uid,
     hasPassword: !!r.password_hash, updatedAt: r.updated_at,
     official: !!r.official, officialKey: r.official_key || null,
+    ...roomSocialOut(r, uid), // B: categoría, etiquetas, likes, favorita, evento
   };
 }
 const roomRow = (id) => db.prepare('SELECT * FROM hotel_rooms WHERE id = ?').get(Number(id));
@@ -161,19 +167,20 @@ const destOf = (U) => (U.path ? { x: U.path[U.path.length - 1][0], y: U.path[U.p
 function userOut(U) {
   const t = Date.now();
   const p = logical(U, t);
-  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null };
+  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null };
+  Object.assign(out, userSocialOut(U.id)); // B: motto, badges, respects
   // Quien llega a media caminata la ve en el mismo paso: desde la casilla del paso en curso y cuándo empezó
   if (U.path && p.moving) Object.assign(out, { path: U.path.slice(p.i), from: [p.x, p.y, p.z], t0: U.t0 + p.i * STEP_MS, n0: (U.n0 || 0) + p.i, now: t });
   else out.path = null;
   return out;
 }
-const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null });
+const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null });
 
 function snapshot(R, uid) {
   const m = ROOM_MODELS[R.row.model] || ROOM_MODELS.a;
   return {
     room: roomOut(R.row, uid), heightmap: m.map, door: m.door,
-    items: [...R.items.values()], users: [...R.users.values()].map(userOut),
+    items: [...R.items.values()], users: [...[...R.users.values()].map(userOut), ...hookAll('users', R)],
     rights: [...R.rights], isOwner: R.row.owner_id === uid, admin: isAdmin(uid),
     chat: R.chat.slice(-50),
   };
@@ -192,6 +199,7 @@ function leaveRoom(uid, reason = null) {
   const U = R.users.get(uid);
   if (U?.timer) clearTimeout(U.timer);
   R.users.delete(uid);
+  hook('leave', R, uid);
   IO?.to(key(R.id)).emit('hotel:user:leave', { id: uid });
   unloadIfEmpty(R);
 }
@@ -203,11 +211,13 @@ function enterRoom(socket, uid, R, { spawn = null } = {}) {
   const door = R.grid.door;
   const s = spawn || { x: door.x, y: door.y, z: tileInfo(R.grid, door.x, door.y)?.z ?? 0, dir: dirToward(door.x, door.y, door.x + 1, door.y) ?? 2 }; // entra mirando hacia la sala
   const U = { id: uid, name: u.display_name, avatar: parse(u.avatar, {}), x: s.x, y: s.y, z: s.z, dir: toDir8(s.dir), sit: null, lay: null, path: null, t0: 0, n0: 0, act: null, timer: null, socket };
+  for (const f of hotelCtx.userInit) f(U);
   R.users.set(uid, U);
   where.set(uid, { roomId: R.id, socket });
   socket.join(key(R.id));
   socket.emit('hotel:room', snapshot(R, uid));
   socket.to(key(R.id)).emit('hotel:user:join', userOut(U));
+  hook('enter', R, U);
   return U;
 }
 
@@ -247,6 +257,7 @@ function startWalk(R, U, to, { onArrive = null } = {}) {
   const cur = logical(U, t);
   const occupied = new Set();
   for (const V of R.users.values()) if (V !== U) { const d = destOf(V); occupied.add(`${d.x},${d.y}`); }
+  for (const k of hookAll('occupied', R)) occupied.add(k);
   // A una cama se llega a la casilla de la almohada (ahí se acuesta, como en el original)
   to = layHeadTile(R.grid, to, occupied) || to;
   const re = cur.moving ? rerouteFrom(walkOf(U), t) : null;
@@ -262,7 +273,7 @@ function startWalk(R, U, to, { onArrive = null } = {}) {
     U.x = cur.x; U.y = cur.y; U.z = cur.z;
     U.path = rest; U.t0 = t; U.n0 = 0;
   }
-  U.sit = null; U.lay = null; U.act = null;
+  U.sit = null; U.lay = null; U.act = null; U.sliding = false;
   U.onArrive = onArrive;
   IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0, now: t });
   U.timer = setTimeout(() => arrive(R, U), Math.max(0, walkEnd(walkOf(U)) - Date.now()) + 15);
@@ -272,7 +283,8 @@ function startWalk(R, U, to, { onArrive = null } = {}) {
 function arrive(R, U) {
   if (!U.path || R.users.get(U.id) !== U) return;
   const end = walkAt(walkOf(U), Infinity);
-  if (end.dir != null) U.dir = end.dir;
+  if (end.dir != null && !U.sliding) U.dir = end.dir; // en un rodillo se sigue viendo hacia donde estaba
+  U.sliding = false;
   const last = U.path[U.path.length - 1];
   [U.x, U.y, U.z] = last;
   U.path = null; U.timer = null;
@@ -282,6 +294,7 @@ function arrive(R, U) {
   const cb = U.onArrive; U.onArrive = null;
   // Pisar la puerta = salir de la sala
   if (U.x === R.grid.door.x && U.y === R.grid.door.y) { leaveRoom(U.id, 'door'); return; }
+  hook('arrive', R, U, t);
   if (t?.kind === 'teleport') teleport(R, U, t.item);
   cb?.();
 }
@@ -343,9 +356,12 @@ const persist = (it) => db.prepare('UPDATE hotel_items SET room_id = ?, x = ?, y
 export function initHotel(io, socket, userId) {
   IO = io;
   const limiter = (n, ms) => { let ts = []; return () => { const t = Date.now(); ts = ts.filter((x) => t - x < ms); if (ts.length >= n) return false; ts.push(t); return true; }; };
-  const walkOk = limiter(12, 1000), chatOk = limiter(6, 5000), furniOk = limiter(12, 1000), bellOk = limiter(3, 15000);
+  const walkOk = limiter(12, 1000), chatOk = limiter(6, 5000), cmdOk = limiter(15, 5000), furniOk = limiter(12, 1000), bellOk = limiter(3, 15000);
   const mine = () => { const w = where.get(userId); return w && w.socket === socket ? live.get(w.roomId) : null; };
   const err = (text) => socket.emit('hotel:notice', { text, error: true });
+  initHotelEconomy(io, socket, userId);
+  for (const fn of hotelCtx.socketInits) fn(socket, userId);
+  initHotelAvatar(socket, userId);
 
   socket.on('hotel:enter', (m) => {
     const roomId = Number(m?.roomId);
@@ -397,6 +413,7 @@ export function initHotel(io, socket, userId) {
     const U = R.users.get(userId);
     const x = Math.trunc(Number(m?.x)), y = Math.trunc(Number(m?.y));
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (hook('walk', R, U, { x, y })) return;
     if (!startWalk(R, U, { x, y })) socket.emit('hotel:nopath', { x, y });
   });
 
@@ -441,8 +458,12 @@ export function initHotel(io, socket, userId) {
     if (!R) return;
     const text = cleanText(m?.text);
     const mode = CHAT_MODES.includes(m?.mode) ? m.mode : 'say';
-    if (!text || !chatOk()) return;
+    if (!text) return;
     const U = R.users.get(userId);
+    // Comandos (":algo"): su propio límite, no cuentan como mensajes
+    const cmd = text.startsWith(':') && chatCommands.get(text.split(' ')[0].toLowerCase());
+    if (cmd) { if (!cmdOk()) return; if (cmd({ R, U, text, args: text.split(' ').slice(1), socket, userId, err }) !== false) return; }
+    if (!chatOk()) return;
     const msg = { id: `${userId}-${Date.now()}`, from: userId, name: U.name, text, mode, at: Date.now() };
     if (mode === 'whisper') {
       const to = R.users.get(Number(m?.to));
@@ -455,6 +476,7 @@ export function initHotel(io, socket, userId) {
     R.chat.push(msg);
     if (R.chat.length > 50) R.chat.shift();
     IO.to(key(R.id)).emit('hotel:chat', msg);
+    hook('chat', R, U, msg);
   });
 
   // Escribiendo… (globito de puntos)
@@ -493,6 +515,8 @@ export function initHotel(io, socket, userId) {
     if (!FURNI_BY_ID[it.type]) return err('Ese furni ya no existe');
     const v = placeCommon(R, it, m);
     if (!v.ok) return err(v.reason);
+    const why = hook('place', R, it, m, userId);
+    if (why) return err(why);
     Object.assign(it, v.patch, { roomId: R.id, state: FURNI_BY_ID[it.type].interact === 'dice' ? 1 : 0 });
     persist(it);
     R.items.set(it.id, it);
@@ -569,6 +593,8 @@ export function initHotel(io, socket, userId) {
     if (!it) return;
     const def = FURNI_BY_ID[it.type];
     const U = R.users.get(userId);
+    if (hook('use', R, U, it, m, socket)) return;
+    if (hotelCtx.useHandlers.has(def.interact)) return hotelCtx.useHandlers.get(def.interact)({ R, it, def, U, socket, userId, m });
     if (def.interact === 'dice') {
       if (it.state === 0) return; // ya está rodando
       it.state = 0;
@@ -620,6 +646,7 @@ export function initHotel(io, socket, userId) {
     if (w?.socket === socket) leaveRoom(userId);
     if (pendingBell.get(userId)?.socket === socket) pendingBell.delete(userId);
   });
+  initHotelSocial(io, socket, userId); // B: consola, seguir/invitar, respetos
 }
 
 // Avisar a la sala que cambió algo de sus ajustes
@@ -631,8 +658,9 @@ function broadcastRoom(R) {
 // ---------- REST ----------
 export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   const roomLimiter = new Map();
-  const buyTimes = new Map();
   setImmediate(ensureOfficialRooms); // al arrancar (después de crear el primer admin)
+  registerHotelSocialRoutes(api, { fail, wrap }); // B: /hotel/social…
+  registerHotelLanding(api, { fail, wrap });
   const MINE = 'SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ? AND official = 0';
   const officialFirst = (a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (a.official && b.official ? a.official - b.official : 0);
 
@@ -706,6 +734,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     const o = v.out;
     const id = Number(db.prepare(`INSERT INTO hotel_rooms (owner_id, name, description, model, access, password_hash, wall_color, floor_color, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(uid, o.name, o.description || '', o.model, o.access, o.password_hash || null, o.wall_color || null, o.floor_color || null, now(), now()).lastInsertRowid);
+    saveRoomSocial(id, req.body || {}); // B: categoría y etiquetas
     res.json({ room: roomOut(roomRow(id), uid) });
   }));
 
@@ -726,6 +755,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     if (o.access && o.access !== 'password') o.password_hash = null;
     const cols = Object.keys(o);
     if (cols.length) db.prepare(`UPDATE hotel_rooms SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((c) => o[c]), now(), r.id);
+    saveRoomSocial(r.id, req.body || {}, { partial: true }); // B: categoría y etiquetas
     const R = live.get(r.id);
     if (R) { R.row = roomRow(r.id); broadcastRoom(R); }
     res.json({ room: roomOut(roomRow(r.id), req.user.id) });
@@ -771,22 +801,8 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     res.json({ items: inventory(req.user.id), max: MAX_INVENTORY });
   }));
 
-  // Tienda (por ahora todo es gratis)
-  api.post('/hotel/buy', wrap((req, res) => {
-    const uid = req.user.id;
-    const def = FURNI_BY_ID[req.body?.type];
-    if (!def) return fail(res, 400, 'Ese furni no existe');
-    const t = Date.now();
-    const times = (buyTimes.get(uid) || []).filter((x) => t - x < 60e3);
-    if (times.length >= 30) return fail(res, 429, 'Vas muy rápido: espera un minuto');
-    if (def.exclusive && req.user.role !== 'admin') return fail(res, 403, 'Este furni es exclusivo HUB: solo los admins pueden obtenerlo');
-    const need = def.interact === 'teleport' ? 2 : 1;
-    if (invCount(uid) + need > MAX_INVENTORY) return fail(res, 400, `Tu inventario está lleno (máximo ${MAX_INVENTORY})`);
-    times.push(t);
-    buyTimes.set(uid, times);
-    const color = typeof req.body?.color === 'string' ? req.body.color : null;
-    res.json({ items: buy(uid, def.id, color) });
-  }));
+  // Tienda con créditos HUB, regalos, canjes e intercambios: server/hotelEconomy.js
+  registerEconomyRoutes(api, { fail, wrap, notify });
 
   // Regalar un furni (solo admins; incluye exclusivos): llega al inventario de la persona con aviso
   const giftTimes = new Map();
@@ -813,5 +829,21 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   }));
 }
 
+
 // Para pruebas
 export const _hotel = { live, where, seedOfficialRooms };
+
+// ---------- Contexto para los módulos del Hotel (mecánicas, economía, social…): solo se AGREGAN llaves ----------
+// chatCommands: ':cmd' → ({ R, U, socket, text, args, err }) — el mensaje no se publica.
+// hooks: cada gancho es una lista de funciones; las de 'use', 'walk' y 'place' cortan el flujo si regresan algo.
+export const chatCommands = new Map();
+export const hotelCtx = {
+  get io() { return IO; }, get IO() { return IO; }, useHandlers: new Map(), roomRow, itemOut, db, live, where, key, logical, startWalk, arrive, leaveRoom, userState, userOut, persist, flash, refreshUsers, footTiles,
+  canEdit, isAdmin, getUser, cleanText, chatCommands, socketInits: [],
+  roomOut, isBanned, capOf, broadcastRoom, addItem, buy, invCount, inventory, // social y economía
+  tileInfo, emitUser: (R, U) => IO?.to(key(R.id)).emit('hotel:user', userState(U)), userInit: [], // avatar (D)
+  hooks: { use: [], walk: [], arrive: [], enter: [], leave: [], chat: [], place: [], users: [], occupied: [] },
+};
+function hook(name, ...a) { for (const fn of hotelCtx.hooks[name]) { const r = fn(...a); if (r) return r; } return null; }
+function hookAll(name, ...a) { return hotelCtx.hooks[name].flatMap((fn) => fn(...a) || []); }
+initHotelMechanics(hotelCtx);

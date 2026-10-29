@@ -23,7 +23,20 @@ export function freePort() {
 }
 
 // Arranca `node server/index.js` en un puerto libre con un DATA_DIR nuevo.
+// Las pruebas corren en paralelo: si otro proceso gana el puerto entre freePort() y el arranque
+// (EADDRINUSE), se reintenta con otro puerto.
 export async function startServer({ env = {}, timeoutMs = 15000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try { return await startOnce({ env, timeoutMs }); } catch (e) {
+      lastErr = e;
+      if (!e.portInUse) throw e;
+    }
+  }
+  throw lastErr;
+}
+
+async function startOnce({ env, timeoutMs }) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuvora-test-'));
   const port = await freePort();
   const child = spawn(process.execPath, ['server/index.js'], {
@@ -48,16 +61,23 @@ export async function startServer({ env = {}, timeoutMs = 15000 } = {}) {
 
   const url = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + timeoutMs;
+  const fail = (msg, portInUse = false) => {
+    if (child.exitCode === null) child.kill('SIGKILL');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    return Object.assign(new Error(`${msg}:\n${output}`), { portInUse });
+  };
   for (;;) {
-    if (child.exitCode !== null) throw new Error(`El servidor terminó al arrancar (código ${child.exitCode}):\n${output}`);
-    try {
-      const r = await fetch(`${url}/api/health`);
-      if (r.ok) break;
-    } catch { /* todavía no escucha */ }
-    if (Date.now() > deadline) {
-      child.kill('SIGKILL');
-      throw new Error(`El servidor no respondió a tiempo:\n${output}`);
+    if (/EADDRINUSE/.test(output)) throw fail('El puerto ya estaba ocupado', true);
+    if (child.exitCode !== null) throw fail(`El servidor terminó al arrancar (código ${child.exitCode})`);
+    // Solo cuenta si NUESTRO proceso ya escucha (imprime "Oficina lista"); si no, la respuesta podría ser de otro
+    if (/Oficina lista en/.test(output)) {
+      try {
+        // Tiempo límite por intento: si algo no contesta, no esperamos minutos
+        const r = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) break;
+      } catch { /* todavía no responde */ }
     }
+    if (Date.now() > deadline) throw fail('El servidor no respondió a tiempo');
     await new Promise((r) => setTimeout(r, 100));
   }
 

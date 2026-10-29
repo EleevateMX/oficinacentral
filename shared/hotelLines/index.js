@@ -18,6 +18,7 @@ import jardin from './jardin.js';
 import deportes from './deportes.js';
 import fiesta from './fiesta.js';
 import hub from './hub.js';
+import mecanica from './mecanica.js';
 
 export const HOTEL_LINES = [
   { id: 'urbana', name: 'Urbana', desc: 'Metal y blanco-negro: elegante y moderna' },
@@ -37,6 +38,12 @@ export const HOTEL_LINES = [
   { id: 'deportes', name: 'Deportes', desc: 'Gym, porterías, aros de básquet' },
   { id: 'fiesta', name: 'Fiesta', desc: 'Máquinas de bebidas y helado, bola disco' },
   { id: 'hub', name: 'Exclusivo HUB', desc: 'Solo admins: rarezas de la marca' },
+  { id: 'mecanica', name: 'Mecánica y Wired', desc: 'Rodillos, expendedoras, rueda, marcador y wired' },
 ];
 
-export const LINE_FURNI = [urbana, puravida, plastik, hielo, cabana, oficina, cristal, castillo, vintage, zen, retro70, cocina, bano, jardin, deportes, fiesta, hub].flat();
+export const LINE_FURNI = [urbana, puravida, plastik, hielo, cabana, oficina, cristal, castillo, vintage, zen, retro70, cocina, bano, jardin, deportes, fiesta, hub, mecanica].flat();
+
+// Línea "Economía HUB" (agente A: monedas canjeables y caja de regalo). Registro aparte para no chocar con otras líneas.
+import economia from './economia.js';
+HOTEL_LINES.push({ id: 'economia', name: 'Economía HUB', desc: 'Monedas y lingotes que se canjean por créditos' });
+LINE_FURNI.push(...economia);

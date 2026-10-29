@@ -3,13 +3,16 @@
 // Orden de dibujo: oscuridad de la puerta → casilla de la puerta → paredes → cuadros de pared →
 // piso → resaltado → furnis y personajes ordenados por profundidad (orden topológico de cajas) → etiquetas → globitos.
 import { TILE_W, TILE_H, Z_PX, WALL_H, toScreen, fromScreen } from '@shared/hotel.js';
+import { drawSocialFx } from './social/fx.js'; // B: respeto y lema
 import { FURNI_BY_ID, footprint } from '@shared/hotelCatalog.js';
 import { buildRoom, canPlace, canPlaceWall, tileInfo, wallTiles, wallBase, maxFloorHeight, floorAt, ROT_VEC, WALL_ITEM_MAX_H } from '@shared/hotelRoom.js';
 import { drawFurni, furniBounds, drawWallItem, wallBounds } from './furniArt.js';
 import { drawAvatarFace } from '../lib/render.js';
 import { hotel } from './hotelStore.js';
 import { avatarFrame, avatarBudget } from './avatarIso.js';
+import { drawAvatarBehind, drawAvatarFront, drawTyping, avatarAlpha, avatarOpts } from './avatarFx.js';
 import { frontOf } from '@shared/hotelSeat.js';
+import { itemPos, mechTint, drawRoomTint } from './mechanics.js';
 
 export const DEFAULT_FLOOR = '#b59a7a';
 export const DEFAULT_WALL = '#e7dfd3';
@@ -407,9 +410,10 @@ export class HotelEngine {
       const def = FURNI_BY_ID[it.type];
       if (!def) return;
       const { w, l } = footprint(def, it.rot);
-      const [ox, oy] = P(it.x, it.y, it.z);
+      const [ix, iy, iz] = itemPos(it, t); // deslizándose (rodillos / wired)
+      const [ox, oy] = P(ix, iy, iz);
       const fb = furniBounds(def, it.rot);
-      list.push({ key: k++, item: it, def, ox, oy, fb, x1: it.x, y1: it.y, x2: it.x + w, y2: it.y + l, z1: it.z, z2: it.z + Math.max(0.03, def.h), sx1: ox + fb.x, sx2: ox + fb.x + fb.w, sy1: oy + fb.y, sy2: oy + fb.y + fb.h });
+      list.push({ key: k++, item: it, def, ox, oy, fb, x1: ix, y1: iy, x2: ix + w, y2: iy + l, z1: iz, z2: iz + Math.max(0.03, def.h), sx1: ox + fb.x, sx2: ox + fb.x + fb.w, sy1: oy + fb.y, sy2: oy + fb.y + fb.h });
     };
     for (const it of L.items.values()) if (!it.wall && !(placing?.move && it.id === placing.itemId)) addItem(it);
     if (ghostItem) addItem(ghostItem);
@@ -428,7 +432,7 @@ export class HotelEngine {
       ctx.translate(d.ox, d.oy);
       if (d.item.ghost) ctx.globalAlpha = d.item.ok ? 0.8 : 0.45;
       const hov = this.hover?.kind === 'item' && this.hover.item.id === d.item.id;
-      drawFurni(ctx, d.def, d.item, { t, hover: hov, ghost: !!d.item.ghost, layer });
+      drawFurni(ctx, d.def, d.item, { t, hover: hov, ghost: !!d.item.ghost, layer, tint: mechTint(d.item) });
       ctx.restore();
     };
     for (const d of sorted) {
@@ -442,6 +446,7 @@ export class HotelEngine {
       drawItem(d, !d.item.ghost && seated.has(d.item.id) ? layerOf(d.item.id, -1) : null);
       if (!d.item.ghost) pick.push({ kind: 'item', item: d.item, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= d.sx1 && wx <= d.sx2 && wy >= d.sy1 && wy <= d.sy2 && this.inItemShape(d, wx, wy); } });
     }
+    drawRoomTint(ctx, this.canvas, L.items); // regulador de luz
     this.pick = pick;
     this.hover = this.mouse ? this.hitTest(this.mouse) : null;
     this.canvas.style.cursor = placing ? (this.ghost?.ok ? 'copy' : 'not-allowed') : this.hover ? 'pointer' : 'default';
@@ -450,6 +455,7 @@ export class HotelEngine {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const a of avs) this.drawTags(ctx, a, t);
     this.drawBubbles(ctx, t);
+    drawSocialFx(ctx, this, avs, t); // B: respeto y lema
   }
 
   // Rombo de una casilla (a la altura donde uno se pararía)
@@ -487,7 +493,7 @@ export class HotelEngine {
     let pose = 'stand', frame = 0, seatH = 0;
     const ti = sit || lay ? tileInfo(grid, U.x, U.y) : null;
     const seat = ti && (ti.kind === 'sit' || ti.kind === 'lay') ? ti.item : null;
-    if (moving) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
+    if (moving && !U.walk.slide) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
     else if (lay) pose = 'lay';
     else if (sit) { pose = 'sit'; const f = floorAt(grid, U.x, U.y); seatH = Number.isNaN(f) ? 0.6 : Math.max(0, U.rz - f); }
     else if (U.act === 'wave') { pose = 'wave'; frame = Math.floor((t - (U.actT || 0)) / 280) % 2; }
@@ -500,7 +506,8 @@ export class HotelEngine {
     }
     const blink = !moving && (t + U.id * 1337) % 4200 < 140;
     const talk = !!(U.talkUntil && t < U.talkUntil && Math.floor(t / 130) % 2 === 0);
-    let fr = avatarFrame(U.avatar, { dir: U.dir, head, pose, frame, blink, talk, seatH }, { force: !U._fr });
+    if (pose === 'stand' && U.sign != null) pose = 'sign';
+    let fr = avatarFrame(U.avatar, { dir: U.dir, head, pose, frame, blink, talk, seatH, ...avatarOpts(U, t, moving) }, { force: !U._fr });
     if (fr) U._fr = fr; else fr = U._fr;
     // En la columna de la puerta el personaje se ve en el hueco (pegado a la pared), no detrás de ella
     const door = grid.door;
@@ -637,22 +644,26 @@ export class HotelEngine {
     const { fr, fx, fy } = a;
     // Sombra suave en el piso (o encima del furni donde está parado)
     if (a.shadow) {
-      ctx.fillStyle = 'rgba(16,10,28,.12)';
-      ctx.beginPath(); ctx.ellipse(fx, fy, 17, 8.5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(16,10,28,.2)';
-      ctx.beginPath(); ctx.ellipse(fx, fy, 12.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(16,10,28,.1)';
+      ctx.beginPath(); ctx.ellipse(fx, fy, 15, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(16,10,28,.18)';
+      ctx.beginPath(); ctx.ellipse(fx, fy, 10.5, 5.2, 0, 0, Math.PI * 2); ctx.fill();
     }
+    drawAvatarBehind(ctx, a, t);
     if (!fr) return;
-    // Pixel-art nítido: se pinta en píxeles del dispositivo, alineado a la rejilla y sin suavizar
-    const s = this.cam.zoom * this.dpr;
+    // Pixel-art nítido: cada píxel del dibujo = un número entero de píxeles del dispositivo, sin suavizar
+    const raw = this.cam.zoom * this.dpr * fr.k;
+    const ks = raw >= 1.5 ? Math.round(raw) : raw;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (a.clipY != null) { ctx.beginPath(); ctx.rect(0, 0, this.canvas.width, Math.round((a.clipY * this.cam.zoom + this.cam.y) * this.dpr)); ctx.clip(); }
-    ctx.imageSmoothingEnabled = s < 0.99;
-    const X = Math.round((fx * this.cam.zoom + this.cam.x) * this.dpr - fr.ax * s);
-    const Y = Math.round((fy * this.cam.zoom + this.cam.y) * this.dpr - fr.ay * s);
-    ctx.drawImage(fr.cv, X, Y, Math.round(fr.w * s), Math.round(fr.h * s));
+    ctx.imageSmoothingEnabled = raw < 1.5;
+    ctx.globalAlpha = avatarAlpha(a.U, t);
+    const X = Math.round((fx * this.cam.zoom + this.cam.x) * this.dpr - fr.sax * ks);
+    const Y = Math.round((fy * this.cam.zoom + this.cam.y) * this.dpr - fr.say * ks);
+    ctx.drawImage(fr.cv, X, Y, Math.round(fr.sw * ks), Math.round(fr.sh * ks));
     ctx.restore();
+    drawAvatarFront(ctx, a, t);
   }
   userPick(a) {
     return { kind: 'user', id: a.U.id, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= a.sx1 + 4 && wx <= a.sx2 - 4 && wy >= a.sy1 + 3 && wy <= a.sy2 - 2; } };
@@ -679,16 +690,7 @@ export class HotelEngine {
     }
     // Escribiendo…
     const ty = hotel.live.typing.get(U.id);
-    if (ty && Date.now() - ty < 6000) {
-      const y = s.y - (hov || sel ? 28 : 8);
-      ctx.fillStyle = '#fff';
-      roundRect(ctx, s.x - 17, y - 16, 34, 16, 8); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
-      for (let i = 0; i < 3; i++) {
-        ctx.fillStyle = Math.floor(t / 250) % 3 === i ? '#141414' : '#9a9aa2';
-        ctx.beginPath(); ctx.arc(s.x - 8 + i * 8, y - 8, 2.4, 0, Math.PI * 2); ctx.fill();
-      }
-    }
+    if (ty && Date.now() - ty < 6000) drawTyping(ctx, s.x, s.y - (hov || sel ? 26 : 6), t, Date.now() - ty);
   }
 
   // Globitos de chat: aparecen sobre la cabeza y suben en filas, como en el hotel clásico

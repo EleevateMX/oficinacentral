@@ -103,7 +103,7 @@ test('mesa de juego: asientos, controles al anfitrión y victoria contada', asyn
 test('aviso diario de cumpleaños al webhook', async () => {
   const http = await import('node:http');
   const got = [];
-  const hook = http.createServer((req, res) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { got.push(JSON.parse(b)); res.end('ok'); }); });
+  const hook = http.createServer((req, res) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { try { got.push(JSON.parse(b)); } catch { /* otra prueba tocó este puerto */ } res.end('ok'); }); });
   await new Promise((r) => hook.listen(0, r));
   const s2 = await startServer({ env: { BIRTHDAY_WEBHOOK_URL: `http://127.0.0.1:${hook.address().port}/hook`, OFFICE_TIMEZONE: 'UTC' } });
   try {

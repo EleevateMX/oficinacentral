@@ -1,12 +1,15 @@
-// Hotel: navegador de salas (Populares / Mis salas / Buscar) y diálogo para crear sala.
+// Hotel: navegador de salas (Oficiales / Populares / Eventos / Favoritas / Mis salas / Buscar) y diálogo para crear sala.
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Plus, Search, Users, Lock, Bell, KeyRound, Flame, Home, X, Building2, BadgeCheck } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Users, Lock, Bell, KeyRound, Flame, Home, X, Building2, BadgeCheck, PartyPopper, Star, Heart, Clock } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar } from '../components/ui.jsx';
 import { ROOM_MODELS, ACCESS } from '@shared/hotel.js';
 import { hotel, useHotel } from './hotelStore.js';
 import { drawModelPreview } from './engine.js';
+import { ROOM_CATEGORIES, countdown, eventActive, cleanTags } from '@shared/hotelSocial.js';
+import { ConsoleButton } from './social/Console.jsx';
+import { CategoryPill, CategoryTagsFields, toggleFav, useNow } from './social/RoomSocial.jsx';
 
 export const ACCESS_LABEL = { open: 'Abierta', bell: 'Con timbre', password: 'Con contraseña', closed: 'Cerrada' };
 export const ACCESS_DESC = {
@@ -31,6 +34,8 @@ export default function Navigator({ onExit }) {
   const entering = useHotel((s) => s.entering);
   const waiting = useHotel((s) => s.waiting);
   const users = useOffice((s) => s.users);
+  const cat = useHotel((s) => s.navCat || '');
+  const now = useNow();
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const [pw, setPw] = useState('');
@@ -46,7 +51,13 @@ export default function Navigator({ onExit }) {
     if (r.access === 'password' && !r.isOwner && office.state.me.role !== 'admin') { setPw(''); hotel.set({ entering: { roomId: r.id, askPassword: true, room: r } }); return; }
     hotel.enter(r.id);
   };
-  const askRoom = entering?.askPassword && (rooms || []).find((r) => r.id === entering.roomId);
+  const askRoom = entering?.askPassword && ((rooms || []).find((r) => r.id === entering.roomId) || entering.room);
+  const setCat = (c) => { hotel.set({ navCat: c }); hotel.refreshRooms(tab, tab === 'all' ? q : '', c); };
+  const fav = async (e, r) => {
+    e.stopPropagation();
+    const x = await toggleFav(r);
+    if (x) hotel.set((st) => ({ rooms: tab === 'favorites' && !x.fav ? st.rooms.filter((y) => y.id !== r.id) : st.rooms.map((y) => (y.id === r.id ? { ...y, ...x } : y)) }));
+  };
 
   return (
     <div className="ht-nav">
@@ -59,36 +70,53 @@ export default function Navigator({ onExit }) {
             <p>Tu cuarto, tus furnis, tu gente. Decora, invita y platica.</p>
           </div>
         </div>
-        <button className="ht-btn primary" onClick={() => setCreating(true)} disabled={myRooms >= maxRooms} title={myRooms >= maxRooms ? `Máximo ${maxRooms} salas` : ''}><Plus size={16} /> Crear sala</button>
+        <div className="ht-nav-actions">
+          <ConsoleButton className="ht-btn ht-nav-console" />
+          <button className="ht-btn primary" onClick={() => setCreating(true)} disabled={myRooms >= maxRooms} title={myRooms >= maxRooms ? `Máximo ${maxRooms} salas` : ''}><Plus size={16} /> Crear sala</button>
+        </div>
       </header>
       <div className="ht-tabs">
-        {[['official', BadgeCheck, 'Oficiales'], ['popular', Flame, 'Populares'], ['mine', Home, 'Mis salas'], ['all', Search, 'Buscar']].map(([id, Icon, label]) => (
+        {[['official', BadgeCheck, 'Oficiales'], ['popular', Flame, 'Populares'], ['events', PartyPopper, 'Eventos'], ['favorites', Star, 'Favoritas'], ['mine', Home, 'Mis salas'], ['all', Search, 'Buscar']].map(([id, Icon, label]) => (
           <button key={id} className={`ht-tab ${tab === id ? 'on' : ''}`} onClick={() => hotel.refreshRooms(id, id === 'all' ? q : '')}><Icon size={15} /> {label}</button>
         ))}
-        {tab === 'all' && <input className="ht-input ht-search" autoFocus placeholder="Busca una sala por nombre…" value={q} onChange={(e) => setQ(e.target.value)} />}
+        {tab === 'all' && <input className="ht-input ht-search" autoFocus placeholder="Nombre, owner:usuario o #etiqueta" value={q} onChange={(e) => setQ(e.target.value)} />}
         {tab === 'mine' && <span className="ht-tabs-note">{myRooms} de {maxRooms} salas</span>}
       </div>
+      {(tab === 'popular' || tab === 'all') && (
+        <div className="ht-cat-row">
+          <button className={`ht-chip ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>Todas</button>
+          {ROOM_CATEGORIES.map((c) => <button key={c.id} className={`ht-chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(cat === c.id ? '' : c.id)}>{c.emoji} {c.name}</button>)}
+        </div>
+      )}
       <div className="ht-rooms">
         {rooms == null && <div className="ht-empty">Cargando salas…</div>}
         {rooms?.length === 0 && (
           <div className="ht-empty">
-            {tab === 'mine' ? <>Aún no tienes sala. <button className="ht-link" onClick={() => setCreating(true)}>¡Crea la tuya!</button></> : tab === 'all' ? 'No hay salas con ese nombre' : <>Todavía no hay salas en el Hotel. <button className="ht-link" onClick={() => setCreating(true)}>Estrena la primera</button></>}
+            {tab === 'mine' ? <>Aún no tienes sala. <button className="ht-link" onClick={() => setCreating(true)}>¡Crea la tuya!</button></> : tab === 'all' ? 'No hay salas con esa búsqueda' : tab === 'events' ? <>No hay eventos ahora. Si tienes sala, ábrela y toca <b>ⓘ → Promocionar evento</b>.</> : tab === 'favorites' ? <>Aún no tienes favoritas. Toca la <Star size={13} /> de una sala para guardarla.</> : cat ? 'No hay salas en esa categoría' : <>Todavía no hay salas en el Hotel. <button className="ht-link" onClick={() => setCreating(true)}>Estrena la primera</button></>}
           </div>
         )}
         {rooms?.map((r) => {
           const owner = users[r.ownerId] || { id: r.ownerId, displayName: r.ownerName, avatar: r.ownerAvatar };
           const full = r.users >= r.capacity;
+          const ev = eventActive(r.event, now) ? r.event : null;
           return (
-            <button key={r.id} className={`ht-room-card ${r.official ? 'official' : ''}`} onClick={() => open(r)} disabled={entering?.roomId === r.id && !entering.askPassword}>
+            <button key={r.id} className={`ht-room-card ${r.official ? 'official' : ''} ${ev ? 'has-event' : ''}`} onClick={() => open(r)} disabled={entering?.roomId === r.id && !entering.askPassword}>
               <div className="ht-room-thumb" style={{ '--floor': r.floorColor || '#b59a7a' }}>
                 <ModelPreview model={r.model} />
                 <span className={`ht-pill ${r.users ? 'live' : ''} ${full ? 'full' : ''}`}><Users size={12} /> {r.users}/{r.capacity}</span>
                 {r.access !== 'open' && <span className="ht-lock" title={ACCESS_LABEL[r.access]}><AccessIcon access={r.access} /></span>}
                 {r.official && <span className="ht-official-badge" title="Sala oficial de GTAHUB"><BadgeCheck size={12} /> GTAHUB</span>}
+                <span role="button" tabIndex={0} className={`ht-card-star ${r.fav ? 'on' : ''}`} title={r.fav ? 'Quitar de favoritas' : 'Guardar en favoritas'} onClick={(e) => fav(e, r)} onKeyDown={(e) => { if (e.key === 'Enter') fav(e, r); }}><Star size={14} fill={r.fav ? 'currentColor' : 'none'} /></span>
+                {ev && <span className="ht-ev-ribbon"><PartyPopper size={12} /> EVENTO</span>}
               </div>
               <div className="ht-room-info">
                 <b>{r.name}</b>
-                {r.description && <span className="ht-room-desc">{r.description}</span>}
+                {ev ? <span className="ht-room-ev"><b>{ev.title}</b><span><Clock size={11} /> {countdown(ev.endsAt - now)}</span></span> : r.description && <span className="ht-room-desc">{r.description}</span>}
+                <span className="ht-room-meta">
+                  <CategoryPill id={r.category} small />
+                  {(r.tags || []).map((t) => <span key={t} className="ht-tag sm">#{t}</span>)}
+                  <span className={`ht-likes ${r.liked ? 'on' : ''}`} title={`${r.likes || 0} likes`}><Heart size={12} fill={r.liked ? 'currentColor' : 'none'} /> {r.likes || 0}</span>
+                </span>
                 {r.official
                   ? <span className="ht-room-owner ht-official-owner"><BadgeCheck size={15} /> Sala oficial</span>
                   : <span className="ht-room-owner"><Avatar user={owner} size={18} showStatus={false} /> {r.isOwner ? 'Tuya' : owner.displayName}</span>}
@@ -131,13 +159,15 @@ function CreateRoom({ onClose }) {
   const [model, setModel] = useState('b');
   const [access, setAccess] = useState('open');
   const [password, setPassword] = useState('');
+  const [category, setCategory] = useState('otros');
+  const [tags, setTags] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setError('');
     try {
-      const r = await api.post('/hotel/rooms', { name, description, model, access, password: access === 'password' ? password : undefined });
+      const r = await api.post('/hotel/rooms', { name, description, model, access, password: access === 'password' ? password : undefined, category, tags: cleanTags(tags) });
       onClose();
       hotel.refreshRooms('mine');
       hotel.enter(r.room.id);
@@ -169,6 +199,7 @@ function CreateRoom({ onClose }) {
             <small className="ht-muted">{ACCESS_DESC[access]}</small>
           </div>
           {access === 'password' && <label className="ht-field"><span>Contraseña</span><input className="ht-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 3 caracteres" /></label>}
+          <CategoryTagsFields category={category} setCategory={setCategory} tags={tags} setTags={setTags} />
           {error && <p className="ht-error">{error}</p>}
         </div>
         <div className="ht-win-foot">
