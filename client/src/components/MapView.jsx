@@ -47,9 +47,11 @@ const STEP_MS = 135;
 const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar', jukebox: 'Abrir rocola', hotel: 'Subir a MeDed Friends' };
 // Objetos con brillo o dibujo fino que se pintan nítidos en cada cuadro (además de los de marca)
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
-const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade', zombieArcade: 'Jugar Zombies en la oficina' };
+// Hay un juego abierto (o el mouse está capturado por uno): la oficina ignora mouse y teclado
+const gameOpen = () => office.state.modal?.type === 'game' || (typeof document !== 'undefined' && !!document.pointerLockElement);
+const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade', zombieArcade: 'Jugar Zombies en la oficina', kartArcade: 'Jugar Karts de oficina' };
 // Zombies: si ya hay una partida en esa máquina, la pista invita a unirse
-const zombieLabel = (o) => { const m = o.type === 'zombieArcade' && office.state.liveGames?.find((g) => g.objectId === o.id); return m ? `Unirse a Zombies (${m.players.length}/${m.max})` : null; };
+const zombieLabel = (o) => { const m = (o.type === 'zombieArcade' || o.type === 'kartArcade') && office.state.liveGames?.find((g) => g.objectId === o.id); return m ? `Unirse a ${o.type === 'kartArcade' ? 'Karts' : 'Zombies'} (${m.players.length}/${m.max})` : null; };
 
 // Tamaño de un objeto (los de temporada traen el suyo)
 const sizeOf = (o) => (o.season ? { w: o.w, h: o.h } : objSize(o));
@@ -328,6 +330,8 @@ export default function MapView({ active }) {
         if (target.near && input.current.path.length) input.current.path.pop();
       }
 
+      // Con un juego abierto, la oficina no recibe controles (ni teclas que quedaron presionadas)
+      if (gameOpen()) { input.current.held = []; input.current.tap = null; input.current.path = []; input.current.run = false; }
       // Movimiento por pasos
       const running = input.current.run || input.current.path.length > 8;
       const stepMs = (running ? STEP_MS * 0.55 : STEP_MS) * (input.current.diag ? Math.SQRT2 : 1);
@@ -973,6 +977,7 @@ export default function MapView({ active }) {
   };
 
   const onPointerDown = (e) => {
+    if (gameOpen()) return;
     if (pinchStart(e)) return;
     if (e.button !== 0 || !floor) return;
     const w = tileAt(e);
@@ -1030,6 +1035,7 @@ export default function MapView({ active }) {
   };
 
   const onPointerMove = (e) => {
+    if (gameOpen()) return;
     if (pinchMove(e)) return;
     if (!floor) return;
     const r = canvasRef.current.getBoundingClientRect();
@@ -1097,6 +1103,7 @@ export default function MapView({ active }) {
   };
 
   const onWheel = (e) => {
+    if (gameOpen()) return;
     if (!e.ctrlKey && !e.metaKey && !editMode) {
       zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1);
       return;

@@ -5,7 +5,10 @@ import { getTemplate, composeFloor, isWalkable } from '../shared/map.js';
 import { CATALOG } from '../shared/catalog.js';
 import {
   waveSpec, waveRoster, bossForWave, isBossWave, BOSSES, ZOMBIE_TYPES, WEAPONS, SHOP, buildLevel, CELL, moveCircle, rayCast, distanceField, floodReach,
+  WALL_H, CEIL_MARGIN, BOSS_MAX_H, EYE_H,
 } from '../shared/zombies.js';
+import * as THREE from 'three';
+import { bossModel, animateBoss } from '../client/src/games/zombies/models.js';
 import * as sim from '../client/src/games/zombies/sim.js';
 import { SnapBuffer, lerpState, gameLoop } from '../client/src/games/netSync.js';
 
@@ -183,14 +186,32 @@ describe('simulación', () => {
     sim.startWave(S, 3);
     for (let i = 0; i < 60 * 6; i++) sim.step(S, 1 / 60);
     S.players[1].pts = 777;
+    S.players[0].revives = 2;
     const d = sim.pack(S);
     const R = sim.restoreSim(L, d);
+    assert.equal(R.players[0].revives, 2, 'las estadísticas viajan en el estado');
+    assert.equal(sim.unpackPlayers(d)[0].dealt, Math.round(S.players[0].dealt));
     assert.equal(R.phase, 'fight');
     assert.equal(R.wave, 3);
     assert.equal(R.players[1].pts, 777);
     assert.equal(R.zombies.length, S.zombies.filter((z) => z.st !== 'dead').length);
     assert.equal(sim.remaining(R), d.left);
     for (let i = 0; i < 60; i++) sim.step(R, 1 / 60); // sigue corriendo
+  });
+
+  test('estadísticas para la pantalla final: daño hecho y compañeros levantados', () => {
+    const S = sim.createSim(L, { seats: [true, true, false, false], seed: 4 });
+    sim.startWave(S, 1);
+    for (let i = 0; i < 60 * 4; i++) sim.step(S, 1 / 60);
+    const z = S.zombies.find((q) => q.st !== 'dead');
+    assert.ok(z, 'hay un zombi');
+    const hp = z.hp;
+    sim.damageZombie(S, z, 1e6, 0, 0, false, 1);
+    assert.equal(Math.round(S.players[0].dealt), Math.round(hp), 'cuenta solo la vida que le quitó');
+    const [A, B] = S.players;
+    B.down = true; B.alive = false; B.downT = 20; A.rv = 1; A.x = B.x; A.y = B.y;
+    for (let i = 0; i < 60 * 3; i++) sim.step(S, 1 / 60);
+    assert.equal(A.revives, 1);
   });
 
   test('estado compacto pequeño para la red', () => {
@@ -248,3 +269,29 @@ describe('interpolación de red (netSync)', () => {
     }
   });
 });
+
+describe('techo alto', () => {
+  test('el techo deja espacio sobre el jefe más alto, la cámara y los zombis', () => {
+    assert.ok(WALL_H >= 2.7 * 1.6, `techo de ${WALL_H} m`);
+    assert.ok(WALL_H > BOSS_MAX_H + CEIL_MARGIN, `techo ${WALL_H} m vs jefe ${BOSS_MAX_H} m`);
+    assert.ok(WALL_H > EYE_H + 1);
+    for (const z of Object.values(ZOMBIE_TYPES)) assert.ok(z.h * z.scale + CEIL_MARGIN < WALL_H, z.name);
+  });
+
+  test('ningún modelo de jefe toca el techo en ninguna animación (brazos arriba, saltos, embestidas)', () => {
+    for (const id of Object.keys(BOSSES)) {
+      const g = bossModel(id);
+      let top = 0;
+      for (const st of ['walk', 'windup', 'charge', 'attack', 'cast', 'stun', 'emerge']) {
+        for (let k = 0; k < 24; k++) {
+          const time = k * 0.137;
+          animateBoss(g, { st, t: (k % 6) * 0.12, flash: 0 }, time, 1 / 60);
+          g.updateMatrixWorld(true);
+          top = Math.max(top, new THREE.Box3().setFromObject(g).max.y);
+        }
+      }
+      assert.ok(top + CEIL_MARGIN < WALL_H, `${BOSSES[id].name}: llega a ${top.toFixed(2)} m (techo ${WALL_H} m)`);
+    }
+  });
+});
+

@@ -19,17 +19,20 @@
 //   status(text)                texto corto bajo el juego ("Turno de Ana", "Tira…")
 //   objectId, floorId, room     la máquina, su piso y el cuarto ({ seats, host, watchers })
 //   onRoom(fn(room)), sit(), close(), volume
+//   fullscreen                 { enter(), toggle(), active() }: pantalla completa del navegador
 //
 // El juego se vuelve a crear cada vez que cambian los jugadores, salvo los que tienen
 // meta.persistent (Zombies, hasta 4): esos se enteran de quién entra o sale con onRoom
 // y, si se va el anfitrión, el siguiente jugador sigue la partida.
+// Los que tienen full: true (Zombies) ocupan toda la ventana, encima de la oficina.
 // Ayudantes de red y bucle para todos: ./netSync.js (interpolación, paso fijo, lienzo nítido).
 export const GAMES = {
   pong: { name: 'Ping pong', emoji: '🏓', load: () => import('./pong.js') },
   pool: { name: 'Billar', emoji: '🎱', load: () => import('./pool.js') },
   foosball: { name: 'Futbolito', emoji: '⚽', load: () => import('./foosball.js') },
   arcade: { name: 'Arcade', emoji: '👾', load: () => import('./pacman.js') },
-  zombies: { name: 'Zombies en la oficina', emoji: '🧟', load: () => import('./zombies/index.js') },
+  zombies: { name: 'Zombies en la oficina', emoji: '🧟', full: true, load: () => import('./zombies/index.js') },
+  karts: { name: 'Karts de oficina', emoji: '🏎️', full: true, load: () => import('./karts/index.js') },
 };
 
-export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies' };
+export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies', kartArcade: 'karts' };

@@ -1,6 +1,5 @@
 // Interfaz encima del 3D (canvas 2D): vida, balas, hordas, jefe, equipo, mira, tienda y pantallas.
-import { WEAPONS, SHOP, CELL } from '@shared/zombies.js';
-import { itemCost } from './sim.js';
+import { WEAPONS, CELL } from '@shared/zombies.js';
 
 const PINK = '#FE3377', YEL = '#FFCC00', GREEN = '#7CFF4F', INK = 'rgba(12,12,18,.78)';
 const fmt = (n) => Math.round(n).toLocaleString('es-MX');
@@ -15,6 +14,23 @@ function text(g, s, x, y, { size = 16, weight = 800, color = '#fff', align = 'le
 function bar(g, x, y, w, h, k, color, back = 'rgba(255,255,255,.12)') {
   plate(g, x, y, w, h, h / 2, back);
   if (k > 0) plate(g, x, y, Math.max(h, w * Math.min(1, k)), h, h / 2, color);
+}
+
+// Mira: 'cruz' | 'punto' | 'circulo' | 'cruzpunto' (también la usa la vista previa de Opciones)
+export function drawCrosshair(g, cx, cy, { style = 'cruz', color = '#ffffff', gap = 6, scale = 1 } = {}) {
+  const L = 9 * scale;
+  const lines = [[cx - gap - L, cy, cx - gap, cy], [cx + gap, cy, cx + gap + L, cy], [cx, cy - gap - L, cx, cy - gap], [cx, cy + gap, cx, cy + gap + L]];
+  const cross = style === 'cruz' || style === 'cruzpunto';
+  const dot = style === 'punto' || style === 'cruzpunto';
+  g.lineCap = 'butt';
+  for (const [w, c] of [[4 * scale, 'rgba(0,0,0,.6)'], [2 * scale, color]]) {
+    g.strokeStyle = c; g.lineWidth = w;
+    if (cross) for (const [a, b, c2, d] of lines) { g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); }
+    if (style === 'circulo') { g.beginPath(); g.arc(cx, cy, gap + 5 * scale, 0, Math.PI * 2); g.stroke(); }
+  }
+  const r = (dot ? 2.4 : 1.2) * scale;
+  g.fillStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.arc(cx, cy, r + 1.2 * scale, 0, Math.PI * 2); g.fill();
+  g.fillStyle = color; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
 }
 
 export class Hud {
@@ -41,18 +57,15 @@ export class Hud {
       this.crosshair(g, W, H, s);
       this.topBar(g, W, H, s);
       this.team(g, W, H, s);
-      this.minimap(g, W, H, s);
+      if (s.showMinimap !== false) this.minimap(g, W, H, s);
       if (s.me) { this.health(g, W, H, s); this.ammo(g, W, H, s); }
       this.popups(g, W, H, s);
       this.feed(g, W, H, s);
       this.prompts(g, W, H, s);
       if (s.touch && s.view === 'play') this.touch(g, W, H, s);
     }
-    this.banner(g, W, H, s);
+    // menús, tienda, fin y anuncios: en HTML (menu.js)
     if (s.phase === 'intro') this.intro(g, W, H, s);
-    if (s.shopOpen) this.shop(g, W, H, s);
-    if (s.phase === 'over') this.over(g, W, H, s);
-    else if (s.menu) this.menu(g, W, H, s);
     g.restore();
     // los botones se guardan en pixeles de pantalla
     for (const b of this.buttons) { b.x *= k; b.y *= k; b.w *= k; b.h *= k; }
@@ -82,13 +95,8 @@ export class Hud {
 
   crosshair(g, W, H, s) {
     if (s.menu || s.shopOpen || s.phase === 'over' || (s.me && !s.me.alive)) return;
-    const cx = W / 2, cy = H / 2, gap = 6 + s.spread * 16;
-    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 4;
-    const lines = [[cx - gap - 9, cy, cx - gap, cy], [cx + gap, cy, cx + gap + 9, cy], [cx, cy - gap - 9, cx, cy - gap], [cx, cy + gap, cx, cy + gap + 9]];
-    for (const [a, b, c, d] of lines) { g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke(); }
-    g.strokeStyle = '#fff'; g.lineWidth = 2;
-    for (const [a, b, c, d] of lines) { g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke(); }
-    g.fillStyle = '#fff'; g.fillRect(cx - 1, cy - 1, 2, 2);
+    const cx = W / 2, cy = H / 2;
+    drawCrosshair(g, cx, cy, { style: s.cross?.style, color: s.cross?.color, gap: 6 + s.spread * 16 });
     if (s.hitT > 0) {
       const a = Math.min(1, s.hitT * 6), r = 9 + (1 - a) * 4;
       g.strokeStyle = s.hitKill ? `rgba(255,60,80,${a})` : s.hitHead ? `rgba(255,204,0,${a})` : `rgba(255,255,255,${a})`;
@@ -241,83 +249,9 @@ export class Hud {
     if (s.revivePrompt) this.button(g, 'revive', '⛑', W - 300, H - 230, 60, 60, { small: true });
   }
 
-  banner(g, W, H, s) {
-    const b = s.banner;
-    if (!b) return;
-    const life = b.t / b.dur;
-    const inK = Math.min(1, (1 - life) * 6), outK = Math.min(1, life * 3);
-    const a = Math.min(inK, outK);
-    g.save();
-    g.globalAlpha = a;
-    g.translate(W / 2, H * 0.32);
-    const sc = 0.8 + 0.2 * inK;
-    g.scale(sc, sc);
-    if (b.boss) { g.fillStyle = 'rgba(80,0,10,.55)'; g.fillRect(-W, -60, W * 2, 120); }
-    text(g, b.title, 0, 0, { size: b.boss ? 58 : 66, weight: 900, align: 'center', base: 'middle', color: b.color || '#fff', stroke: 10 });
-    if (b.sub) text(g, b.sub, 0, 50, { size: 22, weight: 800, align: 'center', base: 'middle', color: '#fff', stroke: 6 });
-    g.restore();
-  }
-
   intro(g, W, H, s) {
     if (s.menu) return;
     const n = Math.ceil(s.pt);
     text(g, n > 0 ? String(n) : '', W / 2, H / 2 + 80, { size: 64, weight: 900, align: 'center', color: YEL, stroke: 10 });
-  }
-
-  shop(g, W, H, s) {
-    const P = s.me;
-    const w = 520, h = 70 + SHOP.length * 54, x = W / 2 - w / 2, y = H / 2 - h / 2;
-    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(0, 0, W, H);
-    plate(g, x, y, w, h, 18, 'rgba(18,17,26,.96)');
-    text(g, '🛒 Tienda de la oficina', x + 22, y + 38, { size: 21, weight: 900 });
-    text(g, `💰 ${fmt(P?.pts || 0)}`, x + w - 22, y + 38, { size: 18, weight: 900, align: 'right', color: YEL });
-    SHOP.forEach((it, i) => {
-      const yy = y + 58 + i * 54;
-      const cost = itemCost(P, it);
-      const owned = it.weapon != null && P?.owned[it.weapon];
-      const maxed = it.id === 'upgrade' && P?.dmgLvl >= 3;
-      const can = P && !owned && !maxed && P.pts >= cost;
-      const hot = this.hover && this.hover.x >= x + 12 && this.hover.x <= x + w - 12 && this.hover.y >= yy && this.hover.y <= yy + 48;
-      plate(g, x + 12, yy, w - 24, 48, 12, hot && can ? 'rgba(254,51,119,.28)' : 'rgba(255,255,255,.06)');
-      text(g, `${i + 1}`, x + 32, yy + 30, { size: 16, weight: 900, color: '#888', align: 'center' });
-      text(g, it.name, x + 52, yy + 21, { size: 15.5, weight: 800, color: can ? '#fff' : '#9a9aa6' });
-      text(g, it.desc, x + 52, yy + 39, { size: 12, weight: 600, color: '#9a9aa6' });
-      text(g, owned ? 'Ya la tienes' : maxed ? 'Máximo' : `💰 ${fmt(cost)}`, x + w - 28, yy + 30, { size: 15, weight: 900, align: 'right', color: can ? YEL : '#77777f' });
-      this.buttons.push({ id: `buy:${it.id}`, x: x + 12, y: yy, w: w - 24, h: 48 });
-    });
-    this.button(g, 'closeShop', 'Cerrar (B)', x + w - 150, y + h + 10, 150, 40);
-    this.button(g, 'ready', s.ready ? 'Listo ✓' : 'Estoy listo (Enter)', x, y + h + 10, 200, 40, { primary: !s.ready });
-  }
-
-  menu(g, W, H, s) {
-    g.fillStyle = 'rgba(6,6,10,.62)'; g.fillRect(0, 0, W, H);
-    const w = 460, x = W / 2 - w / 2, y = H / 2 - 170;
-    plate(g, x, y, w, 340, 20, 'rgba(18,17,26,.96)');
-    text(g, '🧟 Zombies en la oficina', W / 2, y + 46, { size: 26, weight: 900, align: 'center', color: GREEN });
-    text(g, s.solo ? 'En pausa' : 'La partida sigue corriendo', W / 2, y + 74, { size: 14, weight: 700, align: 'center', color: '#bbb' });
-    const help = s.touch ? ['Palanca: moverte · arrastra a la derecha: apuntar', 'Botón rosa: disparar'] : ['WASD moverte · mouse apuntar · clic disparar', '1-3 o rueda: arma · R recargar · Shift correr', '← → girar · E levantar · B tienda · Esc pausa'];
-    help.forEach((t, i) => text(g, t, W / 2, y + 108 + i * 22, { size: 13.5, weight: 600, align: 'center', color: '#e8e8ee' }));
-    this.button(g, 'resume', s.view === 'watch' ? 'Mirar' : s.touch ? 'Jugar' : 'Jugar (clic)', x + 40, y + 190, w - 80, 46, { primary: true });
-    this.button(g, 'quality', `Calidad: ${s.quality === 'alta' ? 'Alta' : 'Baja'}`, x + 40, y + 246, (w - 90) / 2, 40);
-    this.button(g, 'leave', 'Volver a la oficina', x + 50 + (w - 90) / 2, y + 246, (w - 90) / 2, 40);
-    if (s.fps) text(g, `${s.fps} fps`, x + w - 16, y + 330, { size: 11, weight: 600, align: 'right', color: '#666' });
-  }
-
-  over(g, W, H, s) {
-    g.fillStyle = 'rgba(20,0,4,.68)'; g.fillRect(0, 0, W, H);
-    const w = 500, h = 330, x = W / 2 - w / 2, y = H / 2 - h / 2;
-    plate(g, x, y, w, h, 20, 'rgba(18,17,26,.97)');
-    text(g, '☠ Los zombis tomaron la oficina', W / 2, y + 50, { size: 25, weight: 900, align: 'center', color: '#ff6b6b' });
-    const st = s.summary || {};
-    const cells = [['Horda', st.wave ?? s.wave], ['Zombis', st.kills ?? 0], ['Puntuación', fmt(st.score ?? 0)]];
-    cells.forEach(([l, v], i) => {
-      const cx = x + 90 + i * 160;
-      text(g, String(v), cx, y + 125, { size: 38, weight: 900, align: 'center', color: i === 2 ? YEL : '#fff' });
-      text(g, l, cx, y + 150, { size: 13, weight: 700, align: 'center', color: '#aab' });
-    });
-    if (st.best) text(g, '🏆 ¡Tu mejor puntuación!', W / 2, y + 190, { size: 16, weight: 800, align: 'center', color: YEL });
-    if (s.canRestart) this.button(g, 'restart', 'Jugar otra vez', x + 40, y + 230, 200, 48, { primary: true });
-    else text(g, 'Esperando a que alguien empiece otra…', x + 140, y + 260, { size: 13, weight: 600, align: 'center', color: '#bbb' });
-    this.button(g, 'leave', 'Volver a la oficina', x + w - 240, y + 230, 200, 48);
   }
 }

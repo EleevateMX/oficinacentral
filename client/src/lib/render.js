@@ -2004,6 +2004,36 @@ D.zombieArcade = (ctx, x, y, w, h, o, c) => {
   R(ctx, OL, x + 9, y + 15, 14, 8); R(ctx, '#0f1a10', x + 10, y + 16, 12, 6);
   R(ctx, '#7CFF4F', x + 12, y + 17, 2, 4); R(ctx, '#7CFF4F', x + 18, y + 17, 2, 4);
 };
+// Máquina de "Karts de oficina": gabinete de carreras con bandera a cuadros, pista en la pantalla y volante
+D.kartArcade = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const t = Math.floor(ANIM_T / 160);
+  prr(ctx, SH, x + 2, y + h - 3, w, 5, 2);
+  obox(ctx, col, x + 1, y - 26, w - 2, h + 25, 1);
+  R(ctx, shade(col, 0.2), x + 1, y - 26, 2, h + 25); R(ctx, shade(col, -0.25), x + w - 3, y - 26, 2, h + 25);
+  // marquesina a cuadros con una bandera ondeando arriba
+  R(ctx, '#141414', x + 3, y - 23, w - 6, 8);
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) if ((i + j + t) % 2 === 0) R(ctx, '#fff', x + 5 + i * 4, y - 22 + j * 3, 4, 3);
+  R(ctx, OL, x + 7, y - 40, 2, 15); R(ctx, '#cfd4da', x + 7.5, y - 39, 1, 14);
+  const wv = (t % 4 < 2) ? 0 : 1;
+  R(ctx, OL, x + 9, y - 40 + wv, 13, 9);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) R(ctx, (i + j) % 2 ? '#141414' : '#fff', x + 10 + i * 3, y - 39 + wv + j * 2.4 + (i % 2 ? wv * 0.5 : 0), 3, 2.4);
+  // pantalla: pista con curvas y un kart
+  R(ctx, '#0b0b12', x + 4, y - 14, w - 8, 15);
+  R(ctx, '#2bb673', x + 6, y - 12, w - 12, 11);
+  R(ctx, '#5a5f6b', x + 12, y - 12, 8, 11); R(ctx, '#5a5f6b', x + 9 + ((t >> 1) % 3), y - 7, 14, 6);
+  for (let k = 0; k < 3; k++) R(ctx, '#fff', x + 15.5, y - 12 + ((k * 4 + t) % 11), 1, 2);
+  R(ctx, '#FFCC00', x + 14, y - 5, 4, 3); R(ctx, '#141414', x + 13, y - 5, 1, 3); R(ctx, '#141414', x + 18, y - 5, 1, 3);
+  // tablero con volante y botones
+  R(ctx, shade(col, -0.35), x + 3, y + 2, w - 6, 6); R(ctx, shade(col, -0.5), x + 3, y + 7, w - 6, 2);
+  pell(ctx, OL, x + 12.5, y + 4.5, 4.5, 3.5); pell(ctx, '#2b2f3a', x + 12.5, y + 4.5, 3.5, 2.5); pell(ctx, shade(col, -0.35), x + 12.5, y + 4.5, 2, 1.2); R(ctx, '#2b2f3a', x + 12, y + 3, 1, 3);
+  for (const [bx, bc] of [[21, '#FFCC00'], [26, '#3a86ff']]) { R(ctx, OL, bx + x - 1, y + 3, 3, 3); R(ctx, bc, bx + x - 1, y + 3, 2, 2); }
+  R(ctx, shade(col, -0.3), x + 4, y + 10, w - 8, h - 12);
+  // pedales y franja de carreras
+  R(ctx, '#fff', x + 4, y + 12, w - 8, 2); R(ctx, '#141414', x + 4, y + 14, w - 8, 1);
+  R(ctx, OL, x + 9, y + 18, 6, 6); R(ctx, '#cfd4da', x + 10, y + 19, 4, 4);
+  R(ctx, OL, x + 17, y + 18, 6, 6); R(ctx, '#cfd4da', x + 18, y + 19, 4, 4);
+};
 D.foosball = (ctx, x, y, w, h) => {
   const wd = '#7a4a2b';
   prr(ctx, SH, x + 3, y + h - 6, w - 2, 7, 2);

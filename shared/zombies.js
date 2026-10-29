@@ -9,7 +9,10 @@ import { CATALOG, objSize } from './catalog.js';
 
 // Metros por casilla del mapa (la simulación trabaja en casillas; el dibujo 3D en metros)
 export const TILE_M = 1.25;
-export const WALL_H = 2.7; // altura de los muros (m)
+// Techo alto (antes 2.7 m): los jefes, con los brazos arriba o saltando, no lo atraviesan.
+// tests/zombies.test.js revisa que el modelo más alto quepa con margen (CEIL_MARGIN).
+export const WALL_H = 5.4; // altura de los muros y del techo (m): el doble de antes
+export const CEIL_MARGIN = 0.3; // espacio mínimo libre entre lo más alto de un jefe y el techo (m)
 export const EYE_H = 1.6; // altura de los ojos (m)
 export const PLAYER_R = 0.26; // radio del jugador (casillas)
 
@@ -42,6 +45,7 @@ export const BOSSES = {
   },
 };
 export const BOSS_ORDER = ['gerente', 'impresora', 'becario'];
+export const BOSS_MAX_H = Math.max(...Object.values(BOSSES).map((b) => b.h)); // el jefe más alto (de pie)
 
 export const isBossWave = (n) => n > 0 && n % 5 === 0;
 

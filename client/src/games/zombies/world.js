@@ -65,6 +65,9 @@ function signTexture(text, color = '#FE3377', sub = '') {
   });
 }
 
+// Letreros colgados más abajo (cables largos) y lámparas más fuertes: el techo ahora es alto
+const SIGN_Y = WALL_H - 1.3;
+const LAMP = 18 * Math.pow((WALL_H - 0.25) / 2.45, 1.6);
 const AREA_ACCENT = ['#FE3377', '#FFCC00', '#3a86ff', '#2bb673', '#8B7BFF', '#ff8a3d'];
 
 export function buildWorld(level, floor, { quality = 'alta' } = {}) {
@@ -265,12 +268,14 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
     // dos caras (una por lado) para que se lea de frente y de espaldas
     for (const back of [false, true]) {
       const board = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4), smat);
-      board.position.set(s.x * S, WALL_H - 0.55, s.y * S + 0.2 + (back ? -0.01 : 0.01));
+      board.position.set(s.x * S, SIGN_Y, s.y * S + 0.2 + (back ? -0.01 : 0.01));
       if (back) board.rotation.y = Math.PI;
       root.add(board);
       disposables.push(board.geometry);
     }
-    for (const k of [-1, 1]) m.place(s.x * S + k * w * 0.4, s.y * S + 0.2).box(0.015, 0.4, 0.015, 0, WALL_H - 0.4, 0, '#2b2f3a');
+    // cables largos hasta el techo alto
+    const top = SIGN_Y + w / 8;
+    for (const k of [-1, 1]) m.place(s.x * S + k * w * 0.4, s.y * S + 0.2).box(0.015, WALL_H - top, 0.015, 0, top, 0, '#2b2f3a');
     disposables.push(tex, smat);
   }
 
@@ -304,7 +309,7 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
   const points = [];
   const nP = hi ? 4 : 1;
   for (let k = 0; k < nP; k++) {
-    const pl = new THREE.PointLight('#ffe8c4', 18, 15, 1.6);
+    const pl = new THREE.PointLight('#ffe8c4', LAMP, 18, 1.6);
     const fx = nP === 1 ? 0.5 : (k % 2 ? 0.72 : 0.28), fz = nP === 1 ? 0.5 : (k < 2 ? 0.3 : 0.7);
     pl.position.set(W * S * fx, WALL_H - 0.25, H * S * fz);
     root.add(pl);
@@ -315,10 +320,11 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
   alarm.position.set(cx, WALL_H - 0.3, cz);
   root.add(alarm);
 
-  let flickT = 0;
+  let flickT = 0, nightK = 0.2;
   return {
     group: root,
-    update(dt, t, boss) {
+    // night: menú principal (oficina de noche, lámparas que fallan)
+    update(dt, t, boss, night = false) {
       // en las hordas de jefe las luces parpadean y hay alarma
       flickT -= dt;
       let k = 1;
@@ -327,9 +333,15 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
         k = Math.random() < 0.12 ? 0.25 : 0.85 + Math.sin(t * 23) * 0.08;
         alarm.intensity = (Math.sin(t * 4) * 0.5 + 0.5) * 40;
       } else alarm.intensity = 0;
+      if (night) {
+        // casi todo apagado; de vez en cuando una lámpara chisporrotea
+        if (flickT <= 0) { flickT = 0.04 + Math.random() * (Math.random() < 0.2 ? 0.08 : 1.6); nightK = Math.random() < 0.3 ? 0.04 : 0.16 + Math.random() * 0.12; }
+        k = nightK;
+      }
       ceilMat.emissiveIntensity = k;
-      for (const p of points) p.intensity = 18 * k;
-      hemi.intensity = (hi ? 1.25 : 1.9) * (boss ? 0.75 + k * 0.2 : 1);
+      for (const p of points) p.intensity = LAMP * k;
+      hemi.intensity = (hi ? 1.25 : 1.9) * (boss ? 0.75 + k * 0.2 : night ? 0.22 : 1);
+      sun.intensity = (hi ? 1.5 : 1.1) * (night ? 0.12 : 1);
     },
     dispose() {
       for (const d of disposables) d?.dispose?.();
