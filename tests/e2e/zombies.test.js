@@ -131,12 +131,18 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
   assert.ok((await Z('arms')).energy > 0, 'conectar golpes llena la energía');
   await Z('swing', 'heavy');
   await Z('advance', 0.5);
-  for (const id of ['katana', 'carton', 'regla']) {
+  // cuenta cada anuncio de técnica que aparece (otro anuncio, como "¡Horda superada!", lo puede reemplazar enseguida)
+  await page.evaluate(() => {
+    window.__techBanners = 0;
+    new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains('zm-bn-tech')) window.__techBanners++; })
+      .observe(document.body, { childList: true, subtree: true });
+  });
+  for (const [i, id] of ['katana', 'carton', 'regla'].entries()) {
     await Z('give', id);
     await Z('zombieAt', 2.5, 0);
     await Z('energy', 100);
     assert.equal(await Z('tech'), true, `técnica de ${id}`);
-    await page.waitForSelector('.zm-bn-tech', { timeout: 5000 });
+    await page.waitForFunction((n) => window.__techBanners >= n, i + 1, { timeout: 5000 });
     await Z('advance', 0.2);
     const a = await Z('arms');
     assert.ok(a.energy < 100 && a.tcd > 0, 'gasta energía y entra en espera');
