@@ -308,12 +308,14 @@ export function registerModerationRoutes(api, admin, deps) {
       emitToUser(t.id, 'moderation', { kind: 'mute', until: m.until, reason });
       // Se reconecta sin micrófono (y la señalización de voz queda cortada mientras dure)
       emitToUser(t.id, 'moderation:mic-off', {});
+      deps.onMute?.(t.id, true); // corta su voz ya conectada (server/voiceGate.js)
       return res.json({ ok: true, sanction: sanctionOut(m) });
     }
     if (action === 'unmute') {
       liftSanction(t.id, 'mute', req.user.id);
       log(`Quitó el silencio a ${who}`);
       emitToUser(t.id, 'moderation', { kind: 'unmute' });
+      deps.onMute?.(t.id, false);
       return res.json({ ok: true });
     }
     if (action === 'kick') {

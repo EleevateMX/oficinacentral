@@ -15,10 +15,11 @@ const SCREEN = Track.Source.ScreenShare;
 const SCREEN_AUDIO = Track.Source.ScreenShareAudio;
 
 export class LiveKitManager extends EventTarget {
-  constructor({ myId, getToken }) {
+  constructor({ myId, getToken, socket = null }) {
     super();
     this.myId = myId;
     this.getToken = getToken;
+    this.socket = socket;
     this.localStream = new MediaStream();
     this.screenStream = null;
     this.audioTrack = null; // LocalAudioTrack
@@ -36,14 +37,50 @@ export class LiveKitManager extends EventTarget {
       screenQuality: 'balanced', screenAudio: true, screenVolume: 1,
     };
     this.mic = null; // { track, raw, ai, stop } (ver noise.js)
-    this.room = new Room({ adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true });
-    const refresh = () => { this.applySubscriptions(); this.emitPeers(); };
-    for (const ev of [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.TrackPublished, RoomEvent.TrackUnpublished]) this.room.on(ev, refresh);
-    this.room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => { this.playAudio(track, pub, participant); this.emitPeers(); });
-    this.room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => { this.stopAudio(pub, participant); this.emitPeers(); });
-    this.room.on(RoomEvent.Reconnected, refresh);
-    this.room.on(RoomEvent.Disconnected, () => this.emitPeers());
+    this.pubOpts = new Map(); // pista local -> opciones con que se publicó (para volver a publicar al cambiar de sala)
+    this.room = this.makeRoom();
     this.ready = this.connect();
+    // El servidor da acceso solo a la sala de tu ámbito (piso, sala cerrada o sala del Hotel; server/voiceGate.js).
+    // Si cambias de ámbito te avisa y te cambias de sala con tus mismas pistas.
+    this.onScope = () => this.switchRoom();
+    socket?.on('lk:scope', this.onScope);
+  }
+
+  makeRoom() {
+    const room = new Room({ adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true });
+    const mine = (fn) => (...a) => { if (this.room === room) fn(...a); };
+    const refresh = mine(() => { this.applySubscriptions(); this.emitPeers(); });
+    for (const ev of [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.TrackPublished, RoomEvent.TrackUnpublished]) room.on(ev, refresh);
+    room.on(RoomEvent.TrackSubscribed, mine((track, pub, participant) => { this.playAudio(track, pub, participant); this.emitPeers(); }));
+    room.on(RoomEvent.TrackUnsubscribed, mine((track, pub, participant) => { this.stopAudio(pub, participant); this.emitPeers(); }));
+    room.on(RoomEvent.Reconnected, refresh);
+    room.on(RoomEvent.Disconnected, mine(() => this.emitPeers()));
+    return room;
+  }
+
+  async switchRoom() {
+    if (this.switching) { this.switchAgain = true; return; }
+    this.switching = true;
+    try {
+      do {
+        this.switchAgain = false;
+        await this.ready;
+        const old = this.room;
+        const local = [this.audioTrack, this.videoTrack, this.screenTrack, this.screenAudioTrack].filter(Boolean);
+        this.room = this.makeRoom();
+        await old.disconnect(false); // sin detener las pistas locales
+        for (const el of this.audioEls.values()) el.srcObject = null;
+        this.audioEls.clear();
+        this.emitPeers();
+        this.ready = this.connect();
+        await this.ready;
+        for (const t of local) {
+          try { await this.room.localParticipant.publishTrack(t, this.pubOpts.get(t)); } catch (e) { console.warn('LiveKit: no se pudo volver a publicar', e); }
+        }
+      } while (this.switchAgain);
+    } finally {
+      this.switching = false;
+    }
   }
 
   async connect() {
@@ -85,11 +122,13 @@ export class LiveKitManager extends EventTarget {
 
   async publish(track, opts) {
     await this.ready;
+    this.pubOpts.set(track, opts);
     await this.room.localParticipant.publishTrack(track, opts);
   }
 
   async unpublish(track) {
     if (!track) return;
+    this.pubOpts.delete(track);
     try { await this.room.localParticipant.unpublishTrack(track, true); } catch { track.stop(); }
   }
 
@@ -288,6 +327,7 @@ export class LiveKitManager extends EventTarget {
   }
 
   destroy() {
+    this.socket?.off('lk:scope', this.onScope);
     for (const t of [this.audioTrack, this.videoTrack, this.screenTrack, this.screenAudioTrack]) t?.stop();
     this.mic?.stop();
     for (const el of this.audioEls.values()) el.srcObject = null;

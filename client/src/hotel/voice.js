@@ -1,7 +1,7 @@
 // Hotel: voz por cercanía dentro de una sala (usa la misma conexión de medios de la oficina:
 // P2P de media.js o LiveKit, las dos con setPeers / setPeerVolume).
 //   - Te oye quien está a ≤ VOICE_RADIUS casillas en tu misma sala; el volumen baja con la distancia.
-//   - Con los demás de la sala la conexión queda preparada (sin enviar audio) para que suene al instante.
+//   - Con quien está a ≤ VOICE_RADIUS + WARM_MARGIN la conexión queda preparada (sin enviar audio) para que suene al instante.
 //   - store.updateProximity() llama a office.hotelVoice() mientras estás en el Hotel; al salir vuelve la oficina.
 // Además mide el nivel de audio de cada quien para dibujar la ondita de "está hablando".
 import { office } from '../lib/store.js';
@@ -9,6 +9,7 @@ import { hotel } from './hotelStore.js';
 
 export const VOICE_RADIUS = 6;
 export const VOICE_FULL = 2; // hasta aquí se oye al 100 %
+export const WARM_MARGIN = 6; // conexión preparada hasta VOICE_RADIUS + esto (el servidor no deja más: server/voiceGate.js)
 const MIN_VOL = 0.2;
 
 export function voiceFalloff(d) {
@@ -26,7 +27,7 @@ export function hotelVoicePeers() {
   for (const U of L.users.values()) {
     if (U === me || U.bot || !(U.id > 0)) continue;
     const d = Math.hypot(U.rx - me.rx, U.ry - me.ry);
-    if (d <= VOICE_RADIUS + 0.01) { out.ids.push(U.id); out.vol[U.id] = voiceFalloff(d); } else near.push([d, U.id]);
+    if (d <= VOICE_RADIUS + 0.01) { out.ids.push(U.id); out.vol[U.id] = voiceFalloff(d); } else if (d <= VOICE_RADIUS + WARM_MARGIN) near.push([d, U.id]);
   }
   out.ids.sort((a, b) => a - b);
   near.sort((a, b) => a[0] - b[0]);
@@ -34,6 +35,7 @@ export function hotelVoicePeers() {
   return out;
 }
 office.hotelVoice = hotelVoicePeers;
+office.hotelHas = (id) => !!hotel.state.roomId && hotel.live.users.has(id); // client/src/lib/voiceGate.js
 
 // ---------- Nivel de audio (ondita) ----------
 let ctx = null;

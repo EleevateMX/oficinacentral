@@ -16,6 +16,7 @@ import { checkAchievements } from './achievements.js';
 import { initStage, initStageIO, stageCleanup } from './stage.js';
 import { initHotel, hotelCtx } from './hotel.js';
 import { socketShield, socketAdmission, hasBlocked } from './moderation.js'; // límites, moderación y conexiones
+import { initVoiceGate, relayRtc, voiceMoved, voiceChanged, voiceGone } from './voiceGate.js'; // quién puede tener voz con quién
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -78,7 +79,8 @@ export function emitAll(event, payload) {
 }
 
 function spawnFor(user) {
-  const saved = user.floor_id && getFloor(user.floor_id) && (user.role === 'admin' || !isFloorAdminOnly(user.floor_id));
+  // El archivo solo se abre a propósito: al entrar, todos (también admins) llegan a un piso visible
+  const saved = user.floor_id && getFloor(user.floor_id) && !isFloorAdminOnly(user.floor_id);
   const floorId = saved ? user.floor_id : defaultFloorId();
   const f = getFloor(floorId).state;
   // Si su lugar guardado está en un piso archivado (solo admins), aparece en la entrada del piso principal
@@ -134,6 +136,7 @@ export function initRealtime(httpServer) {
   // Tope por mensaje: lo más grande que manda la app es una oferta WebRTC o un trazo de pizarrón (~20 KB)
   io = new Server(httpServer, { maxHttpBufferSize: Number(process.env.SOCKET_MAX_BYTES) || 200_000 });
   initStageIO(io, presence);
+  initVoiceGate({ presence, emitToUser });
 
   io.use((socket, next) => {
     const token = parseCookies(socket.handshake.headers.cookie)[SESSION_COOKIE];
@@ -201,6 +204,7 @@ export function initRealtime(httpServer) {
         if (changingFloor) socket.to('role:member').emit('player', { id: userId, ...presenceFor(userId, false) });
       }
       if (closedAreaIds().length) reopenEmptyRooms();
+      voiceMoved(userId); // voz: corta conexiones con quien ya quedó lejos
       stageCleanup(userId); // fila de manos del escenario: sale si dejó el área
       // Cuando ya están los dos en una sala 1:1, la puerta se cierra sola (para no molestar a los demás)
       const here = areaAt(f, x, y);
@@ -209,6 +213,7 @@ export function initRealtime(httpServer) {
       if (here?.private && /1\s*:\s*1/.test(here.name) && !isAreaClosed(here.id) && inRoom >= 2) {
         setAreaClosed(here.id, true);
         emitFloor(floorId);
+        voiceChanged();
         io.emit('room-state', { areaId: here.id, closed: true, by: userId, auto: true });
       }
     });
@@ -221,6 +226,7 @@ export function initRealtime(httpServer) {
       setAreaClosed(a.id, !!m.closed);
       if (!m.closed) admitted.delete(a.id);
       emitFloor(f.id);
+      voiceChanged(); // al cerrarse, quien quedó fuera deja de oír a los de dentro
       io.emit('room-state', { areaId: a.id, closed: !!m.closed, by: userId });
     });
 
@@ -341,16 +347,12 @@ export function initRealtime(httpServer) {
       emitToUser(sharer, 'clip', { from: userId });
     });
 
-    // Señalización WebRTC: solo se reenvía a usuarios conectados
+    // Señalización WebRTC: solo entre quienes de verdad pueden oírse (server/voiceGate.js:
+    // cercanía, sala cerrada, escenario, Hotel, llamada aceptada, pisos archivados)
     socket.on('rtc', (msg) => {
       const to = Number(msg?.to);
       if (!presence.has(to) || to === userId) return;
-      // Nadie fuera de un piso archivado se conecta con quien está dentro (salvo entre admins)
-      // Hotel: quienes están en la misma sala del Hotel sí se oyen (ahí se ven, sin importar su piso)
-      const q = presence.get(to);
-      const hm = hotelCtx.where.get(userId), ht = hotelCtx.where.get(to);
-      const sameHotelRoom = !!hm && !!ht && hm.roomId === ht.roomId;
-      if (!sameHotelRoom && ((isFloorAdminOnly(q.floorId) && !p.admin) || (isFloorAdminOnly(p.floorId) && !q.admin))) return;
+      if (!relayRtc(userId, to, msg.data)) return;
       emitToUser(to, 'rtc', { from: userId, data: msg.data });
     });
 
@@ -361,6 +363,7 @@ export function initRealtime(httpServer) {
         try { trackDisconnect(userId); checkAchievements(userId); } catch (e) { console.error('[stats]', e.message); }
         savePosition(userId);
         presence.delete(userId);
+        voiceGone(userId);
         stageCleanup(userId, { gone: true });
         io.emit('player', { id: userId, online: false });
         if (closedAreaIds().length) reopenEmptyRooms();

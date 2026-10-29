@@ -29,6 +29,7 @@ import { registerBadgeRoutes } from './badges.js';
 import { getIO } from './realtime.js';
 import { restRateLimit, perUser } from './ratelimit.js';
 import * as mod from './moderation.js'; // silenciar, sacar, suspender, bloquear y reportes
+import * as voice from './voiceGate.js'; // quién puede tener voz con quién (llamadas, LiveKit)
 
 export const api = express.Router();
 api.use(restRateLimit); // tope de peticiones por sesión o IP (server/ratelimit.js)
@@ -337,7 +338,8 @@ function livekitEnabled() {
 
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
-// Token de acceso (JWT HS256) para la sala única de la oficina
+// Token de acceso (JWT HS256) solo para la sala de su ámbito: su piso, su sala cerrada o su sala del Hotel
+// (server/voiceGate.js: así nadie se suscribe a quien está en otro piso o en una sala cerrada)
 function livekitToken(user) {
   const nowS = Math.floor(Date.now() / 1000);
   const header = { alg: 'HS256', typ: 'JWT' };
@@ -348,7 +350,7 @@ function livekitToken(user) {
     nbf: nowS - 10,
     exp: nowS + (mod.isMuted(user.id) ? 3600 : 6 * 3600),
     video: {
-      room: process.env.LIVEKIT_ROOM || 'oficina', roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false,
+      room: voice.lkIssue(user.id), roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false,
       // Silenciado por un admin: puede ver y oír, pero no publicar micrófono
       ...(mod.isMuted(user.id) ? { canPublishSources: ['camera', 'screen_share'] } : {}),
     },
@@ -882,7 +884,7 @@ admin.patch('/feedback/:id', (req, res) => {
 
 registerStatsRoutes(admin);
 mod.registerModerationRoutes(api, admin, {
-  fail, wrap, perUser, emitToUser, disconnectUser, destroyUserSessions, alert,
+  fail, wrap, perUser, emitToUser, disconnectUser, destroyUserSessions, alert, onMute: voice.onMute,
   emitToAdmins: (ev, payload) => getIO()?.to('role:admin').emit(ev, payload),
 });
 api.use('/admin', admin);
@@ -1057,6 +1059,8 @@ api.post('/call/:userId', wrap((req, res) => {
 api.post('/call/:userId/answer', perUser('answer', 20, 60e3), wrap((req, res) => {
   const to = Number(req.params.userId);
   if (mod.eitherBlocked(to, req.user.id)) return res.json({ ok: true });
+  // Llamada aceptada: la pareja puede conectarse aunque esté lejos (solo si de verdad te llamaron hace poco)
+  if (req.body?.accept && Date.now() - (lastCall.get(`${to}:${req.user.id}`) || 0) < 60e3) voice.markCall(to, req.user.id);
   emitToUser(to, 'call:answer', { from: req.user.id, accept: !!req.body?.accept });
   res.json({ ok: true });
 }));

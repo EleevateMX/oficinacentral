@@ -15,6 +15,7 @@ import { onAchievementNotification, forgetBadges } from './achievements.js';
 import { initBadges, onBadgeNotification } from './badges.js';
 import { initPetSocket } from './petFx.js';
 import { initModeration, hideMessage } from './moderation.js'; // bloqueos, silencio, expulsión y reportes
+import { acceptsPeer, closedApart } from './voiceGate.js'; // de quién se aceptan conexiones de voz
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -197,8 +198,9 @@ class Office {
         // LiveKit se carga solo si la oficina lo tiene configurado
         const LiveKitManager = this.state.config.livekitUrl ? (await import('./livekit.js')).LiveKitManager : null;
         this.media = LiveKitManager
-          ? new LiveKitManager({ myId: you, getToken: () => api.get('/livekit/token') })
+          ? new LiveKitManager({ myId: you, socket: s, getToken: () => api.get('/livekit/token') })
           : new MediaManager({ socket: s, myId: you, iceServers: this.state.config.iceServers });
+        this.media.canAccept = (id) => acceptsPeer(this, id);
         this.applyMediaPrefs();
         this.media.addEventListener('local', (e) => {
           const { viewers, ...state } = e.detail;
@@ -244,6 +246,7 @@ class Office {
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
     s.on('call:answer', ({ from, accept }) => {
+      if (accept) this.media?.allowPeer?.(from);
       const who = this.state.users[from]?.displayName || 'La persona';
       this.toast({ title: accept ? `✅ ${who} va en camino` : `${who} no puede ahora`, ...(accept ? {} : { action: { label: 'Mensaje', run: () => this.openConv(`d:${from}`) } }) });
     });
@@ -491,6 +494,7 @@ class Office {
     clearTimeout(this.ringEnd);
     this.set({ incomingCall: null });
     api.post(`/call/${c.from}/answer`, { accept }).catch(() => {});
+    if (accept) this.media?.allowPeer?.(c.from);
     if (accept) this.goTo(c.from);
   }
 
@@ -602,7 +606,7 @@ class Office {
     const near = [];
     for (const [id, p] of Object.entries(this.players)) {
       const n = Number(id);
-      if (n === this.state.me.id || ids.includes(n) || p.floorId !== me.floorId || !this.state.users[n]?.online) continue;
+      if (n === this.state.me.id || ids.includes(n) || p.floorId !== me.floorId || !this.state.users[n]?.online || closedApart(f, me, p)) continue;
       const d = Math.max(Math.abs(p.x - me.x), Math.abs(p.y - me.y));
       if (d <= PROXIMITY_RADIUS + 7) near.push([d, n]);
     }
