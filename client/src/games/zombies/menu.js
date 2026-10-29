@@ -2,8 +2,8 @@
 // pausa, tienda, fin de la partida, opciones, controles, récords y anuncios de horda y jefe.
 // No decide nada del juego: index.js le pasa un "modelo" cada cuadro y recibe acciones.
 import './menu.css';
-import { WEAPONS, SHOP, BOSSES, ZOMBIE_TYPES } from '@shared/zombies.js';
-import { itemCost } from './sim.js';
+import { WEAPONS, SHOP, BOSSES, ZOMBIE_TYPES, TECHNIQUES, UPGRADE_MAX } from '@shared/zombies.js';
+import { itemCost, upgradeLevel } from './sim.js';
 import { iconCanvas } from './icons.js';
 import { drawCrosshair } from './hud.js';
 import { CROSS_STYLES, CROSS_COLORS, DEFAULTS } from './options.js';
@@ -14,7 +14,8 @@ const SEAT_COLORS = ['#FE3377', '#3a86ff', '#FFCC00', '#2bb673'];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n) => Math.round(n || 0).toLocaleString('es-MX');
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
-const SHOP_ICON = { ammo: 'ammo', heal: 'heal', armor: 'armor', cafetera: 'cafetera', clavadora: 'clavadora', upgrade: 'upgrade' };
+const SHOP_ICON = new Proxy({}, { get: (_, id) => id }); // cada artículo usa el ícono con su mismo id
+const SHOP_CATS = { supply: 'Suministros', gun: 'Armas de fuego', sword: 'Espadas', upgrade: 'Mejoras' };
 
 // Fuente del menú (una sola vez; si no carga, se usa la del sistema)
 function ensureFont() {
@@ -310,20 +311,22 @@ export class ZMenu {
   }
 
   pWeapons() {
-    const maxD = Math.max(...WEAPONS.map((w) => w.dmg * w.pellets));
-    const maxR = Math.max(...WEAPONS.map((w) => 1 / w.every));
-    const maxM = Math.max(...WEAPONS.map((w) => w.mag));
-    const desc = ['Fiel y sin fin: nunca se acaban las grapas.', 'Ocho granos por tiro. Brutal de cerca.', 'Automática: mantén el clic y no sueltes.'];
-    const stat = (l, k) => `<div class="zm-stat"><span>${l}</span><i><b style="width:${Math.round(Math.max(0.08, k) * 100)}%"></b></i></div>`;
-    const cards = WEAPONS.map((w, i) => `
-      <div class="zm-wcard">
-        <div class="zm-wtop"><span data-icon="${w.id}" data-size="54"></span><div><div class="zm-wname">${esc(w.name)}</div><div class="zm-pmeta">${w.cost ? `En la tienda · 💰 ${fmt(w.cost)}` : 'Con la que empiezas'}</div></div><span class="zm-kbd">${i + 1}</span></div>
-        <p class="zm-wdesc">${desc[i]}</p>
-        ${stat('Daño', (w.dmg * w.pellets) / maxD)}${stat('Cadencia', 1 / w.every / maxR)}${stat('Cargador', w.mag / maxM)}
-      </div>`).join('');
+    const guns = WEAPONS.filter((w) => w.kind === 'gun'), swords = WEAPONS.filter((w) => w.kind === 'sword');
+    const maxD = Math.max(...guns.map((w) => w.dmg * w.pellets * (w.burst || 1)));
+    const maxR = Math.max(...guns.map((w) => 1 / w.every));
+    const maxM = Math.max(...guns.map((w) => w.mag));
+    const stat = (l, k) => `<div class="zm-stat"><span>${l}</span><i><b style="width:${Math.round(Math.max(0.08, Math.min(1, k)) * 100)}%"></b></i></div>`;
+    const card = (w, body) => `
+      <div class="zm-wcard${w.kind === 'sword' ? ' sword' : ''}" style="--el:${w.color || 'var(--zm-green)'}">
+        <div class="zm-wtop"><span data-icon="${w.id}" data-size="54"></span><div><div class="zm-wname">${esc(w.name)}</div><div class="zm-pmeta">${w.cost ? `En la tienda · 💰 ${fmt(w.cost)}` : 'Con la que empiezas'} · <b class="zm-mode">${esc(w.mode)}</b></div></div></div>
+        <p class="zm-wdesc">${esc(w.desc)}</p>${body}
+      </div>`;
+    const gunCards = guns.map((w) => card(w, `${stat('Daño', (w.dmg * w.pellets * (w.burst || 1) + (w.splash?.dmg || 0)) / maxD)}${stat('Cadencia', 1 / w.every / maxR)}${stat('Cargador', w.mag / maxM)}`)).join('');
+    const swordCards = swords.map((w) => { const T = TECHNIQUES[w.tech]; return card(w, `${stat('Daño', w.dmg / 60)}${stat('Velocidad', 0.8 / w.speed)}${stat('Alcance', w.range / 2.1)}<div class="zm-tech" style="--el:${T.color}"><span data-icon="${T.id}" data-size="26"></span><div><b>${esc(T.name)}</b><div class="zm-pmeta">${esc(T.style)} · Q con la barra llena</div></div></div>`); }).join('');
     const shop = SHOP.filter((it) => it.weapon == null).map((it) => `<div class="zm-mini"><span data-icon="${SHOP_ICON[it.id]}" data-size="30"></span><div><b>${esc(it.name)}</b><div class="zm-pmeta">${esc(it.desc)}</div></div><span class="zm-price">💰 ${fmt(it.cost)}</span></div>`).join('');
     const horde = Object.values(ZOMBIE_TYPES).map((z) => `<span class="zm-tag">${esc(z.name)}</span>`).join('') + Object.values(BOSSES).map((b) => `<span class="zm-tag boss">☠ ${esc(b.name)}</span>`).join('');
-    return `<h2 class="zm-ptitle">Armas</h2><div class="zm-wgrid">${cards}</div>
+    return `<h2 class="zm-ptitle">Arsenal</h2><div class="zm-wgrid">${gunCards}</div>
+      <h3 class="zm-h3">Espadas y técnicas</h3><p class="zm-pdesc small">Cada golpe que conecta llena tu barra de energía. Con la barra llena, ${kbd('Q')} lanza la técnica de tu espada.</p><div class="zm-wgrid">${swordCards}</div>
       <h3 class="zm-h3">Tienda entre hordas</h3><div class="zm-minis">${shop}</div>
       <h3 class="zm-h3">La horda</h3><div class="zm-tags">${horde}</div>`;
   }
@@ -352,6 +355,7 @@ export class ZMenu {
       { k: 'master', label: 'Volumen general', type: 'range', min: 0, max: 100, step: 5, fmt: (v) => `${v}%` },
       { k: 'effects', label: 'Volumen de efectos', type: 'range', min: 0, max: 100, step: 5, fmt: (v) => `${v}%` },
       { k: 'minimap', label: 'Mostrar minimapa', type: 'toggle' },
+      { k: 'dmgNums', label: 'Números de daño', type: 'toggle' },
       { k: 'cross', label: 'Estilo de mira', type: 'seg', opts: CROSS_STYLES.map((c) => [c.id, c.name]), cross: true },
       { k: 'crossColor', label: 'Color de mira', type: 'color', opts: CROSS_COLORS },
     ];
@@ -394,21 +398,23 @@ export class ZMenu {
   kbDiagram() {
     // [tecla, ancho, grupo]
     const R = [
-      [['Esc', 1, 'menu'], ['', 0.5, 'sp'], ['1', 1, 'gun'], ['2', 1, 'gun'], ['3', 1, 'gun'], ['4', 1, 'shop'], ['5', 1, 'shop'], ['6', 1, 'shop'], ['7', 1]],
-      [['Tab', 1.5, 'gun'], ['Q', 1, 'gun'], ['W', 1, 'move'], ['E', 1, 'util'], ['R', 1, 'gun'], ['T', 1], ['Y', 1], ['U', 1]],
+      [['Esc', 1, 'menu'], ['', 0.5, 'sp'], ['1', 1, 'gun'], ['2', 1, 'gun'], ['3', 1, 'gun'], ['4', 1, 'gun'], ['5', 1, 'gun'], ['6', 1, 'gun'], ['7', 1, 'gun']],
+      [['Tab', 1.5, 'gun'], ['Q', 1, 'tech'], ['W', 1, 'move'], ['E', 1, 'util'], ['R', 1, 'gun'], ['T', 1], ['Y', 1], ['U', 1]],
       [['Bloq', 1.75], ['A', 1, 'move'], ['S', 1, 'move'], ['D', 1, 'move'], ['F', 1], ['G', 1, 'util'], ['H', 1], ['Enter', 1.75, 'util']],
-      [['Shift', 2.25, 'move'], ['Z', 1], ['X', 1], ['C', 1, 'menu'], ['V', 1], ['B', 1, 'shop'], ['N', 1]],
+      [['Shift', 2.25, 'move'], ['Z', 1], ['X', 1], ['C', 1, 'menu'], ['V', 1, 'tech'], ['B', 1, 'shop'], ['N', 1]],
       [['', 1.75, 'sp'], ['Espacio', 5.5, 'gun']],
     ];
     const keys = R.map((row) => `<div class="zm-krow">${row.map(([l, w, g]) => `<span class="zm-key ${g || 'dim'}" style="flex:${w}">${l}</span>`).join('')}</div>`).join('');
     const arrows = `<div class="zm-arrows"><span class="zm-key move">↑</span><div><span class="zm-key turn">←</span><span class="zm-key move">↓</span><span class="zm-key turn">→</span></div></div>`;
     const legend = [
       ['move', 'WASD · ↑↓', 'Moverte'], ['turn', '← →', 'Girar'], ['move', 'Shift', 'Correr'],
-      ['gun', 'Clic · Espacio', 'Disparar'], ['gun', '1-3 · Q · Rueda', 'Cambiar arma'], ['gun', 'R', 'Recargar'],
-      ['util', 'E (mantén)', 'Levantar compañero'], ['shop', 'B · 1-6', 'Tienda entre hordas'], ['util', 'Enter · G', 'Estoy listo'],
+      ['gun', 'Clic · Espacio', 'Disparar / cortar'], ['gun', 'Clic derecho', 'Apuntar (mira)'], ['gun', '1-9 · Rueda', 'Cambiar arma'],
+      ['gun', 'Tab (mantén)', 'Rueda de armas'], ['gun', 'R', 'Recargar'], ['tech', 'Mantén clic', 'Golpe cargado (espada)'],
+      ['tech', 'V', 'Golpe rápido'], ['tech', 'Q', 'Técnica de la espada'],
+      ['util', 'E (mantén)', 'Levantar compañero'], ['shop', 'B · 1-9', 'Tienda entre hordas'], ['util', 'Enter · G', 'Estoy listo'],
       ['menu', 'C', 'Calidad'], ['menu', 'Esc', 'Pausa'],
     ].map(([g, k, t]) => `<div class="zm-leg"><i class="${g}"></i><b>${k}</b><span>${t}</span></div>`).join('');
-    const mouse = `<div class="zm-mouse"><div class="zm-mbody"><span class="zm-mbtn l">Disparar</span><span class="zm-mbtn r"></span><span class="zm-wheel"></span></div>
+    const mouse = `<div class="zm-mouse"><div class="zm-mbody"><span class="zm-mbtn l">Disparar</span><span class="zm-mbtn r">Apuntar</span><span class="zm-wheel"></span></div>
       <div class="zm-mcap"><b>Mover el mouse</b> apunta<br><b>Rueda</b> cambia de arma</div></div>`;
     return `<div class="zm-kbwrap"><div class="zm-kb">${keys}</div>${arrows}${mouse}</div><div class="zm-legend">${legend}</div>`;
   }
@@ -454,33 +460,41 @@ export class ZMenu {
   // ---------- Tienda ----------
   shopKey() {
     const m = this.m, P = m.me || {};
-    return JSON.stringify([P.pts, P.owned, P.dmgLvl, m.ready, this.boughtId, this.d.touch]);
+    return JSON.stringify([P.pts, P.owned, P.dmgLvl, P.swLvl, P.enLvl, m.ready, this.boughtId, this.d.touch]);
   }
   renderShop() {
     const m = this.m, P = m.me || {};
-    const cards = SHOP.map((it, i) => {
+    const last = {};
+    const main = [], side = [];
+    SHOP.forEach((it, i) => {
       const cost = itemCost(P, it);
       const owned = it.weapon != null && P.owned?.[it.weapon];
-      const maxed = it.id === 'upgrade' && P.dmgLvl >= 3;
+      const lvl = upgradeLevel(P, it.id);
+      const maxed = lvl != null && lvl >= UPGRADE_MAX;
       const can = !owned && !maxed && P.pts >= cost;
       const st = owned ? 'owned' : maxed ? 'maxed' : can ? 'can' : 'poor';
       const price = owned ? 'Ya la tienes' : maxed ? 'Al máximo' : `💰 ${fmt(cost)}`;
-      const lvl = it.id === 'upgrade' ? `<div class="zm-lvl">${[0, 1, 2].map((k) => `<i class="${k < (P.dmgLvl || 0) ? 'on' : ''}"></i>`).join('')}</div>` : '';
-      return `<button class="zm-card ${st}${this.boughtId === it.id ? ' bought' : ''}" data-buy="${it.id}" ${can ? '' : 'aria-disabled="true"'}>
-        <span class="zm-cardkey">${i + 1}</span>
+      const lvlHtml = lvl != null ? `<div class="zm-lvl">${Array.from({ length: UPGRADE_MAX }, (_, k) => `<i class="${k < lvl ? 'on' : ''}"></i>`).join('')}</div>` : '';
+      const W = it.weapon != null ? WEAPONS[it.weapon] : null;
+      const isSide = it.cat === 'supply' || it.cat === 'upgrade';
+      const head = !last[it.cat] ? `<div class="zm-shopcat">${esc(SHOP_CATS[it.cat] || '')}</div>` : '';
+      last[it.cat] = true;
+      (isSide ? side : main).push(`${head}<button class="zm-card ${isSide ? 'row ' : ''}${st}${it.id === 'box' ? ' box' : ''}${W?.kind === 'sword' ? ' sword' : ''}${this.boughtId === it.id ? ' bought' : ''}" data-buy="${it.id}" ${can ? '' : 'aria-disabled="true"'} style="--el:${W?.color || (it.id === 'box' ? '#b06cff' : 'var(--zm-green)')}">
+        ${i < 9 ? `<span class="zm-cardkey">${i + 1}</span>` : ''}
         <span class="zm-cardicon" data-icon="${SHOP_ICON[it.id]}" data-size="58"></span>
-        <span class="zm-cardname">${esc(it.name)}</span>
-        <span class="zm-carddesc">${esc(it.desc)}</span>${lvl}
+        <span class="zm-cardtext"><span class="zm-cardname">${esc(it.name)}</span>
+        <span class="zm-carddesc">${esc(it.desc)}</span>${lvlHtml}</span>
         <span class="zm-cardprice">${price}</span>
-        ${st === 'poor' ? `<span class="zm-cardneed">Te faltan ${fmt(cost - (P.pts || 0))}</span>` : ''}
+        ${st === 'poor' && !isSide ? `<span class="zm-cardneed">Te faltan ${fmt(cost - (P.pts || 0))}</span>` : ''}
         <span class="zm-stamp">✓ Comprado</span>
-      </button>`;
-    }).join('');
+      </button>`);
+    });
+    const cards = `<div class="zm-shop-main">${main.join('')}</div><div class="zm-shop-side">${side.join('')}</div>`;
     return `<div class="zm-shop">
       <div class="zm-shophead"><div><div class="zm-kicker">Entre hordas</div><h2 class="zm-ptitle">Tienda de la oficina</h2></div>
         <div class="zm-shopinfo"><span class="zm-timer" data-shoptimer></span><span class="zm-pts">💰 <b>${fmt(P.pts)}</b></span></div></div>
-      <div class="zm-cards">${cards}</div>
-      <div class="zm-shopfoot"><span class="zm-pdesc small">${this.d.touch ? 'Toca una tarjeta para comprar' : `${kbd('1')}–${kbd('6')} comprar · ${kbd('B')} cerrar · ${kbd('Enter')} listo`}</span>
+      <div class="zm-cards split">${cards}</div>
+      <div class="zm-shopfoot"><span class="zm-pdesc small">${this.d.touch ? 'Toca una tarjeta para comprar' : `${kbd('1')}–${kbd('9')} comprar · ${kbd('B')} cerrar · ${kbd('Enter')} listo`}</span>
         <span class="flex1"></span>
         <button class="zm-btn" data-act="closeShop">Cerrar</button>
         <button class="zm-btn ${m.ready ? 'ok' : 'prim'}" data-act="shopReady">${m.ready ? '✓ Listo' : 'Estoy listo'}</button></div>
@@ -512,6 +526,12 @@ export class ZMenu {
       const B = BOSSES[b.boss] || {};
       el.className = 'zm-bn zm-bn-boss';
       el.innerHTML = `<div class="zm-bn-band"><div class="zm-bn-k">⚠ Jefe · Horda ${b.wave}</div><div class="zm-bn-name">${esc(B.name || 'Jefe')}</div><div class="zm-bn-quote">«${esc(B.title || '')}»</div></div>`;
+    } else if (b.kind === 'tech') {
+      const T = TECHNIQUES[b.tech] || {};
+      const [form, ...rest] = String(T.name || '').split(':');
+      el.className = `zm-bn zm-bn-tech el-${b.tech}`;
+      el.style.setProperty('--el', T.color || '#FE3377');
+      el.innerHTML = `<div class="zm-bn-slash"></div><div class="zm-bn-tk">${esc(T.style || '')}${b.who ? ` · ${esc(b.who)}` : ''}</div><div class="zm-bn-form">${esc(form)}</div><div class="zm-bn-tname">${esc(rest.join(':').trim())}</div>`;
     } else if (b.kind === 'wave') {
       el.className = 'zm-bn zm-bn-wave';
       el.innerHTML = `<div class="zm-bn-k">Horda</div><div class="zm-bn-n">${b.wave}</div><div class="zm-bn-sub">${esc(b.sub || '')}</div>`;
@@ -525,6 +545,43 @@ export class ZMenu {
     this.bannerEl.appendChild(el);
     el.addEventListener('animationend', (e) => { if (e.target === el) el.remove(); });
     setTimeout(() => { if (!el.getAnimations?.().some((x) => x.playState === 'paused')) el.remove(); }, dur * 1000 + 400); // por si no hubo animación
+  }
+
+  // ---------- Caja misteriosa: una tira de armas que gira y se detiene en el premio ----------
+  // w = índice del arma que tocó; had = ya la tenía (le llenamos las balas)
+  mystery(w, had = false, onDone = null) {
+    const W = WEAPONS[w];
+    if (!W) return;
+    this.boxEl?.remove();
+    clearTimeout(this.boxT);
+    const el = document.createElement('div');
+    el.className = 'zm-box';
+    const pool = WEAPONS.filter((x) => x.cost);
+    const N = 26;
+    const reel = Array.from({ length: N }, (_, i) => (i === N - 3 ? W : pool[(Math.random() * pool.length) | 0]));
+    el.innerHTML = `<div class="zm-box-card"><div class="zm-kicker">Caja misteriosa</div>
+      <div class="zm-box-win"><div class="zm-box-reel">${reel.map((x) => `<div class="zm-box-cell"><span data-icon="${x.id}" data-size="72"></span><b>${esc(x.short)}</b></div>`).join('')}</div><i class="zm-box-mark"></i></div>
+      <div class="zm-box-res"><span class="zm-box-name">${esc(W.name)}</span><span class="zm-box-sub">${had ? 'Ya la tenías: munición llena' : W.kind === 'sword' ? `¡Espada nueva! ${esc(TECHNIQUES[W.tech]?.style || '')}` : '¡Arma nueva!'}</span></div></div>`;
+    this.root.appendChild(el);
+    this.boxEl = el;
+    this.paintCanvases(el);
+    const reelEl = el.querySelector('.zm-box-reel');
+    const cell = 7.5; // em por celda
+    const target = (N - 3) * cell - cell; // deja el premio en el centro (3 celdas visibles)
+    const t0 = performance.now(), dur = 2600;
+    let lastCell = -1;
+    const tick = () => {
+      if (!el.isConnected) return;
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3.4);
+      const x = target * e;
+      reelEl.style.transform = `translateX(${-x}em)`;
+      const c = Math.floor(x / cell);
+      if (c !== lastCell) { lastCell = c; this.a.sound?.('boxspin'); }
+      if (k < 1) requestAnimationFrame(tick);
+      else { el.classList.add('done'); this.a.sound?.('boxwin'); onDone?.(); this.boxT = setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 500); }, 2200); }
+    };
+    requestAnimationFrame(tick);
   }
 
   // ---------- Dibujos dentro del HTML ----------
@@ -693,6 +750,7 @@ export class ZMenu {
 
   destroy() {
     clearTimeout(this.boughtT);
+    clearTimeout(this.boxT);
     this.root.remove();
   }
 }

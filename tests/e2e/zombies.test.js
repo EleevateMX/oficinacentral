@@ -108,18 +108,74 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
   assert.equal(st.boss, 'El Gerente Regional');
   await page.waitForTimeout(500);
   assert.equal((await Z('state')).programs, programs, 'sin compilar materiales nuevos al disparar ni con el jefe');
+  // arsenal: armas nuevas (ráfaga, francotirador con mira, ametralladora y tazas explosivas)
+  for (const id of ['toner', 'laser', 'trituradora', 'lanzatazas']) {
+    assert.ok((await Z('give', id)) >= 3);
+    if (id === 'laser') await Z('ads', true);
+    await Z('aim');
+    assert.equal(await Z('shoot'), id);
+    await Z('advance', 0.3);
+    await Z('ads', false);
+  }
+  // espada: combo de 3, la barra de energía y las 3 técnicas
+  await Z('give', 'katana');
+  await page.waitForTimeout(400);
+  const zid = await Z('zombieAt', 1.2, 0);
+  assert.ok(zid, 'zombi de práctica enfrente');
+  for (let k = 0; k < 3; k++) {
+    const r = await Z('swing', 'light');
+    assert.equal(r.step, k, `golpe ${k + 1} del combo`);
+    await Z('advance', 0.4);
+  }
+  assert.ok((await Z('zombieHp', zid)) < 500, 'el combo le pegó');
+  assert.ok((await Z('arms')).energy > 0, 'conectar golpes llena la energía');
+  await Z('swing', 'heavy');
+  await Z('advance', 0.5);
+  // cuenta cada anuncio de técnica que aparece (otro anuncio, como "¡Horda superada!", lo puede reemplazar enseguida)
+  await page.evaluate(() => {
+    window.__techBanners = 0;
+    new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains('zm-bn-tech')) window.__techBanners++; })
+      .observe(document.body, { childList: true, subtree: true });
+  });
+  for (const [i, id] of ['katana', 'carton', 'regla'].entries()) {
+    await Z('give', id);
+    await Z('zombieAt', 2.5, 0);
+    await Z('energy', 100);
+    assert.equal(await Z('tech'), true, `técnica de ${id}`);
+    await page.waitForFunction((n) => window.__techBanners >= n, i + 1, { timeout: 5000 });
+    await Z('advance', 0.2);
+    const a = await Z('arms');
+    assert.ok(a.energy < 100 && a.tcd > 0, 'gasta energía y entra en espera');
+    assert.equal(await Z('tech'), false, 'en espera no sale otra vez');
+    await page.waitForTimeout(700);
+    await Z('advance', 1);
+  }
+  // golpe rápido (V) y rueda de armas (Tab)
+  await Z('bash');
+  assert.equal(await Z('wheel', true), true);
+  await Z('wheelPick', 0);
+  await Z('wheel', false);
+  assert.equal((await Z('arms')).id, 'grapadora', 'la rueda cambia de arma');
+  await page.waitForTimeout(800);
+  assert.equal((await Z('state')).programs, programs, 'espadas, técnicas, mira y rueda sin compilar nada nuevo');
   // descanso y tienda (tarjetas; 1-6 compran)
   await Z('breakNow'); await Z('advance', 1);
   assert.equal((await Z('state')).phase, 'break');
   await Z('points', 1000);
   await Z('shop', true);
-  await page.waitForSelector('.zm-card[data-buy="cafetera"].can');
+  await page.waitForSelector('.zm-card[data-buy="box"].can');
   const ptsBefore = (await Z('state')).pts;
-  await page.keyboard.press('Digit4');
+  await page.keyboard.press('Digit5');
   await page.waitForFunction((p) => window.__zombies.state().pts < p, ptsBefore, { timeout: 10000 });
   await page.waitForSelector('.zm-card[data-buy="cafetera"].owned');
   st = await Z('state');
   assert.ok(st.shopOpen);
+  // caja misteriosa: gira y da un arma
+  await Z('points', 1000);
+  await page.click('.zm-card[data-buy="box"]');
+  await page.waitForSelector('.zm-box', { timeout: 5000 });
+  await page.waitForSelector('.zm-box.done', { timeout: 15000 });
+  assert.equal((await Z('state')).programs, programs, 'la tienda y la caja tampoco compilan nada');
   // fin: sin protección y con un golpe
   await Z('shop', false);
   await Z('god', false);

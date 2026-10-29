@@ -170,8 +170,15 @@ export class Pickups {
     const g = new THREE.Group();
     if (kind === 'ammo') { g.add(part(0.34, 0.2, 0.24, '#ffcc00')); g.add(part(0.35, 0.05, 0.25, '#141414', { y: 0.04 })); g.add(part(0.2, 0.08, 0.01, '#d62f3a', { y: 0.0, z: 0.125 })); }
     else if (kind === 'health') { const d = new THREE.Mesh(GEO.torus.clone(), mat('#f4a261')); d.scale.setScalar(0.6); d.rotation.x = Math.PI / 2; g.add(d); const ic = new THREE.Mesh(GEO.torus.clone(), mat('#f15bb5')); ic.scale.set(0.62, 0.62, 0.3); ic.rotation.x = Math.PI / 2; ic.position.y = 0.05; g.add(ic); }
+    else if (kind === 'box') {
+      // caja misteriosa: morada con signos que brillan
+      g.add(part(0.34, 0.3, 0.34, '#3a2460'));
+      g.add(part(0.36, 0.05, 0.36, '#5a3a8a', { y: 0.15 }));
+      for (const [x, z, ry] of [[0, 0.172, 0], [0.172, 0, Math.PI / 2]]) { const q = part(0.1, 0.16, 0.01, '#7CFF4F', { glow: true, x, z, shadow: false }); q.rotation.y = ry; g.add(q); }
+      g.add(part(0.12, 0.12, 0.12, '#FE3377', { glow: true, y: 0.26, geo: GEO.ball, shadow: false }));
+    }
     else { g.add(part(0.3, 0.3, 0.05, '#FFCC00', { glow: true, geo: GEO.cyl })); g.children[0].rotation.x = Math.PI / 2; }
-    const glow = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.42, 24), new THREE.MeshBasicMaterial({ color: kind === 'health' ? '#ff7ab6' : kind === 'ammo' ? '#ffcc00' : '#fff3a0', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+    const glow = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.42, 24), new THREE.MeshBasicMaterial({ color: kind === 'health' ? '#ff7ab6' : kind === 'ammo' ? '#ffcc00' : kind === 'box' ? '#b06cff' : '#fff3a0', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
     glow.rotation.x = -Math.PI / 2; glow.position.y = -0.33;
     g.add(glow);
     this.scene.add(g);

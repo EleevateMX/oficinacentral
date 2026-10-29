@@ -1,13 +1,18 @@
 // Simulación de "Zombies en la oficina". La corre el anfitrión (asiento 0) con paso fijo;
 // el invitado solo manda su posición, sus disparos y sus compras. Sin DOM ni three.js.
 import {
-  ZOMBIE_TYPES, ZOMBIE_TYPE_IDS, BOSSES, BOSS_ORDER, WEAPONS, SHOP, upgradeCost, DROPS, CELL, TILE_M, EYE_H, WALL_H, PLAYER_R,
+  ZOMBIE_TYPES, ZOMBIE_TYPE_IDS, BOSSES, BOSS_ORDER, WEAPONS, SHOP, upgradeCost, swordUpCost, energyUpCost, UPGRADE_MAX, DROPS, CELL, TILE_M, EYE_H, WALL_H, PLAYER_R,
   waveSpec, waveRoster, distanceField, moveCircle, rayCast, lineOfSight, killPoints, cellAt,
 } from '../../../../shared/zombies.js';
+import {
+  TECHNIQUES, ENERGY_MAX, BASH, isSword, falloff, pelletDirs, spreadLimits, arcHits, pathHits, techPath, swingOf,
+  energyGain, techDamage, boxPick, ownedBits, bitsOwned, clamp,
+} from '../../../../shared/arsenal.js';
 
 export const ZSTATES = ['rise', 'emerge', 'walk', 'attack', 'dead', 'windup', 'charge', 'stun', 'cast'];
 export const PROJ = ['acid', 'paper', 'coffee'];
-export const DROP_KINDS = ['ammo', 'health', 'points'];
+export const DROP_KINDS = ['ammo', 'health', 'points', 'box'];
+export const MELEE_KINDS = ['light', 'heavy', 'bash'];
 const KINDS = [...ZOMBIE_TYPE_IDS, 'boss'];
 
 // Generador pseudoaleatorio con semilla (mulberry32)
@@ -31,7 +36,8 @@ export function newPlayer(seat, level) {
   const y = open(level.start.x + ox, level.start.y + oy) ? level.start.y + oy : level.start.y;
   return {
     seat, x, y, a: level.startA ?? Math.PI / 2, p: 0, down: false, downT: 0, rv: 0, revive: 0, prot: 0,
-    hp: 100, maxHp: 100, armor: 0, alive: true, pts: 500, earned: 0, kills: 0, dmgLvl: 0, owned: [true, false, false], w: 0,
+    hp: 100, maxHp: 100, armor: 0, alive: true, pts: 500, earned: 0, kills: 0, dmgLvl: 0, owned: WEAPONS.map((_, i) => i === 0), w: 0,
+    energy: 0, tcd: 0, mcd: 0, swLvl: 0, enLvl: 0, // espadas: energía de técnica, enfriamientos y mejoras
     ready: false, streak: 0, streakT: 0, hurtT: 0, mv: 0,
     dealt: 0, revives: 0, // estadísticas para la pantalla final
   };
@@ -43,7 +49,7 @@ export function createSim(level, { players = 1, seats = null, seed = (Math.rando
   const S = {
     level, seed, rand: rng(seed), t: 0, phase: 'intro', pt: 4, wave: 0, spec: null,
     players: Array.from({ length: MAX_PLAYERS }, (_, i) => (seats[i] ? newPlayer(i, level) : null)),
-    zombies: [], shots: [], drops: [], roster: [], spawnT: 0, nextId: 1, kills: 0,
+    zombies: [], shots: [], drops: [], zones: [], roster: [], spawnT: 0, nextId: 1, kills: 0,
     ev: [], grants: [], field: null, fieldT: 0, bossId: 0, flicker: 0, god: false,
   };
   return S;
@@ -133,46 +139,158 @@ export function traceShot(level, zombies, shot, maxD = 40) {
   return { hit: null, d, h, x: shot.x + ca * d, y: shot.y + sa * d };
 }
 
-// Ángulos de los perdigones de un disparo (deterministas con la semilla)
-export function pellets(weapon, a, p, seed) {
-  const W = WEAPONS[weapon];
-  const r = rng(seed);
+// Ángulos de los perdigones de un disparo (deterministas con la semilla). spread: la del momento (apuntando, corriendo…)
+export function pellets(weapon, a, p, seed, spread) {
+  const W = WEAPONS[weapon] || WEAPONS[0];
+  return pelletDirs(W, a, p, seed, spread ?? W.spread);
+}
+
+// Varios zombis en la línea del disparo (el láser atraviesa hasta n)
+export function traceMulti(level, zombies, shot, n = 1) {
   const out = [];
-  for (let i = 0; i < W.pellets; i++) out.push({ a: a + (r() - 0.5) * 2 * W.spread, p: p + (r() - 0.5) * 2 * W.spread * 0.6 });
+  let list = zombies;
+  for (let k = 0; k < n; k++) {
+    const r = traceShot(level, list, shot);
+    out.push(r);
+    if (!r.hit) break;
+    const hz = r.hit;
+    list = list.filter((z) => z !== hz);
+  }
   return out;
 }
 
-// Un disparo de un jugador (lo resuelve el anfitrión). shot = { x, y, a, p, w, seed }
+// Zombis que se pueden golpear (los que van saliendo del piso, solo cuando ya asoman)
+const hittable = (S) => S.zombies.filter((z) => z.st !== 'dead' && !(z.st === 'rise' && z.t < 0.6));
+const losFn = (S) => (ax, ay, bx, by) => lineOfSight(S.level, ax, ay, bx, by);
+
+// Un disparo de un jugador (lo resuelve el anfitrión). shot = { x, y, a, p, w, seed, sp (dispersión) }
 export function fire(S, seat, shot) {
   const P = S.players[seat];
-  if (!P || !P.alive || S.phase === 'over') return [];
-  const W = WEAPONS[shot.w] || WEAPONS[0];
-  if (!P.owned[shot.w]) return [];
-  S.ev.push({ k: 'fire', s: seat, w: shot.w });
+  if (!P || !P.alive || S.phase === 'over' || !shot) return [];
+  const wi = shot.w | 0;
+  const W = WEAPONS[wi];
+  if (!W || W.kind !== 'gun' || !P.owned[wi]) return [];
+  const [lo, hi] = spreadLimits(W);
+  const sp = clamp(Number.isFinite(shot.sp) ? shot.sp : W.spread, lo, hi);
+  S.ev.push({ k: 'fire', s: seat, w: wi });
   const results = [];
-  for (const pl of pellets(shot.w, shot.a, shot.p, shot.seed)) {
-    const r = traceShot(S.level, S.zombies, { x: shot.x, y: shot.y, a: pl.a, p: pl.p });
-    results.push(r);
-    if (!r.hit) continue;
-    let dmg = W.dmg * (1 + 0.25 * P.dmgLvl) * (r.head ? 1.8 : 1);
-    if (W.pellets > 1 && r.d > 5) dmg *= Math.max(0.35, 1 - (r.d - 5) * 0.12);
-    damageZombie(S, r.hit, dmg, seat, shot.a, r.head, r.h);
+  const mul = 1 + 0.25 * P.dmgLvl;
+  for (const pl of pellets(wi, shot.a, shot.p, shot.seed, sp)) {
+    const line = traceMulti(S.level, S.zombies, { x: shot.x, y: shot.y, a: pl.a, p: pl.p }, W.pierce || 1);
+    line.forEach((r, k) => {
+      results.push(r);
+      if (!r.hit) return;
+      const dmg = W.dmg * mul * (r.head ? W.head || 1.8 : 1) * falloff(W, r.d) * 0.8 ** k;
+      damageZombie(S, r.hit, dmg, seat, shot.a, r.head, r.h, wi);
+    });
+    // tazas explosivas: daño en área donde pega
+    if (W.splash) {
+      const r = line[line.length - 1];
+      explode(S, seat, r.x - Math.cos(pl.a) * 0.08, r.y - Math.sin(pl.a) * 0.08, Math.max(0.1, r.h), W.splash.r, W.splash.dmg * mul, wi, r.hit);
+    }
   }
   return results;
 }
 
-export function damageZombie(S, z, dmg, seat, ang, head, h) {
-  if (z.st === 'dead') return;
+function explode(S, seat, x, y, h, rad, dmg, w, skip = null) {
+  S.ev.push({ k: 'boom', s: seat, x: r2(x), y: r2(y), h: r2(h), r: rad });
+  for (const z of hittable(S)) {
+    const d = Math.hypot(z.x - x, z.y - y) - (z.r || 0.3);
+    if (d > rad) continue;
+    if (!lineOfSight(S.level, x, y, z.x, z.y)) continue;
+    const k = z === skip ? 1 : 1 - (0.55 * Math.max(0, d)) / rad;
+    damageZombie(S, z, dmg * k, seat, Math.atan2(z.y - y, z.x - x), false, 1.2, w);
+  }
+}
+
+// ---------- Cuerpo a cuerpo ----------
+// m = { kind: 'light'|'heavy'|'bash', step (0..2), w, x, y, a }. Arco/cono en el anfitrión.
+export function melee(S, seat, m) {
+  const P = S.players[seat];
+  if (!P || !P.alive || S.phase === 'over' || !m) return [];
+  const kind = MELEE_KINDS.includes(m.kind) ? m.kind : 'bash';
+  const wi = m.w | 0;
+  const sword = kind !== 'bash' && isSword(wi) && P.owned[wi] ? WEAPONS[wi] : null;
+  if (kind !== 'bash' && !sword) return [];
+  if (P.mcd > 0.05) return [];
+  const sw = sword ? swingOf(sword, kind, m.step | 0, P.swLvl) : { dmg: BASH.dmg, range: BASH.range, arc: BASH.arc, dur: BASH.every, kind, step: 0 };
+  P.mcd = sw.dur * 0.55;
+  // desde donde dice (si no está lejos de donde lo tengo)
+  const near = Number.isFinite(m.x) && Number.isFinite(m.y) && Math.hypot(m.x - P.x, m.y - P.y) < 1.5;
+  const ox = near ? m.x : P.x, oy = near ? m.y : P.y;
+  const a = Number.isFinite(m.a) ? m.a : P.a;
+  const hits = arcHits({ x: ox, y: oy, a }, hittable(S), { range: sw.range, arc: sw.arc, los: losFn(S), max: kind === 'heavy' ? 8 : 5 });
+  for (const z of hits) damageZombie(S, z, sw.dmg * (z.kind === 'boss' ? 0.85 : 1), seat, a, false, 1.3, sword ? wi : -1, kind === 'heavy' ? 1.6 : 1);
+  if (sword && hits.length) P.energy = Math.min(ENERGY_MAX, P.energy + energyGain(sword, kind, P.enLvl) * Math.min(3, hits.length));
+  S.ev.push({ k: 'slash', s: seat, w: sword ? wi : -1, kd: MELEE_KINDS.indexOf(kind), st: sw.step | 0, n: hits.length });
+  return hits;
+}
+
+// ---------- Técnicas de espada ----------
+// Camino libre de muros: la ola pasa por encima de los muebles; las embestidas chocan con todo.
+export function techCast(level, tech) {
+  if (tech.kind === 'wave') return (x, y, a, max) => rayCast(level, x, y, a, max).t;
+  return (x, y, a, max) => { const m = moveCircle(level, x, y, PLAYER_R, Math.cos(a) * max, Math.sin(a) * max); return Math.hypot(m.x - x, m.y - y); };
+}
+export function techOf(w) { return isSword(w) ? TECHNIQUES[WEAPONS[w].tech] : null; }
+
+// t = { w, x, y, a }. Gasta energía y respeta el enfriamiento. Devuelve { ok, why?, hits, path }
+export function technique(S, seat, t) {
+  const P = S.players[seat];
+  if (!P || !P.alive || S.phase === 'over' || !t) return { ok: false, why: 'No puedes ahora', hits: [] };
+  const wi = t.w | 0;
+  const T = isSword(wi) && P.owned[wi] ? techOf(wi) : null;
+  if (!T) return { ok: false, why: 'Necesitas una espada', hits: [] };
+  if (P.tcd > 0) return { ok: false, why: 'Técnica en espera', hits: [] };
+  if (P.energy < T.cost) return { ok: false, why: 'Te falta energía', hits: [] };
+  const near = Number.isFinite(t.x) && Number.isFinite(t.y) && Math.hypot(t.x - P.x, t.y - P.y) < 1.5;
+  const x = near ? t.x : P.x, y = near ? t.y : P.y;
+  const a = Number.isFinite(t.a) ? t.a : P.a;
+  const path = techPath(T, x, y, a, techCast(S.level, T));
+  P.energy -= T.cost; P.tcd = T.cd;
+  const hits = pathHits(path.ax, path.ay, path.bx, path.by, T.width, hittable(S), { los: losFn(S) });
+  const dmg = techDamage(T, P.swLvl);
+  for (const z of hits) damageZombie(S, z, dmg, seat, a, false, 1.3, wi, 2);
+  if (T.kind !== 'wave') { P.x = path.bx; P.y = path.by; P.prot = Math.max(P.prot, 0.6); } // la embestida te lleva y te cubre un instante
+  if (T.burn) {
+    for (const k of [0.35, 0.7, 1]) {
+      const zx = path.ax + (path.bx - path.ax) * k, zy = path.ay + (path.by - path.ay) * k;
+      S.zones.push({ id: S.nextId++, kind: 'fire', x: zx, y: zy, r: T.burn.r, t: T.burn.t, dps: T.burn.dps * (1 + 0.15 * P.swLvl), seat, tick: 0, w: wi });
+    }
+    if (S.zones.length > 12) S.zones.splice(0, S.zones.length - 12);
+  }
+  S.ev.push({ k: 'tech', s: seat, id: T.id, w: wi, ax: r2(path.ax), ay: r2(path.ay), bx: r2(path.bx), by: r2(path.by), n: hits.length });
+  return { ok: true, hits, path };
+}
+
+// Piso en llamas: quema a los zombis que lo pisan
+function updateZones(S, dt) {
+  for (let i = S.zones.length - 1; i >= 0; i--) {
+    const q = S.zones[i];
+    q.t -= dt; q.tick -= dt;
+    if (q.t <= 0) { S.zones.splice(i, 1); continue; }
+    if (q.tick > 0) continue;
+    q.tick = 0.25;
+    for (const z of hittable(S)) {
+      if (Math.hypot(z.x - q.x, z.y - q.y) > q.r + (z.r || 0.3) * 0.5) continue;
+      damageZombie(S, z, q.dps * 0.25, q.seat, Math.atan2(z.y - q.y, z.x - q.x), false, 0.3, q.w, 0.1);
+    }
+  }
+}
+
+export function damageZombie(S, z, dmg, seat, ang, head, h, w = -1, kbMul = 1) {
+  if (z.st === 'dead' || !(dmg > 0)) return;
+  z.lw = w;
   const P0 = S.players[seat];
   if (P0) P0.dealt += Math.max(0, Math.min(dmg, z.hp));
   z.hp -= dmg;
   z.flash = 0.12;
   const kb = z.kind === 'boss' ? 0.4 : z.kind === 'tank' ? 0.9 : 2.2;
-  z.vx += Math.cos(ang) * kb * Math.min(2, dmg / 20);
-  z.vy += Math.sin(ang) * kb * Math.min(2, dmg / 20);
+  z.vx += Math.cos(ang) * kb * Math.min(2, dmg / 20) * kbMul;
+  z.vy += Math.sin(ang) * kb * Math.min(2, dmg / 20) * kbMul;
   const P = S.players[seat];
   if (P) { P.pts += 10; P.earned += 10; }
-  S.ev.push({ k: 'hit', s: seat, id: z.id, x: r2(z.x), y: r2(z.y), h: r2(h ?? 1.2), hd: head ? 1 : 0 });
+  S.ev.push({ k: 'hit', s: seat, id: z.id, x: r2(z.x), y: r2(z.y), h: r2(h ?? 1.2), hd: head ? 1 : 0, d: Math.round(Math.max(0, Math.min(dmg, z.hp + dmg))), w });
   if (z.hp <= 0) killZombie(S, z, seat);
 }
 
@@ -187,7 +305,7 @@ function killZombie(S, z, seat) {
     pts = killPoints(z.kind === 'boss' ? z.boss : z.kind, P.streak - 1);
     P.pts += pts; P.earned += pts; P.kills++;
   }
-  S.ev.push({ k: 'kill', s: seat ?? -1, id: z.id, x: r2(z.x), y: r2(z.y), pts, boss: z.kind === 'boss' ? 1 : 0 });
+  S.ev.push({ k: 'kill', s: seat ?? -1, id: z.id, x: r2(z.x), y: r2(z.y), pts, boss: z.kind === 'boss' ? 1 : 0, w: z.lw ?? -1, v: z.kind === 'boss' ? z.boss : z.kind });
   if (z.kind === 'boss') {
     S.bossId = 0;
     // El jefe suelta de todo
@@ -295,7 +413,7 @@ export function spawnBoss(S, bossDef) {
 // ---------- Paso de simulación ----------
 export function step(S, dt) {
   S.t += dt;
-  for (const p of S.players) if (p) { p.hurtT = Math.max(0, p.hurtT - dt); p.streakT = Math.max(0, p.streakT - dt); p.prot = Math.max(0, p.prot - dt); }
+  for (const p of S.players) if (p) { p.hurtT = Math.max(0, p.hurtT - dt); p.streakT = Math.max(0, p.streakT - dt); p.prot = Math.max(0, p.prot - dt); p.tcd = Math.max(0, p.tcd - dt); p.mcd = Math.max(0, p.mcd - dt); }
   if (S.phase !== 'over') updateDowned(S, dt);
   S.flicker = Math.max(0, S.flicker - dt);
   if (S.phase === 'over') { updateZombies(S, dt); return; }
@@ -311,6 +429,7 @@ export function step(S, dt) {
     if (S.pt <= 0) startWave(S);
     updateZombies(S, dt);
     updateDrops(S, dt);
+    updateZones(S, dt);
     return;
   }
   // Pelea
@@ -328,6 +447,7 @@ export function step(S, dt) {
   updateZombies(S, dt);
   updateShots(S, dt);
   updateDrops(S, dt);
+  updateZones(S, dt);
   if (!S.roster.length && S.bossPending <= 0 && !S.zombies.some((z) => z.st !== 'dead')) startBreak(S);
   if (!alivePlayers(S).length) gameOver(S);
 }
@@ -510,6 +630,7 @@ function updateDrops(S, dt) {
       if (d.kind === 'health') { if (p.hp >= p.maxHp) continue; p.hp = Math.min(p.maxHp, p.hp + 30); }
       else if (d.kind === 'points') { p.pts += 150; p.earned += 150; }
       else if (d.kind === 'ammo') S.grants.push({ s: p.seat, ammo: 'pack' });
+      else if (d.kind === 'box') openBox(S, p);
       S.ev.push({ k: 'pick', s: p.seat, d: d.kind });
       S.drops.splice(i, 1);
       break;
@@ -608,26 +729,46 @@ function bossThink(S, z, tgt, td, dt) {
 const m2 = (z) => z.hp < z.max * 0.4;
 
 // ---------- Tienda ----------
+const UPGRADES = { upgrade: ['dmgLvl', upgradeCost], swordup: ['swLvl', swordUpCost], energy: ['enLvl', energyUpCost] };
+
+// Caja misteriosa: un arma al azar (si ya las tiene todas, le llena las balas)
+function openBox(S, P) {
+  const w = boxPick(S.rand, P.owned);
+  const had = P.owned[w];
+  P.owned[w] = true;
+  S.grants.push(had ? { s: P.seat, ammo: 'full', box: 1 } : { s: P.seat, weapon: w, box: 1 });
+  S.ev.push({ k: 'box', s: P.seat, w, had: had ? 1 : 0 });
+  return w;
+}
+
 export function buy(S, seat, id) {
   const P = S.players[seat];
   const item = SHOP.find((s) => s.id === id);
   if (!P || !item || S.phase !== 'break') return { ok: false, why: 'Solo entre hordas' };
-  let cost = item.cost;
-  if (id === 'upgrade') { if (P.dmgLvl >= 3) return { ok: false, why: 'Ya está al máximo' }; cost = upgradeCost(P.dmgLvl); }
+  const up = UPGRADES[id];
+  if (up && (P[up[0]] || 0) >= UPGRADE_MAX) return { ok: false, why: 'Ya está al máximo' };
+  const cost = itemCost(P, item);
   if (item.weapon != null && P.owned[item.weapon]) return { ok: false, why: 'Ya la tienes' };
   if (id === 'heal' && P.hp >= P.maxHp) return { ok: false, why: 'Ya tienes toda la vida' };
   if (P.pts < cost) return { ok: false, why: 'Te faltan puntos' };
   P.pts -= cost;
+  let w = null;
   if (id === 'ammo') S.grants.push({ s: seat, ammo: 'full' });
   else if (id === 'heal') P.hp = Math.min(P.maxHp, P.hp + 60);
   else if (id === 'armor') P.armor = Math.min(100, P.armor + 50);
-  else if (id === 'upgrade') P.dmgLvl++;
+  else if (id === 'box') w = openBox(S, P);
+  else if (up) P[up[0]] = (P[up[0]] || 0) + 1;
   else if (item.weapon != null) { P.owned[item.weapon] = true; S.grants.push({ s: seat, weapon: item.weapon }); }
   S.ev.push({ k: 'buy', s: seat, id });
-  return { ok: true };
+  return { ok: true, w };
 }
 
-export function itemCost(P, item) { return item.id === 'upgrade' ? upgradeCost(P?.dmgLvl || 0) : item.cost; }
+// Precio de un artículo para ese jugador (las mejoras suben de precio en cada nivel)
+export function itemCost(P, item) {
+  const up = UPGRADES[item.id];
+  return up ? up[1](P?.[up[0]] || 0) : item.cost;
+}
+export const upgradeLevel = (P, id) => (UPGRADES[id] ? P?.[UPGRADES[id][0]] || 0 : null);
 
 // ---------- Estado compacto para la red ----------
 const q2 = (v) => Math.round(v * 100);
@@ -635,10 +776,11 @@ export function pack(S) {
   const boss = S.bossId ? S.zombies.find((z) => z.id === S.bossId) : null;
   return {
     ph: S.phase, pt: Math.round(S.pt * 10) / 10, w: S.wave, left: remaining(S), k: S.kills, fl: S.flicker > 0 ? 1 : 0,
-    P: S.players.map((p) => p && [q2(p.x), q2(p.y), Math.round(p.a * 1000), Math.round(p.p * 1000), Math.ceil(p.hp), Math.ceil(p.armor), p.alive ? 1 : 0, p.w, p.pts, p.earned, p.kills, p.dmgLvl, (p.owned[0] ? 1 : 0) | (p.owned[1] ? 2 : 0) | (p.owned[2] ? 4 : 0), p.ready ? 1 : 0, p.mv || 0, p.hurtT > 0 ? 1 : 0, p.down ? 1 : 0, Math.round(p.revive * 100), Math.ceil(p.downT), p.prot > 0 ? 1 : 0, Math.round(p.dealt), p.revives]),
+    P: S.players.map((p) => p && [q2(p.x), q2(p.y), Math.round(p.a * 1000), Math.round(p.p * 1000), Math.ceil(p.hp), Math.ceil(p.armor), p.alive ? 1 : 0, p.w, p.pts, p.earned, p.kills, p.dmgLvl, ownedBits(p.owned), p.ready ? 1 : 0, p.mv || 0, p.hurtT > 0 ? 1 : 0, p.down ? 1 : 0, Math.round(p.revive * 100), Math.ceil(p.downT), p.prot > 0 ? 1 : 0, Math.round(p.dealt), p.revives, Math.floor(p.energy), Math.ceil(p.tcd * 10), p.swLvl, p.enLvl]),
     Z: S.zombies.map((z) => [z.id, KINDS.indexOf(z.kind), z.boss ? BOSS_ORDER.indexOf(z.boss) : -1, q2(z.x), q2(z.y), Math.round(z.a * 100), Math.round((z.hp / z.max) * 100), ZSTATES.indexOf(z.st), Math.round(z.t * 100), z.flash > 0 ? 1 : 0, z.minion ? 1 : 0]),
     J: S.shots.map((q) => [q.id, PROJ.indexOf(q.kind), q2(q.x), q2(q.y), q2(q.h)]),
     K: S.drops.map((d) => [d.id, DROP_KINDS.indexOf(d.kind), q2(d.x), q2(d.y)]),
+    Q: S.zones.map((q) => [q.id, q2(q.x), q2(q.y), q2(q.r), Math.ceil(q.t * 10)]),
     B: boss ? [BOSS_ORDER.indexOf(boss.boss), Math.max(0, Math.round(boss.hp)), boss.max] : 0,
     ev: S.ev.splice(0),
   };
@@ -648,7 +790,8 @@ export function pack(S) {
 export function unpackPlayers(d) {
   return (d.P || []).map((p, seat) => p && ({
     seat, x: p[0] / 100, y: p[1] / 100, a: p[2] / 1000, p: p[3] / 1000, hp: p[4], armor: p[5], alive: !!p[6], w: p[7], pts: p[8], earned: p[9], kills: p[10], dmgLvl: p[11],
-    owned: [!!(p[12] & 1), !!(p[12] & 2), !!(p[12] & 4)], ready: !!p[13], mv: p[14], hurt: !!p[15], down: !!p[16], revive: (p[17] || 0) / 100, downT: p[18] || 0, prot: !!p[19], dealt: p[20] || 0, revives: p[21] || 0, maxHp: 100,
+    owned: bitsOwned(p[12]), ready: !!p[13], mv: p[14], hurt: !!p[15], down: !!p[16], revive: (p[17] || 0) / 100, downT: p[18] || 0, prot: !!p[19], dealt: p[20] || 0, revives: p[21] || 0, maxHp: 100,
+    energy: p[22] || 0, tcd: (p[23] || 0) / 10, swLvl: p[24] || 0, enLvl: p[25] || 0,
   }));
 }
 export function unpackZombie(z) {
@@ -665,7 +808,7 @@ export function restoreSim(level, d, { seed = (Math.random() * 2 ** 31) | 0 } = 
   const ps = unpackPlayers(d);
   ps.forEach((p, i) => {
     if (!p) return;
-    S.players[i] = { ...newPlayer(i, level), x: p.x, y: p.y, a: p.a, p: p.p, hp: p.hp, armor: p.armor, alive: p.alive, w: p.w, pts: p.pts, earned: p.earned, kills: p.kills, dmgLvl: p.dmgLvl, owned: p.owned, ready: p.ready, down: p.down, downT: p.downT, revive: p.revive, prot: 2, dealt: p.dealt, revives: p.revives };
+    S.players[i] = { ...newPlayer(i, level), x: p.x, y: p.y, a: p.a, p: p.p, hp: p.hp, armor: p.armor, alive: p.alive, w: p.w, pts: p.pts, earned: p.earned, kills: p.kills, dmgLvl: p.dmgLvl, owned: p.owned, ready: p.ready, down: p.down, downT: p.downT, revive: p.revive, prot: 2, dealt: p.dealt, revives: p.revives, energy: p.energy, tcd: p.tcd, swLvl: p.swLvl, enLvl: p.enLvl };
   });
   if (S.wave) { S.spec = waveSpec(S.wave, ps.filter(Boolean).length); }
   let maxId = 1;
