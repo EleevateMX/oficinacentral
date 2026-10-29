@@ -8,6 +8,8 @@ import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
 import { seatPose, STAND_EMOTES } from '../lib/seating.js';
+import { stepPlayer, walkStepV2, walkStepClassic, breathing } from '../lib/motion.js';
+import { usesV2, avatarStyle } from '../lib/avatarV2.js';
 import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, setRenderAreas, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
@@ -326,7 +328,9 @@ export default function MapView({ active }) {
 
       // Movimiento por pasos
       const running = input.current.run || input.current.path.length > 8;
-      if (t - input.current.lastStep >= (running ? STEP_MS * 0.55 : STEP_MS)) {
+      const stepMs = (running ? STEP_MS * 0.55 : STEP_MS) * (input.current.diag ? Math.SQRT2 : 1);
+      if (t - input.current.lastStep >= stepMs) {
+        input.current.diag = false;
         let next = null;
         let dir = null;
         const held = input.current.held;
@@ -335,6 +339,17 @@ export default function MapView({ active }) {
           input.current.tap = null;
           const [dx, dy] = DIRV[dir];
           next = { x: mine.x + dx, y: mine.y + dy };
+          // Dos flechas a la vez (una horizontal y una vertical): en diagonal, sin cortar esquinas
+          const hz = [...held].reverse().find((d) => d === 'left' || d === 'right');
+          const vt = [...held].reverse().find((d) => d === 'up' || d === 'down');
+          if (hz && vt) {
+            const [ddx] = DIRV[hz], [, ddy] = DIRV[vt];
+            if (isWalkable(f, mine.x + ddx, mine.y + ddy) && isWalkable(f, mine.x + ddx, mine.y) && isWalkable(f, mine.x, mine.y + ddy)) {
+              next = { x: mine.x + ddx, y: mine.y + ddy };
+              dir = hz;
+              input.current.diag = true;
+            }
+          }
         } else if (input.current.path.length) {
           next = input.current.path.shift();
           dir = next.x > mine.x ? 'right' : next.x < mine.x ? 'left' : next.y < mine.y ? 'up' : 'down';
@@ -353,20 +368,11 @@ export default function MapView({ active }) {
         }
       }
 
-      // Interpolación
-      const speed = 1000 / STEP_MS + 1;
-      for (const p of Object.values(players)) {
-        if (p.rx == null) { p.rx = p.x; p.ry = p.y; }
-        const dx = p.x - p.rx;
-        const dy = p.y - p.ry;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 4) { p.rx = p.x; p.ry = p.y; } else if (dist > 0) {
-          const s = Math.min(dist, Math.max(speed, dist * 9) * dt);
-          p.rx += (dx / dist) * s;
-          p.ry += (dy / dist) * s;
-        }
-        p.moving = dist > 0.02;
-        if (p.moving) p.anim = (p.anim || 0) + dt;
+      // Interpolación (lib/motion.js): los demás con un pequeño búfer; tú, a la velocidad de tus pasos
+      const eight = avatarStyle() === 'v2';
+      for (const [pid, p] of Object.entries(players)) {
+        const v2 = eight && usesV2(us[pid]?.avatar);
+        stepPlayer(p, { now: t, dt, mine: p === mine, stepMs: p === mine ? stepMs : STEP_MS, eight: v2, stride: v2 ? 2 : 2.4 });
       }
 
       // Ambiente: pasos propios y música en zonas de descanso
@@ -621,7 +627,7 @@ export default function MapView({ active }) {
           }
         }
         // Ciclo de caminar de 4 cuadros (contacto, en el aire, contacto, en el aire)
-        const step = p.moving ? (Math.floor((p.anim || 0) * 14) % 4) + 1 : 0;
+        const step = walkStepClassic(p);
         ctx.globalAlpha = p.status === 'away' ? 0.6 : 1;
         const seat = !p.moving && seatAt(f, Math.round(p.rx), Math.round(p.ry));
         // Mascota: sigue al personaje con un poco de retraso
@@ -656,7 +662,8 @@ export default function MapView({ active }) {
         const sp = sitting ? seatPose(seat, Math.round(p.rx), Math.round(p.ry)) : null;
         const sitDX = sp ? sp.dx : 0, sitDY = sp ? sp.dy : 0;
         const ax = (p.rx + 0.5) * T + sitDX + (emPose?.dx || 0), ay = (p.ry + 1) * T - 2 + hopY + sitDY + (emPose?.dy || 0);
-        drawAvatar(ctx, ax, ay, u?.avatar, (sitting && seat.dir) || emPose?.dir || p.dir, emPose?.step || step, !!sitting, blink || !!emPose?.blink, emPose?.pose || null);
+        const ext = { view: sitting || emPose?.dir ? null : p.view, walk: emPose?.step ? emPose.step * 2 - 1 : walkStepV2(p), breathe: breathing(t, id), talk: (office.bubbles[id]?.until || 0) - t > 4600 && Math.floor(t / 140) % 2 === 0 };
+        drawAvatar(ctx, ax, ay, u?.avatar, (sitting && seat.dir) || emPose?.dir || p.dir, emPose?.step || step, !!sitting, blink || !!emPose?.blink, emPose?.pose || null, ext);
         if (em) drawEmoteFx(ctx, em, t, ax, ay - 46 + (sitting ? 4 : 0), { ...p, id: Number(id) }, emOther && { ...emOther, id: Number(em.target) });
         if (u?.birthday && u.birthday === todayCached()) drawPartyHat(ctx, ax, ay, !!sitting);
         // Lo que del asiento queda entre el personaje y la cámara (respaldo por detrás, brazo cercano…)

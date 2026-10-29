@@ -1104,6 +1104,14 @@ function BrandAdmin() {
         </Row>
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
+      <Section title="Personajes">
+        <Row title="Estilo de personajes" desc="Clásico: los de siempre (con el movimiento suave nuevo). HUB v2 (prueba): más altos y con más detalle. Cambia la oficina y el Hotel para todos; los personajes subidos (dibujados a mano) se ven igual en los dos.">
+          <select value={config.avatarStyle || 'classic'} onChange={(e) => save({ avatarStyle: e.target.value })}>
+            <option value="classic">Clásico</option>
+            <option value="v2">HUB v2 (prueba)</option>
+          </select>
+        </Row>
+      </Section>
       <Section title="Decoración de temporada">
         <Row title="Temporada" desc="Adornos, personajes y ambiente especiales en el mapa (Halloween: calabazas, zombies y ofrenda; Navidad, del 1 de dic. al 6 de ene.: nieve, árbol y Amigo secreto; Aniversario: pastel, fuegos artificiales y foto grupal). En automático se pone sola en su fecha.">
           <select value={config.seasonSetting || 'auto'} onChange={(e) => save({ season: e.target.value })}>

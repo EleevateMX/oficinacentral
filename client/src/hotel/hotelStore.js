@@ -8,7 +8,7 @@ import { ROOM_MODELS } from '@shared/hotel.js';
 import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
 import { buildRoom } from '@shared/hotelRoom.js';
 import { FLAGSHIP_KEY } from '@shared/hotelOfficialRooms.js';
-import { walkAt, toDir8, dirToward } from '@shared/hotelWalk.js';
+import { walkVisual, strideAdvance, toDir8, dirToward } from '@shared/hotelWalk.js';
 import { playSound } from '../lib/sounds.js';
 import { mechOnItem } from './mechanics.js';
 
@@ -182,13 +182,15 @@ class Hotel {
     this.stepUser(U, performance.now());
   }
   stepUser(U, t) {
-    const p = walkAt(U.walk, t);
+    const p = walkVisual(U.walk, t);
+    // Ciclo de caminar según lo que avanza (no según el tiempo): sin pies que patinen en diagonal
+    if (!U.walk.slide && !p.done) U.walkPhase = ((U.walkPhase || 0) + strideAdvance(p.x - U.rx, p.y - U.ry)) % 1;
     U.rx = p.x; U.ry = p.y; U.rz = p.z;
     if (p.dir != null && !U.walk.slide) U.dir = p.dir; // en un rodillo no se voltea
     U.steps = p.steps;
     if (p.done) {
       // Al llegar queda justo en el centro de la casilla
-      U.walk = null; U.moving = false;
+      U.walk = null; U.moving = false; U.walkPhase = 0;
       [U.x, U.y, U.z] = p.to;
       if (U.pending) { this.applyUser(U, U.pending); U.pending = null; }
     } else { U.moving = true; U.x = p.from[0]; U.y = p.from[1]; }

@@ -159,6 +159,8 @@ export function officeConfig() {
     season: activeSeason(getSetting('season') || 'auto', new Date(), { anniversary: getSetting('anniversary_date') }),
     // Aniversario de la comunidad: fecha 'MM-DD' y año de fundación (para "N años")
     anniversary: { date: getSetting('anniversary_date') || null, year: Number(getSetting('anniversary_year')) || null },
+    // Estilo de los personajes generados: 'v2' (HUB v2, predeterminado) o 'classic'
+    avatarStyle: getSetting('avatar_style') === 'v2' ? 'v2' : 'classic',
     // Resumen de reuniones con IA: si el admin lo permite y si el servidor tiene llave
     ...notesConfig(),
   };
@@ -756,6 +758,10 @@ admin.patch('/office', (req, res) => {
     const y = Number(b.anniversaryYear) || null;
     if (y && (y < 1990 || y > new Date().getFullYear())) return fail(res, 400, 'Año de fundación inválido');
     setSetting('anniversary_year', y);
+  }
+  if (b.avatarStyle !== undefined) {
+    if (!['classic', 'v2'].includes(b.avatarStyle)) return fail(res, 400, 'Estilo de personajes inválido');
+    setSetting('avatar_style', b.avatarStyle);
   }
   if (b.shifts !== undefined) {
     if (!Array.isArray(b.shifts)) return fail(res, 400, 'Lista de turnos inválida');

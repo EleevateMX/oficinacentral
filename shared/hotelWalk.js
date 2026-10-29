@@ -56,6 +56,29 @@ export function walkAt(w, t) {
     dir: dir8(b[0] - a[0], b[1] - a[1]), steps: n0 + e,
   };
 }
+// Solo para dibujar: el primer paso arranca suave y el último frena suave. Las casillas se pisan en los
+// mismos tiempos que en el servidor (cada paso empieza y termina igual); solo cambia el avance dentro del paso.
+// (Un cambio de rumbo, n0 > 0, ya venía caminando: no vuelve a arrancar.)
+export function walkVisual(w, t) {
+  const p = walkAt(w, t);
+  if (p.done || w.slide) return p;
+  const n = w.path.length;
+  let k = p.k;
+  const first = p.i === 0 && !(w.n0 > 0), last = p.i === n - 1;
+  if (first && last) k = k * k * (3 - 2 * k);
+  else if (first) k = k * k * (2 - k);
+  else if (last) { const u = 1 - k; k = 1 - u * u * (2 - u); }
+  const a = p.from, b = p.to;
+  return { ...p, k, x: a[0] + (b[0] - a[0]) * k, y: a[1] + (b[1] - a[1]) * k, z: a[2] + (b[2] - a[2]) * k };
+}
+// Ciclo de caminar sincronizado con lo que avanza en pantalla (para que los pies no patinen):
+// fase += distancia / zancada. dx, dy en casillas. Una zancada completa (dos pasos) ≈ 72 px de pantalla.
+export const STRIDE_PX = 72;
+export function strideAdvance(dx, dy) {
+  const sx = (dx - dy) * 32, sy = (dx + dy) * 16; // TILE_W/2, TILE_H/2
+  return Math.max(Math.hypot(sx, sy), Math.hypot(dx, dy) * 34) / STRIDE_PX;
+}
+
 export const walkEnd = (w) => w.t0 + w.path.length * STEP_MS;
 
 // Cambiar de rumbo a media caminata: se termina el paso en curso y el nuevo camino sale de la casilla

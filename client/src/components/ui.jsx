@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { X, ChevronDown } from 'lucide-react';
 import { drawAvatarPreview, drawAvatarFace } from '../lib/render.js';
 import { onSpritesLoaded } from '../lib/sprites.js';
+import { onAvatarStyle } from '../lib/avatarV2.js';
 import { Mascota } from './brand.jsx';
 
 export const STATUS = {
@@ -43,6 +44,7 @@ export function AvatarCanvas({ avatar, width = 96, height = 120, dir = 'down', s
   const ref = useRef(null);
   const [, bump] = React.useState(0);
   useEffect(() => onSpritesLoaded(() => bump((x) => x + 1)), []);
+  useEffect(() => onAvatarStyle(() => bump((x) => x + 1)), []);
   useEffect(() => {
     const c = ref.current;
     if (!c) return;

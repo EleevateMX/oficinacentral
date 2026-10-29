@@ -232,7 +232,10 @@ function wsOrigins(url) {
   try {
     const u = new URL(url);
     const secure = u.protocol === 'wss:' || u.protocol === 'https:';
-    return [`${secure ? 'https' : 'http'}://${u.host}`, `${secure ? 'wss' : 'ws'}://${u.host}`];
+    const out = [`${secure ? 'https' : 'http'}://${u.host}`, `${secure ? 'wss' : 'ws'}://${u.host}`];
+    // LiveKit Cloud primero pregunta las regiones y luego se conecta a otra dirección (*.livekit.cloud)
+    if (/(^|\.)livekit\.cloud$/i.test(u.hostname)) out.push('https://*.livekit.cloud', 'wss://*.livekit.cloud');
+    return out;
   } catch { return []; }
 }
 export function contentSecurityPolicy(host = '') {

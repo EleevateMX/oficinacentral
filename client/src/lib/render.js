@@ -3,6 +3,7 @@ import { TILE } from '@shared/map.js';
 import { CATALOG, objSize } from '@shared/catalog.js';
 import { getSheet, drawSprite, FRAME_W, FRAME_H } from './sprites.js';
 import { FULL_SHEET_W, SIT_POSE } from '@shared/sprite.js';
+import { usesV2, drawAvatarV2, drawPreviewV2, drawFaceV2 } from './avatarV2.js';
 import { drawJukebox, jukeboxPlaying } from './jukeboxDraw.js';
 
 const T = TILE;
@@ -2244,7 +2245,18 @@ export function sortObjects(objects) {
 // ---------------- Avatares ----------------
 // cx = centro horizontal, by = base (pies). El sprite mide 32×48.
 // step: 0 quieto, 1-4 ciclo de caminar. pose: postura de una acción (ver POSES en shared/sprite.js).
-export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false, blink = false, pose = null) {
+// ext (HUB v2): { view (8 direcciones), walk (1–8), breathe, talk }
+export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit = false, blink = false, pose = null, ext = null) {
+  if (usesV2(avatar)) {
+    if (!sit) {
+      ctx.fillStyle = 'rgba(0,0,0,.2)';
+      ctx.beginPath();
+      ctx.ellipse(cx, by - 1, 8.5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const walk = ext?.walk ?? (step ? [0, 1, 3, 5, 7][Math.max(0, Math.min(4, Math.round(step)))] : 0);
+    return drawAvatarV2(ctx, cx, by, avatar, { dir: ext?.view || dir, walk: pose || sit ? 0 : walk, pose: pose || (sit ? 'sit' : null), blink, breathe: !pose && !sit && !walk && ext?.breathe ? 1 : 0, talk: !!ext?.talk });
+  }
   // Parpadeo: la misma ficha con los ojos cerrados (no aplica a personajes dibujados ni lentes de sol)
   if (blink && !avatar?.sprite && avatar?.eyewear !== 'sunglasses' && (dir === 'down' || dir === 'left' || dir === 'right')) avatar = { ...avatar, eyes: 'sleepy' };
   if (sit) {
@@ -2273,6 +2285,7 @@ export function drawAvatar(ctx, cx, by, avatar = {}, dir = 'down', step = 0, sit
 
 // Vista previa: el cuadro quieto en la dirección pedida, escalado a número entero.
 export function drawAvatarPreview(canvas, avatar, dir = 'down', step = 0, pose = null) {
+  if (usesV2(avatar)) return drawPreviewV2(canvas, avatar, { dir, walk: step ? [0, 1, 3, 5, 7][step] || 0 : 0, pose });
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
@@ -2282,6 +2295,7 @@ export function drawAvatarPreview(canvas, avatar, dir = 'down', step = 0, pose =
 
 // Solo la cara (para usar como foto de perfil cuando no hay foto)
 export function drawAvatarFace(canvas, avatar) {
+  if (usesV2(avatar)) return drawFaceV2(canvas, avatar);
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
