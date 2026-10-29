@@ -26,7 +26,7 @@ test('el token es un JWT válido para la sala de la oficina', async () => {
   const claims = JSON.parse(Buffer.from(c, 'base64url').toString());
   assert.equal(claims.iss, 'devkey');
   assert.equal(claims.sub, String(admin.user.id));
-  assert.equal(claims.video.room, 'oficina');
+  assert.match(claims.video.room, /^oficina-/); // una sala por ámbito (server/voiceGate.js)
   assert.equal(claims.video.roomJoin, true);
   assert.ok(claims.exp > Date.now() / 1000);
 });

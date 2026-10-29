@@ -37,6 +37,30 @@ export class MediaManager extends EventTarget {
     this.streamVolumes = new Map(); // volumen por pantalla que veo
     this.onSignal = ({ from, data }) => this.handleSignal(from, data);
     socket.on('rtc', this.onSignal);
+    // Defensa extra (el servidor ya filtra, server/voiceGate.js): solo se aceptan ofertas de
+    // quien está en tu sala, cerca (conexión preparada), en una llamada aceptada o cuya pantalla ves.
+    this.canAccept = null; // (id) => bool, lo pone el store (client/src/lib/voiceGate.js)
+    this.allowedUntil = new Map(); // id -> vence (llamada aceptada)
+    this.watchingIds = new Set();
+    this.held = new Map(); // id -> { at, list } señales que llegaron un instante antes de que yo te viera cerca
+    this.dropped = new Map(); // id -> cuándo el servidor cortó la conexión (no se reintenta enseguida)
+    this.onDrop = ({ peer } = {}) => {
+      const id = Number(peer);
+      if (!Number.isInteger(id)) return;
+      this.dropped.set(id, Date.now());
+      this.held.delete(id);
+      this.closePeer(id, false);
+    };
+    socket.on('rtc:drop', this.onDrop);
+  }
+
+  // Llamada aceptada: se acepta su conexión aunque esté lejos (unos minutos)
+  allowPeer(id, ms = 3 * 60e3) { this.allowedUntil.set(Number(id), Date.now() + ms); }
+
+  accepts(id) {
+    if (this.peers.has(id) || this.active?.has(id) || this.wanted?.has(id) || this.watchingIds.has(id)) return true;
+    if ((this.allowedUntil.get(id) || 0) > Date.now()) return true;
+    return this.canAccept ? !!this.canAccept(id) : true;
   }
 
   emit(type, detail) {
@@ -123,7 +147,7 @@ export class MediaManager extends EventTarget {
   }
 
   // En P2P la pantalla llega solo si quien comparte me la envía (ver setWatchers)
-  setWatching() {}
+  setWatching(ids = []) { this.watchingIds = new Set(ids.map(Number)); }
 
   setWatchers(ids) {
     const next = new Set(ids);
@@ -208,9 +232,17 @@ export class MediaManager extends EventTarget {
   setPeers(ids, warm = []) {
     this.active = new Set(ids);
     const wanted = new Set([...ids, ...warm]);
+    this.wanted = wanted;
+    const t = Date.now();
     for (const id of wanted) {
       clearTimeout(this.closeTimers.get(id));
       this.closeTimers.delete(id);
+      if (this.peers.has(id)) continue;
+      // El servidor la acaba de cortar: se reintenta en unos segundos (por si fue un desfase)
+      if (t - (this.dropped.get(id) || 0) < 3000) continue;
+      const h = this.held.get(id);
+      this.held.delete(id);
+      if (h && t - h.at < 4000) { for (const data of h.list) this.handleSignal(id, data); }
       if (!this.peers.has(id)) this.createPeer(id);
     }
     for (const p of this.peers.values()) {
@@ -335,6 +367,15 @@ export class MediaManager extends EventTarget {
       return;
     }
     let p = this.peers.get(from);
+    if (!p && !this.accepts(from)) {
+      // No te tengo cerca (todavía): se guarda un momento por si es solo el desfase del movimiento
+      const h = this.held.get(from);
+      const t = Date.now();
+      if (!h || t - h.at > 4000) this.held.set(from, { at: t, list: [data] });
+      else if (h.list.length < 60) h.list.push(data);
+      if (this.held.size > 40) this.held.delete(this.held.keys().next().value);
+      return;
+    }
     if (!p) {
       if (!data.description || data.description.type !== 'offer') {
         if (data.meta) {
@@ -378,6 +419,7 @@ export class MediaManager extends EventTarget {
 
   destroy() {
     this.socket.off('rtc', this.onSignal);
+    this.socket.off('rtc:drop', this.onDrop);
     for (const id of [...this.peers.keys()]) this.closePeer(id, true);
     this.mic?.stop();
     this.audioTrack?.stop();

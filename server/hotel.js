@@ -183,7 +183,7 @@ function snapshot(R, uid) {
     room: roomOut(R.row, uid), heightmap: m.map, door: m.door,
     items: [...R.items.values()], users: [...[...R.users.values()].map(userOut), ...hookAll('users', R)],
     rights: [...R.rights], isOwner: R.row.owner_id === uid, admin: isAdmin(uid),
-    chat: R.chat.slice(-50),
+    chat: R.chat.slice(-50).filter((m) => !hasBlocked(uid, m.from)), // sin lo de quien bloqueaste (server/moderation.js)
   };
 }
 
