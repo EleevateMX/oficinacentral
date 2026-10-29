@@ -249,7 +249,7 @@ function zen_fountain(s, { st, t }) {
   const on = st === 1, water = '#6fb5c8';
   s.shadowEllipse(0.56, 0.56, 0.42, 0.38, 0.22);
   // piedras alrededor
-  for (const [u, v, r, c] of [[0.14, 0.86, 0.08, '#7d8083'], [0.9, 0.16, 0.07, '#a0a3a5'], [0.26, 0.92, 0.05, '#b2b4b5'], [0.1, 0.18, 0.06, '#8a8d90']]) s.ball(u, v, r * 0.6, r, c);
+  for (const [u, v, r, c] of [[0.14, 0.86, 0.08, '#7d8083'], [0.9, 0.16, 0.07, '#a0a3a5'], [0.26, 0.92, 0.05, '#b2b4b5'], [0.1, 0.18, 0.06, '#8a8d90']]) s.ball(u, v, r, r, c);
   // pileta de piedra
   s.cyl('z', 0.6, 0.55, 0.32, 0.3, 0, 0.26, STONE, {
     seg: 20,

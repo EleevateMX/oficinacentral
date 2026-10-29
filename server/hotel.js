@@ -9,6 +9,8 @@ import { ROOM_MODELS, ROT_DIR, ACCESS, CHAT_MODES, MAX_ROOMS_PER_USER, MAX_FURNI
 import { seedOfficialRooms, isSeedItem } from './hotelOfficial.js';
 import { FURNI_BY_ID, STARTER_INVENTORY } from '../shared/hotelCatalog.js';
 import { buildRoom, tileInfo, findPath, canPlace, canPlaceWall, roomAddItem, roomRemoveItem, wallBase, dirOf } from '../shared/hotelRoom.js';
+import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8 } from '../shared/hotelWalk.js';
+import { layHeadTile } from '../shared/hotelSeat.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS hotel_rooms (
@@ -145,25 +147,27 @@ function unloadIfEmpty(R) {
 // Salas oficiales: solo los admins decoran (nadie tiene "permisos" ahí)
 const canEdit = (R, uid) => (R.row.official ? isAdmin(uid) : R.row.owner_id === uid || R.rights.has(uid) || isAdmin(uid));
 
-// Posición lógica de alguien que camina (la casilla en la que va)
+// Posición lógica de alguien que camina: la casilla de donde sale el paso en curso (ver shared/hotelWalk.js)
+const walkOf = (U) => ({ from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0 || 0 });
 function logical(U, t = Date.now()) {
   if (!U.path) return { x: U.x, y: U.y, z: U.z, moving: false, i: 0 };
-  const i = Math.floor(((t - U.t0) / 1000) * WALK_SPEED);
-  if (i >= U.path.length) { const [x, y, z] = U.path[U.path.length - 1]; return { x, y, z, moving: false, i: U.path.length }; }
-  if (i <= 0) return { x: U.x, y: U.y, z: U.z, moving: true, i: 0 };
-  const [x, y, z] = U.path[i - 1];
-  return { x, y, z, moving: true, i };
+  const p = walkAt(walkOf(U), t);
+  if (p.done) { const [x, y, z] = U.path[U.path.length - 1]; return { x, y, z, moving: false, i: U.path.length }; }
+  const [x, y, z] = p.from;
+  return { x, y, z, moving: true, i: p.i, next: p.to };
 }
 const destOf = (U) => (U.path ? { x: U.path[U.path.length - 1][0], y: U.path[U.path.length - 1][1] } : { x: U.x, y: U.y });
 
 function userOut(U) {
-  const p = logical(U);
-  return {
-    id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay,
-    path: U.path && p.moving ? U.path.slice(p.i) : null,
-  };
+  const t = Date.now();
+  const p = logical(U, t);
+  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null };
+  // Quien llega a media caminata la ve en el mismo paso: desde la casilla del paso en curso y cuándo empezó
+  if (U.path && p.moving) Object.assign(out, { path: U.path.slice(p.i), from: [p.x, p.y, p.z], t0: U.t0 + p.i * STEP_MS, n0: (U.n0 || 0) + p.i, now: t });
+  else out.path = null;
+  return out;
 }
-const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay });
+const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null });
 
 function snapshot(R, uid) {
   const m = ROOM_MODELS[R.row.model] || ROOM_MODELS.a;
@@ -197,8 +201,8 @@ function enterRoom(socket, uid, R, { spawn = null } = {}) {
   pendingBell.delete(uid);
   const u = getUser(uid);
   const door = R.grid.door;
-  const s = spawn || { x: door.x, y: door.y, z: tileInfo(R.grid, door.x, door.y)?.z ?? 0, dir: ROT_DIR[door.rot] || 'down' };
-  const U = { id: uid, name: u.display_name, avatar: parse(u.avatar, {}), x: s.x, y: s.y, z: s.z, dir: s.dir || 'down', sit: null, lay: null, path: null, t0: 0, timer: null, socket };
+  const s = spawn || { x: door.x, y: door.y, z: tileInfo(R.grid, door.x, door.y)?.z ?? 0, dir: dirToward(door.x, door.y, door.x + 1, door.y) ?? 2 }; // entra mirando hacia la sala
+  const U = { id: uid, name: u.display_name, avatar: parse(u.avatar, {}), x: s.x, y: s.y, z: s.z, dir: toDir8(s.dir), sit: null, lay: null, path: null, t0: 0, n0: 0, act: null, timer: null, socket };
   R.users.set(uid, U);
   where.set(uid, { roomId: R.id, socket });
   socket.join(key(R.id));
@@ -223,8 +227,8 @@ function refreshUsers(R, tiles = null) {
 function applySeat(U, t) {
   const wasFloorSit = U.sit?.floor;
   U.sit = null; U.lay = null;
-  if (t.kind === 'sit') { U.sit = { z: t.z }; U.dir = ROT_DIR[t.item.rot] || U.dir; }
-  else if (t.kind === 'lay') { U.lay = { z: t.z }; U.dir = ROT_DIR[t.item.rot] || U.dir; }
+  if (t.kind === 'sit') { U.sit = { z: t.z }; U.dir = ROT_DIR8[t.item.rot] ?? U.dir; }
+  else if (t.kind === 'lay') { U.lay = { z: t.z }; U.dir = ROT_DIR8[t.item.rot] ?? U.dir; }
   else if (wasFloorSit) U.sit = { floor: true };
 }
 function footTiles(it) {
@@ -236,32 +240,40 @@ function footTiles(it) {
   return out;
 }
 
+// Caminar casilla por casilla (STEP_MS por paso). A media caminata se termina el paso en curso
+// y el nuevo camino sale de la casilla a la que ya iba, sin brincos ni cambiar el ritmo.
 function startWalk(R, U, to, { onArrive = null } = {}) {
   const t = Date.now();
   const cur = logical(U, t);
-  // Si va caminando, el nuevo camino sale de la casilla a la que ya se dirige
-  const from = cur.moving && U.path[cur.i] ? { x: U.path[cur.i][0], y: U.path[cur.i][1], z: U.path[cur.i][2] } : { x: cur.x, y: cur.y, z: cur.z };
   const occupied = new Set();
   for (const V of R.users.values()) if (V !== U) { const d = destOf(V); occupied.add(`${d.x},${d.y}`); }
-  const rest = findPath(R.grid, from, to, { occupied });
+  // A una cama se llega a la casilla de la almohada (ahí se acuesta, como en el original)
+  to = layHeadTile(R.grid, to, occupied) || to;
+  const re = cur.moving ? rerouteFrom(walkOf(U), t) : null;
+  const start = re ? { x: re.next[0], y: re.next[1], z: re.next[2] } : { x: cur.x, y: cur.y, z: cur.z };
+  const rest = findPath(R.grid, start, to, { occupied });
   if (!rest) return false;
-  const path = cur.moving && U.path[cur.i] ? [[from.x, from.y, from.z], ...rest] : rest;
   if (U.timer) clearTimeout(U.timer);
-  if (!path.length) { U.path = null; return true; }
-  U.x = cur.x; U.y = cur.y; U.z = cur.z;
-  U.path = path; U.t0 = t; U.sit = null; U.lay = null;
+  if (re) {
+    U.x = re.from[0]; U.y = re.from[1]; U.z = re.from[2];
+    U.path = [re.next, ...rest]; U.t0 = re.t0; U.n0 = re.n0;
+  } else {
+    if (!rest.length) { U.path = null; return true; }
+    U.x = cur.x; U.y = cur.y; U.z = cur.z;
+    U.path = rest; U.t0 = t; U.n0 = 0;
+  }
+  U.sit = null; U.lay = null; U.act = null;
   U.onArrive = onArrive;
-  IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path });
-  U.timer = setTimeout(() => arrive(R, U), (path.length / WALK_SPEED) * 1000 + 20);
+  IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0, now: t });
+  U.timer = setTimeout(() => arrive(R, U), Math.max(0, walkEnd(walkOf(U)) - Date.now()) + 15);
   return true;
 }
 
 function arrive(R, U) {
   if (!U.path || R.users.get(U.id) !== U) return;
+  const end = walkAt(walkOf(U), Infinity);
+  if (end.dir != null) U.dir = end.dir;
   const last = U.path[U.path.length - 1];
-  const prev = U.path.length > 1 ? U.path[U.path.length - 2] : [U.x, U.y];
-  const d = dirOf(last[0] - prev[0], last[1] - prev[1]);
-  if (d) U.dir = d;
   [U.x, U.y, U.z] = last;
   U.path = null; U.timer = null;
   const t = tileInfo(R.grid, U.x, U.y);
@@ -287,7 +299,7 @@ function teleport(R, U, item) {
     if (R.users.get(U.id) !== U || U.path || U.x !== item.x || U.y !== item.y) return;
     const o = itemOut(other);
     if (o.roomId === R.id) {
-      U.x = o.x; U.y = o.y; U.z = o.z; U.dir = ROT_DIR[o.rot] || U.dir; U.sit = null; U.lay = null;
+      U.x = o.x; U.y = o.y; U.z = o.z; U.dir = ROT_DIR8[o.rot] ?? U.dir; U.sit = null; U.lay = null;
       IO?.to(key(R.id)).emit('hotel:user', { ...userState(U), tp: true });
       flash(R, R.items.get(o.id) || o);
       return;
@@ -300,7 +312,7 @@ function teleport(R, U, item) {
       return;
     }
     const sock = U.socket;
-    enterRoom(sock, U.id, R2, { spawn: { x: o.x, y: o.y, z: o.z, dir: ROT_DIR[o.rot] } });
+    enterRoom(sock, U.id, R2, { spawn: { x: o.x, y: o.y, z: o.z, dir: ROT_DIR8[o.rot] } });
     flash(R2, R2.items.get(o.id) || o);
   }, 700);
 }
@@ -396,6 +408,7 @@ export function initHotel(io, socket, userId) {
     const t = tileInfo(R.grid, U.x, U.y);
     if (t?.kind === 'sit') return;
     U.sit = U.sit ? null : { floor: true };
+    U.act = null;
     IO.to(key(R.id)).emit('hotel:user', userState(U));
   });
 
@@ -403,10 +416,24 @@ export function initHotel(io, socket, userId) {
     const R = mine();
     const U = R?.users.get(userId);
     if (!U || U.path || U.sit || U.lay) return;
-    const d = dirOf(Math.sign(Number(m?.x) - U.x) || 0, Math.sign(Number(m?.y) - U.y) || 0);
-    if (!d || d === U.dir) return;
+    const d = dirToward(U.x, U.y, Number(m?.x), Number(m?.y));
+    if (d == null || d === U.dir) return;
     U.dir = d;
     IO.to(key(R.id)).emit('hotel:user', userState(U));
+  });
+
+  // Saludar / bailar (lo ven todos; caminar lo termina)
+  socket.on('hotel:act', (m) => {
+    const R = mine();
+    const U = R?.users.get(userId);
+    if (!U || !walkOk()) return;
+    const act = m?.act === 'wave' || m?.act === 'dance' ? m.act : null;
+    if (act === 'dance' && (U.path || U.sit || U.lay)) return;
+    if (act === U.act) return;
+    U.act = act;
+    IO.to(key(R.id)).emit('hotel:user', userState(U));
+    clearTimeout(U.actTimer);
+    if (act === 'wave') U.actTimer = setTimeout(() => { if (U.act === 'wave' && R.users.get(U.id) === U) { U.act = null; IO?.to(key(R.id)).emit('hotel:user', userState(U)); } }, 2500);
   });
 
   socket.on('hotel:chat', (m) => {

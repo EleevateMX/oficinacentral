@@ -228,7 +228,7 @@ test('hotel: caminar, sentarse, colocar/apilar, recoger y permisos', async () =>
     const pm = await path;
     assert.deepEqual(pm.path[pm.path.length - 1].slice(0, 2), [3, 6]);
     const sat = await once(sx, 'hotel:user', (u) => u.id === owner.user.id && u.sit, 6000);
-    assert.equal(sat.dir, 'left');
+    assert.equal(sat.dir, 6); // rot 2 → mira hacia −x
     assert.ok(Math.abs(sat.z - FURNI_BY_ID.chair_basic.sit) < 1e-9);
     // El otro no puede terminar en la casilla ocupada
     const np = once(sx, 'hotel:nopath');

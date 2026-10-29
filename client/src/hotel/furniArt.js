@@ -68,10 +68,26 @@ function periodOf(def, st) {
 }
 const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
-function renderFloor(ctx, def, rot, c, st, t) {
+function renderFloor(ctx, def, rot, c, st, t, layer = null) {
   const s = new Scene(def.w || 1, def.l || 1, rot);
   (FLOOR[def.id] || LINE_FLOOR[def.id] || FLOOR._fallback)(s, { c, st, t, def });
-  s.draw(ctx);
+  if (!layer) return s.draw(ctx);
+  s.draw(ctx, (p) => partSlot(p.box, layer.vols) === layer.slot, layer.slot < 0);
+}
+
+// ---------- Capas para quien se sienta / acuesta ----------
+// Un furni con gente encima se dibuja en partes: lo de atrás antes de las personas y cada pieza que
+// queda ENFRENTE de alguien (respaldo visto por detrás, brazo del sofá, piecera…) justo después de esa
+// persona. vols = cajas [x1, y1, x2, y2] (casillas, relativas al origen del furni) de cada persona en el
+// orden en que se dibujan. Devuelve el índice de la última persona a la que la pieza tapa (o −1).
+const E = 1e-6;
+function inFront(b, v) {
+  return (b[0] >= v[2] - E && b[4] > v[1] + E) || (b[1] >= v[3] - E && b[3] > v[0] + E);
+}
+export function partSlot(box, vols) {
+  let k = -1;
+  for (let i = 0; i < vols.length; i++) if (inFront(box, vols[i])) k = i;
+  return k;
 }
 function renderWall(ctx, def, c, st, now) {
   (WALL[def.id] || LINE_WALL[def.id] || wallFallback)(ctx, { c, st, def, now });
@@ -192,12 +208,14 @@ export function drawFurni(ctx, def, item = {}, opts = {}) {
   if (!canMake || opts.direct) {
     ctx.save();
     if (opts.ghost) ctx.globalAlpha *= 0.55;
-    renderFloor(ctx, def, rot, c, st, t);
+    renderFloor(ctx, def, rot, c, st, t, opts.layer || null);
     ctx.restore();
     return;
   }
   const b = furniBounds(def, rot), sc = scaleOf(ctx);
-  const spr = getSprite(`f|${def.id}|${rot}|${c}|${st}`, p ? t : null, b, sc, (g) => renderFloor(g, def, rot, c, st, t));
+  const layer = opts.layer || null;
+  const lk = layer ? `|L${layer.slot}:${layer.vols.map((v) => v.map((n) => Math.round(n * 100)).join(',')).join(';')}` : '';
+  const spr = getSprite(`f|${def.id}|${rot}|${c}|${st}${lk}`, p ? t : null, b, sc, (g) => renderFloor(g, def, rot, c, st, t, layer));
   blit(ctx, spr, opts);
 }
 
