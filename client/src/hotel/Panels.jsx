@@ -12,6 +12,8 @@ import { ACCESS_LABEL, ACCESS_DESC, AccessIcon } from './Navigator.jsx';
 import { RoomSocialSettings } from './social/RoomSocial.jsx'; // B: categoría y etiquetas
 import { UserEconomyActions, ItemEconomyActions } from './economy/CardActions.jsx'; // A: intercambiar, regalar, canjear
 import { ECO_INTERACT } from '@shared/hotelEconomy.js';
+import { MechItemCard, BotCard, GiveHandButton } from './MechPanels.jsx';
+import { isMechDef } from './mechanics.js';
 
 const { HOTEL_CATS, HOTEL_FURNI, FURNI_BY_ID } = HC;
 const fmt = (n) => Number(n || 0).toLocaleString('es-MX');
@@ -295,6 +297,7 @@ export function ItemCard({ item }) {
   const def = FURNI_BY_ID[item.type];
   if (!def) return null;
   const live = hotel.live.items.get(item.id) || item;
+  if (isMechDef(def)) return <MechItemCard item={live} />; // línea Mecánica y Wired
   const can = hotel.canEdit();
   const owner = users[live.ownerId];
   const s = hotel.socket;
@@ -328,6 +331,7 @@ export function UserCard({ userId }) {
   useHotel((s) => s.usersV);
   const U = hotel.live.users.get(userId);
   if (!U || !room) return null;
+  if (U.bot) return <BotCard U={U} />;
   const me = userId === hotel.me;
   const u = users[userId] || { id: userId, displayName: U.name, avatar: U.avatar };
   const s = hotel.socket;
@@ -350,6 +354,7 @@ export function UserCard({ userId }) {
         ) : (
           <>
             <button className="ht-btn primary" onClick={() => { hotel.set({ chatMode: 'whisper', whisperTo: userId, selected: null }); window.dispatchEvent(new Event('hotel:focus-chat')); }}><MessageCircle size={14} /> Susurrar</button>
+            <GiveHandButton userId={userId} />
             <button className="ht-btn" onClick={() => office.set({ profileCard: userId })}>Perfil</button>
             <UserEconomyActions userId={userId} />
             {(isOwner || admin) && !room.official && target !== 'owner' && (rights.includes(userId)

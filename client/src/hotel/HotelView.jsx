@@ -6,7 +6,9 @@ import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
 import { hotel, useHotel } from './hotelStore.js';
 import { HotelEngine } from './engine.js';
 import Navigator from './Navigator.jsx';
-import { InventoryPanel, CatalogPanel, SettingsPanel, ChatLogPanel, ItemCard } from './Panels.jsx';
+import { InventoryPanel, CatalogPanel, SettingsPanel, ChatLogPanel, ItemCard, UserCard } from './Panels.jsx';
+import { MechLayer } from './MechPanels.jsx';
+import { mechPick } from './mechanics.js';
 import './hotel.css';
 import ConsolePanel, { ConsoleButton } from './social/Console.jsx'; // B: social
 import PersonCard from './social/PersonCard.jsx'; // B: social
@@ -70,6 +72,7 @@ function RoomView({ onExit }) {
     const eng = new HotelEngine(canvasRef.current, {
       onTile: (x, y) => { hotel.socket.emit('hotel:walk', { x, y }); hotel.set({ selected: null }); },
       onItem: (item) => {
+        if (mechPick(item)) return; // eligiendo furnis para un wired
         hotel.set({ selected: { itemId: item.id } });
         if (!item.wall) hotel.socket.emit('hotel:look', { x: item.x, y: item.y });
       },
@@ -151,9 +154,10 @@ function RoomView({ onExit }) {
       </div>
       <div className="ht-cards">
         {sel && <ItemCard key={`i${sel.id}`} item={sel} />}
-        {selected?.userId && <PersonCard key={`u${selected.userId}`} userId={selected.userId} />}
+        {selected?.userId && (selected.userId < 0 ? <UserCard key={`b${selected.userId}`} userId={selected.userId} /> : <PersonCard key={`u${selected.userId}`} userId={selected.userId} />)}
       </div>
       <EconomyLayer />
+      <MechLayer />
       <ChatBar />
     </div>
   );

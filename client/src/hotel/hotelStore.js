@@ -9,6 +9,7 @@ import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
 import { buildRoom } from '@shared/hotelRoom.js';
 import { walkAt, toDir8, dirToward } from '@shared/hotelWalk.js';
 import { playSound } from '../lib/sounds.js';
+import { mechOnItem } from './mechanics.js';
 
 const FAIL = {
   missing: 'Esa sala ya no existe',
@@ -161,7 +162,7 @@ class Hotel {
   }
   addUser(u) {
     const U = {
-      id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: toDir8(u.dir), sit: u.sit, lay: u.lay, act: u.act || null,
+      id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: toDir8(u.dir), sit: u.sit, lay: u.lay, act: u.act || null, hand: u.hand ?? null, bot: u.bot || null,
       rx: u.x, ry: u.y, rz: u.z, walk: null, moving: false, steps: 0, look: null, actT: performance.now(),
     };
     this.live.users.set(u.id, U);
@@ -174,14 +175,14 @@ class Hotel {
     if (!U) return;
     const ago = m.now != null && m.t0 != null ? Math.max(0, m.now - m.t0) : 0;
     const from = m.from ? [...m.from] : [U.rx, U.ry, U.rz];
-    U.walk = { from, path: m.path.map((p) => [...p]), t0: performance.now() - ago, n0: m.n0 || 0 };
+    U.walk = { from, path: m.path.map((p) => [...p]), t0: performance.now() - ago, n0: m.n0 || 0, slide: !!m.slide };
     U.sit = null; U.lay = null; U.act = null; U.look = null; U.pending = null;
     this.stepUser(U, performance.now());
   }
   stepUser(U, t) {
     const p = walkAt(U.walk, t);
     U.rx = p.x; U.ry = p.y; U.rz = p.z;
-    if (p.dir != null) U.dir = p.dir;
+    if (p.dir != null && !U.walk.slide) U.dir = p.dir; // en un rodillo no se voltea
     U.steps = p.steps;
     if (p.done) {
       // Al llegar queda justo en el centro de la casilla
@@ -200,7 +201,7 @@ class Hotel {
   applyUser(U, m) {
     const act = m.act || null;
     if (act !== U.act) U.actT = performance.now();
-    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), sit: m.sit, lay: m.lay, act });
+    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), sit: m.sit, lay: m.lay, act, hand: m.hand ?? null });
     U.rx = m.x; U.ry = m.y; U.rz = m.z;
   }
   onUser(m) {
@@ -233,6 +234,7 @@ class Hotel {
       if (this.state.selected?.itemId === m.id) this.set({ selected: null });
     } else {
       const prev = L.items.get(m.item.id);
+      mechOnItem(m);
       L.items.set(m.item.id, m.item);
       // Dado: anunciar el resultado
       if (m.roll && prev) this.live.diceAt = { id: m.item.id, t: performance.now() };

@@ -11,6 +11,7 @@ import { drawAvatarFace } from '../lib/render.js';
 import { hotel } from './hotelStore.js';
 import { avatarFrame, avatarBudget } from './avatarIso.js';
 import { frontOf } from '@shared/hotelSeat.js';
+import { itemPos, mechTint, drawRoomTint } from './mechanics.js';
 
 export const DEFAULT_FLOOR = '#b59a7a';
 export const DEFAULT_WALL = '#e7dfd3';
@@ -408,9 +409,10 @@ export class HotelEngine {
       const def = FURNI_BY_ID[it.type];
       if (!def) return;
       const { w, l } = footprint(def, it.rot);
-      const [ox, oy] = P(it.x, it.y, it.z);
+      const [ix, iy, iz] = itemPos(it, t); // deslizándose (rodillos / wired)
+      const [ox, oy] = P(ix, iy, iz);
       const fb = furniBounds(def, it.rot);
-      list.push({ key: k++, item: it, def, ox, oy, fb, x1: it.x, y1: it.y, x2: it.x + w, y2: it.y + l, z1: it.z, z2: it.z + Math.max(0.03, def.h), sx1: ox + fb.x, sx2: ox + fb.x + fb.w, sy1: oy + fb.y, sy2: oy + fb.y + fb.h });
+      list.push({ key: k++, item: it, def, ox, oy, fb, x1: ix, y1: iy, x2: ix + w, y2: iy + l, z1: iz, z2: iz + Math.max(0.03, def.h), sx1: ox + fb.x, sx2: ox + fb.x + fb.w, sy1: oy + fb.y, sy2: oy + fb.y + fb.h });
     };
     for (const it of L.items.values()) if (!it.wall && !(placing?.move && it.id === placing.itemId)) addItem(it);
     if (ghostItem) addItem(ghostItem);
@@ -429,7 +431,7 @@ export class HotelEngine {
       ctx.translate(d.ox, d.oy);
       if (d.item.ghost) ctx.globalAlpha = d.item.ok ? 0.8 : 0.45;
       const hov = this.hover?.kind === 'item' && this.hover.item.id === d.item.id;
-      drawFurni(ctx, d.def, d.item, { t, hover: hov, ghost: !!d.item.ghost, layer });
+      drawFurni(ctx, d.def, d.item, { t, hover: hov, ghost: !!d.item.ghost, layer, tint: mechTint(d.item) });
       ctx.restore();
     };
     for (const d of sorted) {
@@ -443,6 +445,7 @@ export class HotelEngine {
       drawItem(d, !d.item.ghost && seated.has(d.item.id) ? layerOf(d.item.id, -1) : null);
       if (!d.item.ghost) pick.push({ kind: 'item', item: d.item, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= d.sx1 && wx <= d.sx2 && wy >= d.sy1 && wy <= d.sy2 && this.inItemShape(d, wx, wy); } });
     }
+    drawRoomTint(ctx, this.canvas, L.items); // regulador de luz
     this.pick = pick;
     this.hover = this.mouse ? this.hitTest(this.mouse) : null;
     this.canvas.style.cursor = placing ? (this.ghost?.ok ? 'copy' : 'not-allowed') : this.hover ? 'pointer' : 'default';
@@ -489,7 +492,7 @@ export class HotelEngine {
     let pose = 'stand', frame = 0, seatH = 0;
     const ti = sit || lay ? tileInfo(grid, U.x, U.y) : null;
     const seat = ti && (ti.kind === 'sit' || ti.kind === 'lay') ? ti.item : null;
-    if (moving) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
+    if (moving && !U.walk.slide) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
     else if (lay) pose = 'lay';
     else if (sit) { pose = 'sit'; const f = floorAt(grid, U.x, U.y); seatH = Number.isNaN(f) ? 0.6 : Math.max(0, U.rz - f); }
     else if (U.act === 'wave') { pose = 'wave'; frame = Math.floor((t - (U.actT || 0)) / 280) % 2; }

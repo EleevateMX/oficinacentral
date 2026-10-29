@@ -13,6 +13,7 @@ import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8 } fr
 import { layHeadTile } from '../shared/hotelSeat.js';
 import { initHotelSocial, registerHotelSocialRoutes, roomSocialOut, userSocialOut, saveRoomSocial } from './hotelSocial.js'; // B: social
 import { initHotelEconomy, registerEconomyRoutes } from './hotelEconomy.js'; // créditos, tienda, intercambios, regalos (agente A)
+import { initHotelMechanics } from './hotelMechanics.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS hotel_rooms (
@@ -164,20 +165,20 @@ const destOf = (U) => (U.path ? { x: U.path[U.path.length - 1][0], y: U.path[U.p
 function userOut(U) {
   const t = Date.now();
   const p = logical(U, t);
-  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null };
+  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null };
   Object.assign(out, userSocialOut(U.id)); // B: motto, badges, respects
   // Quien llega a media caminata la ve en el mismo paso: desde la casilla del paso en curso y cuándo empezó
   if (U.path && p.moving) Object.assign(out, { path: U.path.slice(p.i), from: [p.x, p.y, p.z], t0: U.t0 + p.i * STEP_MS, n0: (U.n0 || 0) + p.i, now: t });
   else out.path = null;
   return out;
 }
-const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null });
+const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null });
 
 function snapshot(R, uid) {
   const m = ROOM_MODELS[R.row.model] || ROOM_MODELS.a;
   return {
     room: roomOut(R.row, uid), heightmap: m.map, door: m.door,
-    items: [...R.items.values()], users: [...R.users.values()].map(userOut),
+    items: [...R.items.values()], users: [...[...R.users.values()].map(userOut), ...hookAll('users', R)],
     rights: [...R.rights], isOwner: R.row.owner_id === uid, admin: isAdmin(uid),
     chat: R.chat.slice(-50),
   };
@@ -196,6 +197,7 @@ function leaveRoom(uid, reason = null) {
   const U = R.users.get(uid);
   if (U?.timer) clearTimeout(U.timer);
   R.users.delete(uid);
+  hook('leave', R, uid);
   IO?.to(key(R.id)).emit('hotel:user:leave', { id: uid });
   unloadIfEmpty(R);
 }
@@ -212,6 +214,7 @@ function enterRoom(socket, uid, R, { spawn = null } = {}) {
   socket.join(key(R.id));
   socket.emit('hotel:room', snapshot(R, uid));
   socket.to(key(R.id)).emit('hotel:user:join', userOut(U));
+  hook('enter', R, U);
   return U;
 }
 
@@ -251,6 +254,7 @@ function startWalk(R, U, to, { onArrive = null } = {}) {
   const cur = logical(U, t);
   const occupied = new Set();
   for (const V of R.users.values()) if (V !== U) { const d = destOf(V); occupied.add(`${d.x},${d.y}`); }
+  for (const k of hookAll('occupied', R)) occupied.add(k);
   // A una cama se llega a la casilla de la almohada (ahí se acuesta, como en el original)
   to = layHeadTile(R.grid, to, occupied) || to;
   const re = cur.moving ? rerouteFrom(walkOf(U), t) : null;
@@ -266,7 +270,7 @@ function startWalk(R, U, to, { onArrive = null } = {}) {
     U.x = cur.x; U.y = cur.y; U.z = cur.z;
     U.path = rest; U.t0 = t; U.n0 = 0;
   }
-  U.sit = null; U.lay = null; U.act = null;
+  U.sit = null; U.lay = null; U.act = null; U.sliding = false;
   U.onArrive = onArrive;
   IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0, now: t });
   U.timer = setTimeout(() => arrive(R, U), Math.max(0, walkEnd(walkOf(U)) - Date.now()) + 15);
@@ -276,7 +280,8 @@ function startWalk(R, U, to, { onArrive = null } = {}) {
 function arrive(R, U) {
   if (!U.path || R.users.get(U.id) !== U) return;
   const end = walkAt(walkOf(U), Infinity);
-  if (end.dir != null) U.dir = end.dir;
+  if (end.dir != null && !U.sliding) U.dir = end.dir; // en un rodillo se sigue viendo hacia donde estaba
+  U.sliding = false;
   const last = U.path[U.path.length - 1];
   [U.x, U.y, U.z] = last;
   U.path = null; U.timer = null;
@@ -286,6 +291,7 @@ function arrive(R, U) {
   const cb = U.onArrive; U.onArrive = null;
   // Pisar la puerta = salir de la sala
   if (U.x === R.grid.door.x && U.y === R.grid.door.y) { leaveRoom(U.id, 'door'); return; }
+  hook('arrive', R, U, t);
   if (t?.kind === 'teleport') teleport(R, U, t.item);
   cb?.();
 }
@@ -351,6 +357,7 @@ export function initHotel(io, socket, userId) {
   const mine = () => { const w = where.get(userId); return w && w.socket === socket ? live.get(w.roomId) : null; };
   const err = (text) => socket.emit('hotel:notice', { text, error: true });
   initHotelEconomy(io, socket, userId);
+  for (const fn of hotelCtx.socketInits) fn(socket, userId);
 
   socket.on('hotel:enter', (m) => {
     const roomId = Number(m?.roomId);
@@ -402,6 +409,7 @@ export function initHotel(io, socket, userId) {
     const U = R.users.get(userId);
     const x = Math.trunc(Number(m?.x)), y = Math.trunc(Number(m?.y));
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (hook('walk', R, U, { x, y })) return;
     if (!startWalk(R, U, { x, y })) socket.emit('hotel:nopath', { x, y });
   });
 
@@ -448,6 +456,8 @@ export function initHotel(io, socket, userId) {
     const mode = CHAT_MODES.includes(m?.mode) ? m.mode : 'say';
     if (!text || !chatOk()) return;
     const U = R.users.get(userId);
+    const cmd = chatCommands.get(text.split(' ')[0].toLowerCase());
+    if (cmd) return cmd({ R, U, socket, text, args: text.split(' ').slice(1), err });
     const msg = { id: `${userId}-${Date.now()}`, from: userId, name: U.name, text, mode, at: Date.now() };
     if (mode === 'whisper') {
       const to = R.users.get(Number(m?.to));
@@ -460,6 +470,7 @@ export function initHotel(io, socket, userId) {
     R.chat.push(msg);
     if (R.chat.length > 50) R.chat.shift();
     IO.to(key(R.id)).emit('hotel:chat', msg);
+    hook('chat', R, U, msg);
   });
 
   // Escribiendo… (globito de puntos)
@@ -498,6 +509,8 @@ export function initHotel(io, socket, userId) {
     if (!FURNI_BY_ID[it.type]) return err('Ese furni ya no existe');
     const v = placeCommon(R, it, m);
     if (!v.ok) return err(v.reason);
+    const why = hook('place', R, it, m, userId);
+    if (why) return err(why);
     Object.assign(it, v.patch, { roomId: R.id, state: FURNI_BY_ID[it.type].interact === 'dice' ? 1 : 0 });
     persist(it);
     R.items.set(it.id, it);
@@ -574,6 +587,8 @@ export function initHotel(io, socket, userId) {
     if (!it) return;
     const def = FURNI_BY_ID[it.type];
     const U = R.users.get(userId);
+    if (hook('use', R, U, it, m, socket)) return;
+    if (hotelCtx.useHandlers.has(def.interact)) return hotelCtx.useHandlers.get(def.interact)({ R, it, def, U, socket, userId, m });
     if (def.interact === 'dice') {
       if (it.state === 0) return; // ya está rodando
       it.state = 0;
@@ -593,7 +608,6 @@ export function initHotel(io, socket, userId) {
       if (!startWalk(R, U, { x: it.x, y: it.y })) err('No se puede llegar al teletransportador');
       return;
     }
-    if (hotelCtx.useHandlers.has(def.interact)) return hotelCtx.useHandlers.get(def.interact)({ R, it, def, U, socket, userId });
     if (!def.interact || def.states < 2) return;
     // En salas oficiales cualquiera prende/apaga (lámparas, maquinitas, tele…); rejas y lo demás, solo admins
     if (!canEdit(R, userId) && !(R.row.official && def.interact === 'toggle')) return err('Solo quien tiene permisos puede usar esto');
@@ -808,13 +822,20 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   }));
 }
 
-// Contexto para los módulos del Hotel (economía, social, mecánicas…). Solo se AGREGAN llaves.
-export const hotelCtx = {
-  roomRow, roomOut, isBanned, capOf, broadcastRoom,
-  live, where, key, itemOut, addItem, buy, invCount, inventory, persist, refreshUsers, footTiles, canEdit, getUser, isAdmin, cleanText, leaveRoom,
-  get IO() { return IO; },
-  useHandlers: new Map(), // interact → ({ R, it, def, U, socket, userId }) => void
-};
 
 // Para pruebas
 export const _hotel = { live, where, seedOfficialRooms };
+
+// ---------- Contexto para los módulos del Hotel (mecánicas, economía, social…): solo se AGREGAN llaves ----------
+// chatCommands: ':cmd' → ({ R, U, socket, text, args, err }) — el mensaje no se publica.
+// hooks: cada gancho es una lista de funciones; las de 'use', 'walk' y 'place' cortan el flujo si regresan algo.
+export const chatCommands = new Map();
+export const hotelCtx = {
+  get io() { return IO; }, get IO() { return IO; }, useHandlers: new Map(), roomRow, itemOut, db, live, where, key, logical, startWalk, arrive, leaveRoom, userState, userOut, persist, flash, refreshUsers, footTiles,
+  canEdit, isAdmin, getUser, cleanText, chatCommands, socketInits: [],
+  roomOut, isBanned, capOf, broadcastRoom, addItem, buy, invCount, inventory, // social y economía
+  hooks: { use: [], walk: [], arrive: [], enter: [], leave: [], chat: [], place: [], users: [], occupied: [] },
+};
+function hook(name, ...a) { for (const fn of hotelCtx.hooks[name]) { const r = fn(...a); if (r) return r; } return null; }
+function hookAll(name, ...a) { return hotelCtx.hooks[name].flatMap((fn) => fn(...a) || []); }
+initHotelMechanics(hotelCtx);

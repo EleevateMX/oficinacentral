@@ -2,6 +2,7 @@
 // respetos, hasta 5 insignias (los logros de la oficina), y acciones: agregar amigo, mensaje,
 // intercambiar (gancho socialHooks.onTrade), dar respeto, susurrar, permisos, sacar y vetar.
 import React, { useEffect, useState } from 'react';
+import { GiveHandButton } from '../MechPanels.jsx'; // C: dar lo que traes en la mano
 import { UserEconomyActions } from '../economy/CardActions.jsx'; // A: intercambiar, regalar, créditos
 import { X, Crown, Shield, ShieldOff, UserMinus, Ban, MessageCircle, Armchair, UserPlus, Check, ThumbsUp, Repeat, Mail, Pencil, Award, Clock } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
@@ -114,6 +115,7 @@ export default function PersonCard({ userId }) {
             <button className="ht-btn ht-respect-btn" onClick={respect} disabled={left === 0} title={left === 0 ? 'Ya diste tus respetos de hoy' : `Te quedan ${left ?? RESPECTS_PER_DAY} hoy`}><ThumbsUp size={14} /> Respeto{left != null ? ` · ${left}` : ''}</button>
             <button className="ht-btn" onClick={() => { hotel.set({ chatMode: 'whisper', whisperTo: userId, selected: null }); window.dispatchEvent(new Event('hotel:focus-chat')); }}><MessageCircle size={14} /> Susurrar</button>
             <UserEconomyActions userId={userId} />
+            <GiveHandButton userId={userId} />
             <button className="ht-btn" onClick={() => office.set({ profileCard: userId })}>Perfil</button>
             {(isOwner || admin) && !room.official && target !== 'owner' && (rights.includes(userId)
               ? <button className="ht-btn" onClick={() => setRight(false)}><ShieldOff size={14} /> Quitar permisos</button>
