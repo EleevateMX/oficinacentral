@@ -1,6 +1,6 @@
 // Estado del mundo: pisos, áreas y objetos (con caché en memoria).
 import { db, now, tx, getSetting, setSetting } from './db.js';
-import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, STAGE_EXTRAS, HOTEL_ELEVATOR_SPOT, areaAt } from '../shared/map.js';
+import { composeFloor, getTemplate, TEMPLATES, inRect, RECEPTION_EXTRAS, STAGE_EXTRAS, HOTEL_ELEVATOR_SPOT, ZOMBIE_ARCADE_SPOT, areaAt, isWalkable } from '../shared/map.js';
 import { CATALOG, objSize, DESK_DECOR_LIMIT, AREA_DECOR_LIMIT, DESK_TYPES, CHAIR_TYPES } from '../shared/catalog.js';
 import { AREA_SHAPES } from '../shared/map.js';
 
@@ -88,7 +88,7 @@ export function furnishDesks(floorId, { walls = true } = {}) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Oficina', 'recreativo'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1', 'migr_recreativo_v1', 'migr_recreativo_temas_v1']) setSetting(k, '1'); migrateHubName(); return; }
+  if (!rows.length) { createFloor('Oficina', 'recreativo'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1', 'migr_recreativo_v1', 'migr_recreativo_temas_v1', 'migr_zombies_arcade_v1']) setSetting(k, '1'); migrateHubName(); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
@@ -132,7 +132,32 @@ export function loadWorld() {
   for (const r of db.prepare('SELECT id FROM floors ORDER BY sort, id').all()) rebuild(r.id);
   // Una vez: la oficina recreativa pasa a las salas temáticas (Charla General, Roleplay, League of Legends…)
   if (!getSetting('migr_recreativo_temas_v1')) migrateRecreativoTemas();
+  // Una vez: máquina de "Zombies en la oficina" en la sala de juegos de las oficinas ya creadas
+  if (!getSetting('migr_zombies_arcade_v1')) migrateZombiesArcade();
   migrateHubName();
+}
+
+// Pone una máquina de Zombies en la sala de juegos de cada piso (recreativo y HQ) que no tenga.
+// Primero en su lugar de la plantilla; si está ocupado, en la primera casilla libre del área de juegos
+// que no tape el paso. Es idempotente: si ya hay una en el piso, no hace nada.
+export function migrateZombiesArcade() {
+  const ins = db.prepare('INSERT INTO objects (floor_id, type, x, y, w, h, rot, color, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 0, NULL, ?)');
+  for (const r of db.prepare("SELECT id, template FROM floors WHERE template IN ('recreativo', 'hq')").all()) {
+    const objects = db.prepare('SELECT * FROM objects WHERE floor_id = ?').all(r.id).map(rowToObject);
+    if (objects.some((o) => o.type === 'zombieArcade')) continue;
+    const areas = db.prepare('SELECT * FROM areas WHERE floor_id = ?').all(r.id).map((a) => rowToArea(a));
+    const f = composeFloor({ template: r.template, areas, objects });
+    const covered = (x, y) => objects.some((o) => { const s = objSize(o); return o.x < x + 1 && x < o.x + s.w && o.y < y + 1 && y < o.y + s.h; });
+    const free = (x, y) => isWalkable(f, x, y) && !covered(x, y) && !f.walls[y]?.[x];
+    const spot = ZOMBIE_ARCADE_SPOT[r.template];
+    let at = spot && free(spot.x, spot.y) ? spot : null;
+    if (!at) {
+      const room = areas.find((a) => /juegos/i.test(a.name));
+      if (room) for (let y = room.y; y < room.y + room.h && !at; y++) for (let x = room.x; x < room.x + room.w && !at; x++) if (free(x, y) && free(x, y + 1)) at = { x, y };
+    }
+    if (at) { ins.run(r.id, 'zombieArcade', at.x, at.y, now()); rebuild(r.id); }
+  }
+  setSetting('migr_zombies_arcade_v1', '1');
 }
 
 // Nombres viejos de las áreas de la oficina recreativa → salas temáticas. Se renombran antes de

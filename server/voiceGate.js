@@ -93,6 +93,8 @@ export function canConnect(a, b) {
   if (a === b) return false;
   const pa = presence.get(a), pb = presence.get(b);
   if (!pa || !pb) return false;
+  // Zombies: quien juega solo se oye con su equipo (misma partida)
+  if (pa.game || pb.game) return !!(pa.game && pb.game && pa.game.objectId === pb.game.objectId);
   const ha = hotelCtx.where.get(a), hb = hotelCtx.where.get(b);
   // Hotel: la misma sala se oye sin importar el piso de la oficina (regla de antes)
   if (ha && hb && ha.roomId === hb.roomId) return hotelNear(a, b, ha.roomId) || inCall(a, b);
@@ -216,6 +218,7 @@ export function voiceScope(uid) {
   if (w) return `h${w.roomId}`;
   const p = presence.get(Number(uid));
   if (!p) return 'idle';
+  if (p.game) return `z${p.game.objectId}`; // equipo de Zombies
   const f = getFloor(p.floorId)?.state;
   const a = f && areaAt(f, p.x, p.y);
   if (a?.closed) return `a${a.id}`;

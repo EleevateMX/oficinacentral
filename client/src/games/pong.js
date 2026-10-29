@@ -1,4 +1,7 @@
-// Ping pong para 2 (o contra la computadora). El asiento 0 corre la física.
+// Ping pong para 2 (o contra la computadora). El asiento 0 corre la física con paso fijo;
+// el invitado y los espectadores dibujan ~100 ms en el pasado interpolando (netSync.js).
+import { SnapBuffer, gameLoop, crispCanvas, stamp, Shake, Particles, drawCountdown } from './netSync.js';
+
 export const meta = { w: 800, h: 450, help: 'W/S o ↑/↓, o mueve el mouse / dedo · Espacio: revancha' };
 
 const W = 800, H = 450;
@@ -10,19 +13,28 @@ const COLORS = ['#FE3377', '#3a86ff'];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function create(canvas, ctx) {
-  const g = canvas.getContext('2d');
+  const cc = crispCanvas(canvas, W, H);
+  const g = cc.g;
   const { seat, host, players } = ctx;
   const vsCpu = host && !players[1];
-  let raf = 0;
-  let last = performance.now();
   let sendAcc = 0;
   const sounds = [];
-  const play = (s) => { ctx.sound(s); if (host) sounds.push(s); };
+  const buf = new SnapBuffer({ delay: 100 });
+  const shake = new Shake();
+  const parts = new Particles(220);
+  // efectos que se ven en todas las pantallas (los decide el anfitrión y viajan con los sonidos)
+  const juice = (s, b) => {
+    if (s === 'hit') parts.burst(b.x, b.y, 10, { colors: ['#fff', '#ffcf6b'], speed: [80, 240], life: [0.2, 0.45] });
+    if (s === 'wall') parts.burst(b.x, b.y, 5, { colors: ['#cfe0ff'], speed: [40, 140], life: [0.15, 0.3] });
+    if (s === 'score') { shake.kick(10, 0.4); parts.burst(b.x < W / 2 ? 30 : W - 30, b.y, 40, { colors: ['#FFCC00', '#FE3377', '#fff', '#3a86ff'], speed: [120, 420], life: [0.5, 1.1], gravity: 300 }); }
+  };
+  const play = (s) => { ctx.sound(s); if (host) { sounds.push(s); juice(s, st.b); } };
 
   // Estado (lo tiene el anfitrión; los demás reciben copias)
   let st = fresh();
   function fresh() {
-    return { b: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, p: [H / 2, H / 2], s: [0, 0], phase: 'serve', t: 1.2, to: Math.random() < 0.5 ? 0 : 1, winner: -1, hits: 0 };
+    // el primer saque tiene cuenta regresiva
+    return { b: { x: W / 2, y: H / 2, vx: 0, vy: 0 }, p: [H / 2, H / 2], s: [0, 0], phase: 'serve', t: 3.2, to: Math.random() < 0.5 ? 0 : 1, winner: -1, hits: 0 };
   }
 
   // Mi paleta: teclado o mouse/dedo
@@ -60,11 +72,13 @@ export function create(canvas, ctx) {
       if (d?.rematch && st.phase === 'over') { st = fresh(); ctx.status(''); }
     });
   } else {
+    let lastSeen = null;
     ctx.onState((d) => {
-      if (d.snd) for (const s of d.snd) ctx.sound(s);
-      const was = st.phase;
-      st = d;
-      if (was !== 'over' && d.phase === 'over') announce();
+      if (!buf.push(d)) return;
+      if (d.snd) for (const s of d.snd) { ctx.sound(s); juice(s, d.b); }
+      const was = lastSeen?.phase;
+      lastSeen = d;
+      if (was !== 'over' && d.phase === 'over') { st = d; announce(); }
     });
   }
 
@@ -205,6 +219,7 @@ export function create(canvas, ctx) {
       g.font = '700 22px system-ui, sans-serif';
       g.fillStyle = '#fff';
       g.fillText(st.s[0] + st.s[1] === 0 ? `Primero en llegar a ${WIN}` : '¡Saque!', W / 2, H / 2 - 40);
+      if (st.s[0] + st.s[1] === 0) drawCountdown(g, W / 2, H / 2 + 40, st.t, { size: 72 });
     }
     if (st.phase === 'over') {
       g.fillStyle = 'rgba(0,0,0,.55)';
@@ -218,30 +233,42 @@ export function create(canvas, ctx) {
     }
   }
 
-  function loop(t) {
-    const dt = Math.min(0.033, (t - last) / 1000);
-    last = t;
+  // Física con paso fijo (igual en monitores de 60, 120 o 144 Hz); el dibujo va aparte
+  function hostStep(dt) {
     if (seat >= 0) moveMine(dt);
-    if (host) {
-      step(dt);
-      sendAcc += dt;
-      if (sendAcc >= 1 / 30) {
-        sendAcc = 0;
-        ctx.sendState({ ...st, b: { ...st.b }, p: [...st.p], s: [...st.s], snd: sounds.splice(0) });
-      }
-    } else if (seat === 1) {
-      sendAcc += dt;
-      if (sendAcc >= 1 / 30) { sendAcc = 0; ctx.sendInput({ y: Math.round(myY) }); }
+    step(dt);
+    sendAcc += dt;
+    if (sendAcc >= 1 / 30) {
+      sendAcc = 0;
+      ctx.sendState(stamp({ ...st, b: { ...st.b }, p: [...st.p], s: [...st.s], snd: sounds.splice(0) }));
     }
-    draw();
-    raf = requestAnimationFrame(loop);
   }
-  raf = requestAnimationFrame(loop);
+  function frame(dt) {
+    if (!host) {
+      if (seat >= 0) moveMine(dt);
+      // estado interpolado (pelota y paletas suaves aunque los mensajes lleguen a saltos)
+      const v = buf.state({ keys: ['b', 'p', 't'], jump: 160 });
+      if (v) st = v;
+      if (seat === 1) {
+        sendAcc += dt;
+        if (sendAcc >= 1 / 30) { sendAcc = 0; ctx.sendInput({ y: Math.round(myY) }); }
+      }
+    }
+    cc.begin();
+    const [sx, sy] = shake.offset(dt);
+    g.save();
+    g.translate(sx, sy);
+    draw();
+    parts.draw(g, dt);
+    g.restore();
+  }
+  const loop = gameLoop({ step: host ? hostStep : null, frame, hz: 120 });
   ctx.status(seat < 0 ? 'Estás mirando la partida' : vsCpu ? 'Juegas contra la computadora. Si alguien más abre la mesa, entra como rival.' : '');
 
   return {
     destroy() {
-      cancelAnimationFrame(raf);
+      loop.stop();
+      cc.destroy();
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
       canvas.removeEventListener('pointermove', pm);

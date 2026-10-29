@@ -1,5 +1,7 @@
 // "Come-Puntos": laberinto arcade para un jugador. El asiento 0 (host) corre el juego;
 // los demás que abren la máquina solo miran (reciben el estado con onState).
+import { SnapBuffer, gameLoop, crispCanvas, stamp } from './netSync.js';
+
 export const meta = { w: 448, h: 560, help: 'Flechas o WASD · desliza el dedo en el celular · Espacio: pausa/empezar' };
 
 const TS = 16, COLS = 28, ROWS = 31, TOP = 40, W = COLS * TS, H = TOP + ROWS * TS + 24;
@@ -91,10 +93,12 @@ const fruitOf = (lv) => Math.min(FRUITS.length - 1, lv - 1);
 let sessionHi = 0; // récord de la sesión (sobrevive mientras la página siga abierta)
 
 export function create(canvas, ctx) {
-  const g = canvas.getContext('2d');
+  const cc = crispCanvas(canvas, W, H);
+  const g = cc.g;
+  const buf = new SnapBuffer({ delay: 100 });
   const { host } = ctx;
   const watcher = !host;
-  let raf = 0, last = performance.now(), sendAcc = 0, fullAcc = 99, eatCool = 0, anim = 0, clock = 0;
+  let sendAcc = 0, fullAcc = 99, eatCool = 0, anim = 0, clock = 0;
   const sounds = [];
   const play = (s) => { ctx.sound(s); if (host) sounds.push(s); };
 
@@ -416,7 +420,19 @@ export function create(canvas, ctx) {
     st.popups = (d.po || []).map((p) => ({ x: p[0] / 100, y: p[1] / 100, txt: p[2], c: p[3], t: 1 }));
     if (d.d) { decodeDots(d.d, st.dots); st.left = st.dots.reduce((a, b) => a + b, 0); }
   }
-  if (watcher) ctx.onState(unpack);
+  if (watcher) ctx.onState((d) => { if (buf.push(d)) unpack(d); });
+  // Espectadores: el jugador y los fantasmas se dibujan interpolados entre dos estados (netSync.js)
+  function smoothWatch() {
+    const smp = buf.sample();
+    if (!smp || !smp.a.p || !smp.b.p) return;
+    const k = Math.max(0, Math.min(1.3, smp.k));
+    const L = (a, b) => (Math.abs(b - a) > 300 ? b : a + (b - a) * k) / 100; // el túnel no se interpola
+    st.pl.x = L(smp.a.p[0], smp.b.p[0]); st.pl.y = L(smp.a.p[1], smp.b.p[1]);
+    for (let i = 0; i < 4; i++) {
+      const o = i * 5;
+      if (smp.a.g?.length > o && smp.b.g?.length > o) { st.gh[i].x = L(smp.a.g[o], smp.b.g[o]); st.gh[i].y = L(smp.a.g[o + 1], smp.b.g[o + 1]); }
+    }
+  }
 
   // ---------- Dibujo ----------
   const px = (x) => x * TS + TS / 2;
@@ -424,8 +440,9 @@ export function create(canvas, ctx) {
 
   function prerenderWalls(flash) {
     const c = document.createElement('canvas');
-    c.width = W; c.height = ROWS * TS;
+    c.width = W * 2; c.height = ROWS * TS * 2;
     const w = c.getContext('2d');
+    w.scale(2, 2);
     const isWall = (r, cc) => r < 0 || r >= ROWS || cc < 0 || cc >= COLS || MAZE[r][cc] === '#';
     const isOpen = (r, cc) => !isWall(r, cc);
     const bnd = (r, cc) => {
@@ -572,7 +589,7 @@ export function create(canvas, ctx) {
 
     // Laberinto
     const flash = st.phase === 'clear' && st.pt > 0.6 && Math.floor(st.pt * 5) % 2 === 0;
-    g.drawImage(flash ? wallsB : wallsA, 0, TOP);
+    g.drawImage(flash ? wallsB : wallsA, 0, TOP, W, ROWS * TS);
 
     // Puntos
     const pulse = 0.75 + 0.25 * Math.sin(t * 8);
@@ -681,31 +698,32 @@ export function create(canvas, ctx) {
     if (s !== lastStatus) { lastStatus = s; ctx.status(s); }
   }
 
-  function loop(now) {
-    const dt = Math.min(0.033, (now - last) / 1000);
-    last = now;
-    clock += dt;
-    if (host) {
-      step(dt);
-      sendAcc += dt; fullAcc += dt;
-      if (sendAcc >= 1 / 25) {
-        sendAcc = 0;
-        const full = fullAcc >= 1;
-        if (full) fullAcc = 0;
-        ctx.sendState(pack(full));
-      }
+  // Paso fijo para la simulación (igual en cualquier monitor) y dibujo con requestAnimationFrame
+  function hostStep(dt) {
+    step(dt);
+    sendAcc += dt; fullAcc += dt;
+    if (sendAcc >= 1 / 25) {
+      sendAcc = 0;
+      const full = fullAcc >= 1;
+      if (full) fullAcc = 0;
+      ctx.sendState(stamp(pack(full)));
     }
+  }
+  function frame(dt) {
+    clock += dt;
+    if (watcher) smoothWatch();
     if (st.pl.moving && st.phase === 'play' && !st.paused && !(st.fz > 0)) anim += dt * 16;
     updateStatus();
+    cc.begin();
     draw(clock);
-    raf = requestAnimationFrame(loop);
   }
-  raf = requestAnimationFrame(loop);
+  const loop = gameLoop({ step: host ? hostStep : null, frame, hz: 120 });
 
   // Para pruebas automáticas
   const api = {
     destroy() {
-      cancelAnimationFrame(raf);
+      loop.stop();
+      cc.destroy();
       window.removeEventListener('keydown', kd);
       canvas.removeEventListener('pointerdown', pd);
       canvas.removeEventListener('pointermove', pm);

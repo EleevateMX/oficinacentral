@@ -1478,3 +1478,11 @@ body.pet-aiming canvas { cursor: crosshair !important; }
 
 /* ---------- Moderación extra (silenciar en voz, sacar de la sala, banear + IP) ---------- */
 .mod-ip { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
+
+/* ===== Zombies en la oficina (juego 3D) ===== */
+.game-modal.game-wide { width: min(1320px, calc(100vw - 16px)); }
+.game-wide .game-stage canvas { max-height: none; object-fit: fill; cursor: crosshair; }
+.game-back { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.1); color: inherit; border: 0; }
+.game-back:hover { background: rgba(255,255,255,.18); }
+.pc-game { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.pc-game .btn { flex: none; }
