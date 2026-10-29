@@ -181,7 +181,7 @@ describe('rutas /api/push y avisos de chat', () => {
   before(async () => {
     svc = await startPushService(cert);
     // El servidor confía en el certificado del servicio push falso
-    srv = await startServer({ env: { NODE_EXTRA_CA_CERTS: cert.certPath, VAPID_SUBJECT: 'mailto:pruebas@example.com' } });
+    srv = await startServer({ env: { NODE_EXTRA_CA_CERTS: cert.certPath, VAPID_SUBJECT: 'mailto:pruebas@example.com', PUSH_ALLOWED_HOSTS: '127.0.0.1' } });
     admin = await adminClient(srv.url);
     member = await createMember(srv.url, admin, 'Lupita');
     other = await createMember(srv.url, admin, 'Ramon');
@@ -205,6 +205,8 @@ describe('rutas /api/push y avisos de chat', () => {
     const s = subscription(svc.base, keys);
     assert.equal((await new Client(srv.url).post('/push/subscribe', { subscription: s })).status, 401);
     assert.equal((await member.post('/push/subscribe', { subscription: { endpoint: 'http://inseguro/x', keys: s.keys } })).status, 400);
+    // Solo servicios push conocidos (nada de direcciones internas: SSRF)
+    assert.equal((await member.post('/push/subscribe', { subscription: { endpoint: 'https://169.254.169.254/latest/meta-data', keys: s.keys } })).status, 400);
     assert.equal((await member.post('/push/subscribe', { subscription: { endpoint: s.endpoint, keys: { p256dh: 'x', auth: 'y' } } })).status, 400);
     const r = await member.post('/push/subscribe', { subscription: s });
     assert.equal(r.status, 200);

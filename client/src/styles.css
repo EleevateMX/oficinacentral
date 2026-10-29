@@ -1454,3 +1454,24 @@ body.pet-aiming canvas { cursor: crosshair !important; }
 .floor-lock-ico { color: #FFCC00; vertical-align: -1px; }
 .floor-admin-only { align-items: center; gap: 8px; padding-top: 6px; border-top: 1px dashed var(--border); }
 .floor-admin-only .small { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+/* ===== Moderación: bloquear, reportar y sanciones (Moderation.jsx) ===== */
+.mod-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.mod-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.mod-row .btn.tiny { gap: 4px; }
+.mod-row .btn.ghost.on { background: var(--accent-soft); color: var(--accent); }
+.mod-actions .btn.danger, .mod-panel .btn.danger { background: var(--red); color: #fff; border-color: transparent; }
+.mod-actions .btn.ghost.danger { background: transparent; color: var(--red); }
+.mod-panel { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: var(--panel-2); }
+.mod-panel .search-input { width: 100%; }
+.mod-reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.mod-reason { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; cursor: pointer; }
+.mod-reason.on { border-color: var(--accent); background: var(--accent-soft); }
+.mod-reason input { accent-color: var(--accent); }
+.mod-quote { margin: 4px 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 6px; font-size: 13px; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: auto; }
+.mod-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.mod-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 12px; }
+.mod-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mod-item-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.mod-item .link { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-decoration: underline; }
+@media (max-width: 520px) { .mod-reasons { grid-template-columns: 1fr; } .mod-item { flex-wrap: wrap; } }

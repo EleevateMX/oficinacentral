@@ -5,6 +5,7 @@ import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar, Empty } from './ui.jsx';
 import { fmtTime, fmtDayLong, sameDay } from '../lib/time.js';
+import { ReportMsgButton } from './Moderation.jsx';
 
 // ---------- Panel lateral ----------
 export function ChatPanel() {
@@ -242,6 +243,7 @@ function ReactButton({ m }) {
   return (
     <div className="msg-actions">
       <button className="icon-btn" title="Reaccionar" onClick={() => setOpen(!open)}><SmilePlus size={16} /></button>
+      <ReportMsgButton m={m} />
       {open && (
         <div className="popover down right emoji-pop" onMouseLeave={() => setOpen(false)}>
           {QUICK_REACTIONS.map((x) => <button key={x} onClick={() => react(x)}>{x}</button>)}

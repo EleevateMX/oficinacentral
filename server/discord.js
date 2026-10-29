@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { db, now, tx } from './db.js';
+import { isBanned } from './moderation.js';
 import { createSession, sessionCookie, hashPassword, defaultAvatar, randomToken, parseCookies } from './auth.js';
 import { newLoginTicket, audit } from './security.js';
 
@@ -153,7 +154,7 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
 
     // login
     if (!linked) return { query: { discord: 'nolink' } };
-    if (linked.disabled) return { query: { discord: 'disabled' } };
+    if (linked.disabled || isBanned(linked.id)) return { query: { discord: 'disabled' } };
     if (linked.totp_enabled) return { query: { login2fa: newLoginTicket(linked.id) } };
     if (linked.role === 'admin') audit({ actor: linked.id, action: 'Inició sesión con Discord (admin)', ip: req.ip });
     return { query: { discord: 'ok' }, session: linked.id };

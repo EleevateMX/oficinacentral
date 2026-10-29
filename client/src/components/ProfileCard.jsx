@@ -11,6 +11,7 @@ import { fmtTime, sameDay, tzDiffLabel } from '../lib/time.js';
 import { api } from '../lib/api.js';
 import { BadgeRow } from './Achievements.jsx';
 import { PlacasSection, LiveTag } from './badges/Badge.jsx'; // placas y "en vivo"
+import { ModerationActions } from './Moderation.jsx';
 
 export default function ProfileCard({ userId }) {
   const u = useOffice((s) => s.users[userId]);
@@ -130,6 +131,7 @@ export default function ProfileCard({ userId }) {
         <div className="pc-sub pc-where"><MapPin size={12} /> {room ? `${room.name}${room.closed ? ' · cerrada 🔒' : ''}` : 'En su escritorio'}</div>
       )}
       <PlacasSection userId={u.id} />
+      {!isMe && <ModerationActions user={u} />}
       <BadgeRow userId={u.id} />
       <div className="pc-section">
         <div className="pc-label">Avatar</div>

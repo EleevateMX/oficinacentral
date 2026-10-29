@@ -23,11 +23,27 @@ export function getFiles(ids, userId) {
   return out;
 }
 
+// Cuota por persona: que nadie llene el disco del servidor subiendo archivos sin parar
+db.exec('CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id, created_at)');
+const FILES_PER_HOUR = Number(process.env.FILES_PER_HOUR) || 60;
+const MB_PER_DAY = Number(process.env.UPLOAD_MB_PER_DAY) || 500;
+function quotaError(userId) {
+  const t = now();
+  const hour = db.prepare('SELECT COUNT(*) AS n FROM files WHERE user_id = ? AND created_at > ?').get(userId, t - 3600e3).n;
+  if (hour >= FILES_PER_HOUR) return 'Subiste muchos archivos en esta hora. Espera un poco.';
+  const day = db.prepare('SELECT COALESCE(SUM(size), 0) AS b FROM files WHERE user_id = ? AND created_at > ?').get(userId, t - 864e5).b;
+  if (day >= MB_PER_DAY * 1048576) return `Llegaste al límite de ${MB_PER_DAY} MB de archivos por día.`;
+  return null;
+}
+const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return String(s); } };
+
 export function registerFileRoutes(api, { fail }) {
-  api.post('/files', express.raw({ type: () => true, limit: `${MAX_FILE_MB}mb` }), (req, res) => {
+  // La cuota se revisa antes de recibir el cuerpo (así no se lee un archivo que se va a rechazar)
+  const quota = (req, res, next) => { const e = quotaError(req.user.id); return e ? fail(res, 429, e) : next(); };
+  api.post('/files', quota, express.raw({ type: () => true, limit: `${MAX_FILE_MB}mb` }), (req, res) => {
     const buf = req.body;
     if (!Buffer.isBuffer(buf) || !buf.length) return fail(res, 400, 'Archivo vacío');
-    const name = String(decodeURIComponent(req.headers['x-file-name'] || 'archivo')).replace(/[\\/\0]/g, '_').slice(0, 120) || 'archivo';
+    const name = String(safeDecode(req.headers['x-file-name'] || 'archivo')).replace(/[\\/\0]/g, '_').slice(0, 120) || 'archivo';
     let mime = String(req.headers['content-type'] || 'application/octet-stream').split(';')[0].trim().toLowerCase().slice(0, 100);
     if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(mime)) mime = 'application/octet-stream';
     // Las imágenes deben serlo de verdad (firma del archivo)

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db, now } from './db.js';
 import { PRESETS } from '../shared/sprite.js';
+import { isBanned } from './moderation.js';
 
 const SESSION_DAYS = 30;
 export const SESSION_COOKIE = 'oc_sid';
@@ -40,6 +41,8 @@ export function userFromToken(token) {
   const row = db.prepare(`
     SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > ? AND u.disabled = 0`).get(token, now());
+  // Cuenta suspendida (server/moderation.js): la sesión no sirve aunque siga guardada
+  if (row && isBanned(row.id)) return null;
   return row || null;
 }
 
@@ -49,7 +52,8 @@ export function parseCookies(header = '') {
     const i = part.indexOf('=');
     if (i < 0) continue;
     const k = part.slice(0, i).trim();
-    if (k) out[k] = decodeURIComponent(part.slice(i + 1).trim());
+    // Una cookie mal formada (%E0%A4%A) no debe lanzar un error (en el handshake del socket tumbaría el proceso)
+    if (k) { try { out[k] = decodeURIComponent(part.slice(i + 1).trim()); } catch { out[k] = ''; } }
   }
   return out;
 }
@@ -64,6 +68,7 @@ export function sessionCookie(token, { clear = false } = {}) {
 const attempts = new Map();
 export function loginRateLimited(ip) {
   const t = now();
+  if (attempts.size > 20000) for (const [k, v] of attempts) if (t > v.reset) attempts.delete(k);
   const a = attempts.get(ip) || { count: 0, reset: t + 15 * 60e3 };
   if (t > a.reset) { a.count = 0; a.reset = t + 15 * 60e3; }
   a.count++;
