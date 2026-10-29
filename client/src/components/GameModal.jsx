@@ -121,7 +121,9 @@ export default function GameModal({ objectId, game, floorId }) {
   const watchers = room?.watchers || [];
   const vs = game === 'arcade'
     ? (players[0] ? `Juega ${players[0].name}` : '')
-    : `${players[0]?.name || '…'} vs ${players[1]?.name || 'la computadora 🤖'}`;
+    : game === 'zombies' || game === 'karts'
+      ? `${game === 'karts' ? 'Corredores' : 'Equipo'} (${players.filter(Boolean).length}/${seats.length}): ${players.filter(Boolean).map((p) => p.name).join(', ')}`
+      : `${players[0]?.name || '…'} vs ${players[1]?.name || 'la computadora 🤖'}`;
 
   return (
     <div ref={backRef} className={`modal-backdrop game-backdrop${full ? ' game-full' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && !persistent && close()}>
@@ -133,7 +135,7 @@ export default function GameModal({ objectId, game, floorId }) {
           {!persistent && seat < 0 && room && <span className="game-tag">Estás mirando</span>}
           <span className="flex1" />
           {watchers.length > 0 && <span className="game-watch" title={watchers.map((id) => users[id]?.displayName).join(', ')}><Users size={14} /> {watchers.length}{persistent ? ' mirando' : ''}</span>}
-          {!persistent && <button className="icon-btn" onClick={loadTop} title="Mejores jugadores"><Trophy size={17} /></button>}
+          {!persistent && !mod?.meta?.ownTop && <button className="icon-btn" onClick={loadTop} title="Mejores jugadores"><Trophy size={17} /></button>}
           {full && <button className="icon-btn game-fs" onClick={toggleFs} title={isFs ? 'Salir de pantalla completa (F)' : 'Pantalla completa (F)'} aria-label="Pantalla completa">{isFs ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>}
           {persistent && <button className="btn small game-back" onClick={close}><LogOut size={14} /> Volver a la oficina</button>}
           <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={18} /></button>

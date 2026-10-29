@@ -32,6 +32,7 @@ export const GAMES = {
   foosball: { name: 'Futbolito', emoji: '⚽', load: () => import('./foosball.js') },
   arcade: { name: 'Arcade', emoji: '👾', load: () => import('./pacman.js') },
   zombies: { name: 'Zombies en la oficina', emoji: '🧟', full: true, load: () => import('./zombies/index.js') },
+  karts: { name: 'Karts de oficina', emoji: '🏎️', full: true, load: () => import('./karts/index.js') },
 };
 
-export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies' };
+export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies', kartArcade: 'karts' };

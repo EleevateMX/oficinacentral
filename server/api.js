@@ -16,7 +16,7 @@ import { openShift, shiftReport } from './shifts.js';
 import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
-import { addScore, topScores, SCORE_GAMES, POINT_GAMES, liveMatches, bestOf } from './games.js';
+import { addScore, topScores, SCORE_GAMES, POINT_GAMES, TIME_GAMES, liveMatches, bestOf } from './games.js';
 import { activeSeason, SEASON_SETTINGS, validMD } from '../shared/seasons.js';
 import { registerSantaRoutes } from './santa.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
@@ -521,7 +521,7 @@ let scoreTimes = new Map();
 // Puntuación de los juegos de puntos (arcade y Zombies en la oficina)
 api.post('/games/:game/score', wrap((req, res) => {
   const game = req.params.game;
-  if (!POINT_GAMES.includes(game)) return fail(res, 404, 'No existe');
+  if (!POINT_GAMES.includes(game) && !TIME_GAMES.includes(game)) return fail(res, 404, 'No existe');
   const score = Math.trunc(Number(req.body?.score));
   if (!Number.isFinite(score) || score <= 0 || score > 1e6) return fail(res, 400, 'Puntuación inválida');
   const t = Date.now();

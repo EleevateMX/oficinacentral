@@ -449,6 +449,7 @@ function templateHQ() {
   for (let x = 84; x <= 88; x++) b.door(x, 46, 'slate');
   b.o('arcade', 79, 47, { color: '#FE3377' }); b.o('arcade', 80, 47, { color: '#FFCC00' }); b.o('arcade', 81, 47, { color: '#3a86ff' });
   b.o('zombieArcade', ZOMBIE_ARCADE_SPOT.hq.x, ZOMBIE_ARCADE_SPOT.hq.y);
+  b.o('kartArcade', KART_ARCADE_SPOT.hq.x, KART_ARCADE_SPOT.hq.y); // Karts de oficina
   b.o('bigScreen', 89, 47);
   b.o('poolTable', 81, 50); b.o('pingPong', 88, 50);
   b.o('foosball', 81, 54);
@@ -668,6 +669,7 @@ function templateRecreativo() {
   b.area('juegos', 'Juegos', 60, 23, 34, 11, { color: 'purple' });
   for (const [x, c] of [[61, PINK], [62, YEL], [63, '#3a86ff'], [64, '#2bb673']]) b.o('arcade', x, 23, { color: c });
   b.o('zombieArcade', ZOMBIE_ARCADE_SPOT.recreativo.x, ZOMBIE_ARCADE_SPOT.recreativo.y); // Zombies en la oficina
+  b.o('kartArcade', KART_ARCADE_SPOT.recreativo.x, KART_ARCADE_SPOT.recreativo.y); // Karts de oficina
   b.o('bigScreen', 67, 23); b.o('controllerRug', 66, 25, { w: 7, h: 2, color: '#2b2f3a' });
   b.o('sofaSmall', 68, 28, { rot: 2, color: PINK });
   for (const [x, c] of [[67, PINK], [69, YEL], [71, '#3a86ff']]) b.o('beanBag', x, 26, { color: c });
@@ -909,6 +911,8 @@ export const RECEPTION_EXTRAS = [
 export const HOTEL_ELEVATOR_SPOT = { x: 38, y: 46 };
 // Máquina de "Zombies en la oficina" en la sala de juegos (también se agrega una vez a oficinas ya creadas)
 export const ZOMBIE_ARCADE_SPOT = { recreativo: { x: 65, y: 23 }, hq: { x: 82, y: 47 } };
+// Máquina de "Karts de oficina" en la sala de juegos (también se agrega una vez a oficinas ya creadas)
+export const KART_ARCADE_SPOT = { recreativo: { x: 73, y: 23 }, hq: { x: 94, y: 47 } };
 
 export const STAGE_EXTRAS = [
   ['stage', 72, 22, {}],

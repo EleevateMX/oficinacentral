@@ -8,8 +8,10 @@
 //    Quien entra a jugar "sale de la sala": deja de verse en el mapa y de oírse (ver hooks).
 import { db, now } from './db.js';
 
-export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies' };
-export const MAX_SEATS = { arcade: 1, zombies: 4 };
+export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies', kartArcade: 'karts' };
+export const MAX_SEATS = { arcade: 1, zombies: 4, karts: 8 };
+// Juegos "de sala" (Zombies y Karts): asientos fijos, anfitrión que pasa al siguiente y quien juega sale de la oficina
+export const SQUAD_GAMES = new Set(['zombies', 'karts']);
 const seatsFor = (game) => MAX_SEATS[game] || 2;
 const rooms = new Map(); // objectId -> { game, seats: [uid|null…], host, members: Set<uid>, floorId }
 
@@ -22,14 +24,14 @@ function objectInfo(id) {
 }
 
 const roomKey = (id) => `game:${id}`;
-const hostOf = (r) => (r.game === 'zombies' ? r.host : r.seats[0]);
+const hostOf = (r) => (SQUAD_GAMES.has(r.game) ? r.host : r.seats[0]);
 const view = (id, r) => ({ objectId: id, game: r.game, seats: r.seats, host: hostOf(r) ?? null, watchers: [...r.members].filter((u) => !r.seats.includes(u)) });
 
 // Partidas de Zombies en curso (para que cualquiera pueda unirse)
 export function liveMatches() {
   const out = [];
   for (const [id, r] of rooms) {
-    if (r.game !== 'zombies') continue;
+    if (!SQUAD_GAMES.has(r.game)) continue;
     const players = r.seats.filter(Boolean);
     if (players.length) out.push({ objectId: id, floorId: r.floorId, game: r.game, players, max: r.seats.length });
   }
@@ -44,7 +46,7 @@ function sit(io, id, r, uid) {
   const free = r.seats.indexOf(null);
   if (free < 0) return false;
   r.seats[free] = uid;
-  if (r.game === 'zombies') {
+  if (SQUAD_GAMES.has(r.game)) {
     if (r.host == null || !r.seats.includes(r.host)) r.host = uid;
     gameHooks.seated(uid, { game: r.game, objectId: id, floorId: r.floorId });
     emitLive();
@@ -59,7 +61,7 @@ function leave(io, id, userId) {
   const seat = seatOf(r, userId);
   if (seat >= 0) {
     r.seats[seat] = null;
-    if (r.game === 'zombies') {
+    if (SQUAD_GAMES.has(r.game)) {
       gameHooks.unseated(userId);
       // el anfitrión pasa al siguiente jugador (el de asiento más bajo)
       if (r.host === userId) r.host = r.seats.find(Boolean) ?? null;
@@ -133,7 +135,7 @@ export function initGames(io, socket, userId) {
     socket.to(roomKey(id)).emit('game:event', { objectId: id, seat: r.seats.indexOf(userId), data: m.data });
     // Fin de partida entre dos personas: el anfitrión dice quién ganó y se cuenta la victoria
     const w = Number(m.data?.winner);
-    if (m.data?.type === 'end' && r.seats[0] === userId && r.seats[1] != null && (w === 0 || w === 1) && r.game !== 'arcade' && r.game !== 'zombies') {
+    if (m.data?.type === 'end' && r.seats[0] === userId && r.seats[1] != null && (w === 0 || w === 1) && r.game !== 'arcade' && !SQUAD_GAMES.has(r.game)) {
       const t = Date.now();
       if (t - (r.lastEnd || 0) < 15e3) return; // una partida no termina dos veces seguidas
       r.lastEnd = t;
@@ -160,7 +162,9 @@ CREATE TABLE IF NOT EXISTS game_scores (
 CREATE INDEX IF NOT EXISTS idx_game_scores ON game_scores(game, score DESC);
 `);
 
-export const SCORE_GAMES = ['arcade', 'pong', 'pool', 'foosball', 'zombies'];
+// Karts: mejor vuelta (en milisegundos, menos es mejor) de cada pista
+export const TIME_GAMES = ['karts_oficina', 'karts_juegos', 'karts_torre'];
+export const SCORE_GAMES = ['arcade', 'pong', 'pool', 'foosball', 'zombies', ...TIME_GAMES];
 // Juegos de puntuación (mejor marca de cada persona); los demás cuentan partidas ganadas
 export const POINT_GAMES = ['arcade', 'zombies'];
 
@@ -170,7 +174,9 @@ export function addScore(userId, game, score) {
 
 // Arcade y Zombies: mejor puntuación de cada persona. Mesas: partidas ganadas.
 export function topScores(game, limit = 10) {
-  const sql = POINT_GAMES.includes(game)
+  const sql = TIME_GAMES.includes(game)
+    ? 'SELECT user_id AS userId, MIN(score) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score ASC LIMIT ?'
+    : POINT_GAMES.includes(game)
     ? 'SELECT user_id AS userId, MAX(score) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score DESC LIMIT ?'
     : 'SELECT user_id AS userId, COUNT(*) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score DESC LIMIT ?';
   return db.prepare(sql).all(game, limit);
