@@ -90,6 +90,10 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
   await page.keyboard.up('KeyW');
   const moved = await Z('state');
   assert.ok(Math.hypot(moved.x - before.x, moved.y - before.y) > 0.05, 'se movió');
+  // ya se prepararon los efectos: disparar, cambiar de arma o que llegue un jefe no compila nada nuevo (eso congelaba el juego)
+  await page.waitForFunction(() => window.__zombies.state().warmed, null, { timeout: 30000, polling: 200 });
+  const programs = (await Z('state')).programs;
+  assert.ok(programs > 0);
   // disparar hasta matar al menos uno
   for (let i = 0; i < 40 && (await Z('state')).kills < 1; i++) {
     await Z('aim'); await Z('shoot'); await Z('advance', 0.3);
@@ -102,6 +106,8 @@ test('zombies: abrir la máquina, disparar, jefe, tienda y fin', { timeout: 2400
   await Z('advance', 5);
   st = await Z('state');
   assert.equal(st.boss, 'El Gerente Regional');
+  await page.waitForTimeout(500);
+  assert.equal((await Z('state')).programs, programs, 'sin compilar materiales nuevos al disparar ni con el jefe');
   // descanso y tienda (tarjetas; 1-6 compran)
   await Z('breakNow'); await Z('advance', 1);
   assert.equal((await Z('state')).phase, 'break');

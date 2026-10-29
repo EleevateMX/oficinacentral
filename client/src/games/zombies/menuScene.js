@@ -83,19 +83,27 @@ export class MenuScene {
     this.group.add(lamp);
     this.warm = new THREE.PointLight('#ffb35c', 7, 6.5, 1.6);
     this.warm.position.set(lx * S, 0.6, ly * S);
-    this.group.add(this.warm);
+    scene.add(this.warm); // las luces quedan siempre en la escena (ver setActive)
     // Brillo verde de "salida" al fondo
     const gd = Math.max(4, far - 0.8);
     this.exit = new THREE.PointLight('#38ff6a', 9, 14, 1.4);
     this.exit.position.set((this.cx + fx * gd) * S, 2.1, (this.cy + fy * gd) * S);
-    this.group.add(this.exit);
+    scene.add(this.exit);
     // Luz fría muy tenue desde la cámara (para que se lean las siluetas)
     this.rim = new THREE.PointLight('#7d8cff', 2.2, 10, 1.5);
-    this.group.add(this.rim);
+    scene.add(this.rim);
+    this.lights = [this.warm, this.exit, this.rim];
+    this.base = this.lights.map((l) => l.intensity);
+    this.setActive(false);
     this.t = 0;
   }
 
-  setActive(on) { this.group.visible = on; }
+  // Las luces no se esconden: se apagan con intensidad 0. Si cambiara el número de luces,
+  // three.js tendría que volver a compilar todos los materiales y el juego se congelaría.
+  setActive(on) {
+    this.group.visible = on;
+    this.lights.forEach((l, i) => { l.intensity = on ? this.base[i] : 0; });
+  }
   get active() { return this.group.visible; }
 
   // Mueve la cámara y devuelve los zombis de adorno (en metros, como los espera Horde.update)
@@ -125,5 +133,5 @@ export class MenuScene {
     return out;
   }
 
-  dispose() { this.scene.remove(this.group); }
+  dispose() { this.scene.remove(this.group); for (const l of this.lights) this.scene.remove(l); }
 }
