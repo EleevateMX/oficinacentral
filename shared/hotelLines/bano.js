@@ -4,7 +4,7 @@ const F = (id, name, cat, o) => ({ id, name, cat, kind: 'floor', line: 'bano', w
 const W = (id, name, cat, o) => ({ id, name, cat, kind: 'wall', line: 'bano', w: 1, l: 1, h: 0, rots: [2, 4], states: 1, ...o });
 
 export default [
-  F('bano_tub', 'Tina con patas', 'deco', { w: 1, l: 2, h: 0.7, sit: 0.3, interact: 'toggle', states: 2, price: 28, colors: ['#f6f5f2', '#FE3377', '#7fb8a4', '#2b2d38'] }),
+  F('bano_tub', 'Tina con patas', 'deco', { w: 1, l: 2, h: 0.7, sit: 0.3, soak: 0.73, interact: 'toggle', states: 2, price: 28, colors: ['#f6f5f2', '#FE3377', '#7fb8a4', '#2b2d38'] }),
   F('bano_shower', 'Regadera', 'deco', { h: 2.3, interact: 'toggle', states: 2, price: 24 }),
   F('bano_sink', 'Lavabo con espejo', 'deco', { h: 1, interact: 'toggle', states: 2, price: 16 }),
   F('bano_toilet', 'Inodoro', 'sillas', { h: 0.9, sit: 0.42, price: 12, colors: ['#f6f5f2', '#2b2d38', '#FE3377'] }),

@@ -244,13 +244,14 @@ export function SettingsPanel() {
         <div className="ht-swatches">{FLOORS.map((c) => <button key={c} className={`ht-swatch ${(room.floorColor || DEFAULT_FLOOR) === c ? 'on' : ''}`} style={{ background: c }} onClick={() => patch({ floorColor: c })} aria-label={c} />)}
           <input type="color" className="ht-color" value={room.floorColor || DEFAULT_FLOOR} onChange={(e) => patch({ floorColor: e.target.value })} /></div>
       </div>
-      <div className="ht-field"><span>Permisos para decorar</span>
+      {!room.official && <div className="ht-field"><span>Permisos para decorar</span>
         {!rights.length && <small className="ht-muted">Nadie más tiene permisos.</small>}
         {rights.map((id) => <div key={id} className="ht-right-row"><Shield size={14} /> {nameOf(id)}<button className="ht-link" onClick={() => setRight(id, false)}>Quitar</button></div>)}
         {here.filter((u) => !rights.includes(u.id)).length > 0 && <small className="ht-muted">En la sala ahora:</small>}
         {here.filter((u) => !rights.includes(u.id)).map((u) => <div key={u.id} className="ht-right-row"><span className="ht-dot" /> {u.name}<button className="ht-link" onClick={() => setRight(u.id, true)}>Dar permisos</button></div>)}
-      </div>
-      {(isOwner || office.state.me.role === 'admin') && (
+      </div>}
+      {room.official && <small className="ht-muted">Sala oficial: solo los admins la decoran y no se puede borrar.</small>}
+      {(isOwner || office.state.me.role === 'admin') && !room.official && (
         <div className="ht-danger">
           {!confirmDel ? <button className="ht-btn danger" onClick={() => setConfirmDel(true)}><Trash2 size={14} /> Borrar sala</button> : (
             <><span>¿Seguro? Los furnis regresan a sus dueños.</span><button className="ht-btn danger" onClick={del}>Sí, borrar</button><button className="ht-btn ghost" onClick={() => setConfirmDel(false)}>No</button></>
@@ -303,7 +304,7 @@ export function ItemCard({ item }) {
           {def.interact === 'dice' && live.state > 0 && <span className="ht-muted">Salió {live.state} 🎲</span>}</div>
       </div>
       <div className="ht-card-actions">
-        {def.interact && (def.interact === 'dice' || def.interact === 'teleport' || can) && <button className="ht-btn primary" onClick={() => s.emit('hotel:use', { itemId: item.id })}><Play size={14} /> {useLabel}</button>}
+        {def.interact && (def.interact === 'dice' || def.interact === 'teleport' || can || (hotel.state.room?.official && def.interact === 'toggle')) && <button className="ht-btn primary" onClick={() => s.emit('hotel:use', { itemId: item.id })}><Play size={14} /> {useLabel}</button>}
         {can && !live.wall && def.rots.length > 1 && <button className="ht-btn" onClick={() => s.emit('hotel:rotate', { itemId: item.id })}><RotateCw size={14} /> Rotar</button>}
         {can && <button className="ht-btn" onClick={() => hotel.startPlacing(live, { move: true })}><Move size={14} /> Mover</button>}
         {can && <button className="ht-btn" onClick={() => { s.emit('hotel:pickup', { itemId: item.id }); hotel.set({ selected: null }); }}><Hand size={14} /> Recoger</button>}
@@ -345,7 +346,7 @@ export function UserCard({ userId }) {
           <>
             <button className="ht-btn primary" onClick={() => { hotel.set({ chatMode: 'whisper', whisperTo: userId, selected: null }); window.dispatchEvent(new Event('hotel:focus-chat')); }}><MessageCircle size={14} /> Susurrar</button>
             <button className="ht-btn" onClick={() => office.set({ profileCard: userId })}>Perfil</button>
-            {(isOwner || admin) && target !== 'owner' && (rights.includes(userId)
+            {(isOwner || admin) && !room.official && target !== 'owner' && (rights.includes(userId)
               ? <button className="ht-btn" onClick={() => setRight(false)}><ShieldOff size={14} /> Quitar permisos</button>
               : <button className="ht-btn" onClick={() => setRight(true)}><Shield size={14} /> Dar permisos</button>)}
             {can && !target && <button className="ht-btn" onClick={() => { s.emit('hotel:kick', { userId }); hotel.set({ selected: null }); }}><UserMinus size={14} /> Sacar</button>}

@@ -244,19 +244,22 @@ export class Scene {
     return out;
   }
 
-  draw(ctx) {
-    for (const sh of this.shadows) {
+  // keep(part) → si se dibuja esa pieza (capas para quien está sentado/acostado: ver furniArt.js);
+  // las sombras y los dibujos de antes/después van solo con la capa de atrás (back = true)
+  draw(ctx, keep = null, back = true) {
+    if (back) for (const sh of this.shadows) {
       const pts = sh.pts.map(([u, v]) => { const p = this.w(u, v, 0); return proj(p[0] + 0.07, p[1] - 0.02, 0); });
       ctx.fillStyle = `rgba(16,10,28,${sh.a})`;
       pathPts(ctx, pts); ctx.fill();
     }
-    for (const fn of this.pre) fn(ctx, this);
+    if (back) for (const fn of this.pre) fn(ctx, this);
     for (const p of this._order()) {
+      if (keep && !keep(p)) continue;
       if (p.kind === 'poly') this._drawPoly(ctx, p);
       else if (p.kind === 'ball') this._drawBall(ctx, p);
       else p.fn(ctx, this);
     }
-    for (const fn of this.post) fn(ctx, this);
+    if (back) for (const fn of this.post) fn(ctx, this);
   }
 
   _drawBall(ctx, p) {

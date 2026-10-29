@@ -6,15 +6,16 @@ import { TILE_W, TILE_H, Z_PX, WALL_H, toScreen, fromScreen } from '@shared/hote
 import { FURNI_BY_ID, footprint } from '@shared/hotelCatalog.js';
 import { buildRoom, canPlace, canPlaceWall, tileInfo, wallTiles, wallBase, maxFloorHeight, floorAt, ROT_VEC, WALL_ITEM_MAX_H } from '@shared/hotelRoom.js';
 import { drawFurni, furniBounds, drawWallItem, wallBounds } from './furniArt.js';
-import { drawAvatar, drawAvatarFace } from '../lib/render.js';
+import { drawAvatarFace } from '../lib/render.js';
 import { hotel } from './hotelStore.js';
+import { avatarFrame, avatarBudget } from './avatarIso.js';
+import { frontOf } from '@shared/hotelSeat.js';
 
 export const DEFAULT_FLOOR = '#b59a7a';
 export const DEFAULT_WALL = '#e7dfd3';
-const AV_SCALE = 2; // los personajes de la oficina (32×48) al doble para que tengan el tamaño de la casilla
 const WALL_T = 0.16; // grosor de la pared (en casillas)
 const FLOOR_T = 0.28; // grosor del piso en los bordes
-const DOOR_H = 2.45; // alto del hueco de la puerta
+const DOOR_H = 2.6; // alto del hueco de la puerta (cabe un personaje con gorro)
 const ZOOM_MIN = 0.35, ZOOM_MAX = 3;
 const USER_COLORS = ['#FE3377', '#FFCC00', '#3a86ff', '#2fb67c', '#9b5de5', '#ff8a3d', '#00b4d8', '#e05ca5'];
 export const userColor = (id) => USER_COLORS[Math.abs(Number(id) || 0) % USER_COLORS.length];
@@ -83,6 +84,13 @@ function faceOf(U) {
   return c;
 }
 
+// Altura máxima de un cuadro para que su dibujo no rebase el borde de arriba de la pared
+export function wallItemMaxH(grid, def, base) {
+  const b = wallBounds(def);
+  const top = maxFloorHeight(grid) + WALL_H - 0.08;
+  return Math.max(0, Math.floor((top - base + b.y / Z_PX) * 4) / 4);
+}
+
 export class HotelEngine {
   constructor(canvas, cb = {}) {
     this.canvas = canvas;
@@ -113,6 +121,7 @@ export class HotelEngine {
     c.addEventListener('wheel', this.wheel, { passive: false });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     this.resize();
+    hotel.engine = this; // para depurar desde la consola (y las pruebas visuales)
     const loop = (t) => { this.raf = requestAnimationFrame(loop); try { this.frame(t); } catch (e) { console.error(e); } };
     this.raf = requestAnimationFrame(loop);
   }
@@ -138,6 +147,13 @@ export class HotelEngine {
   }
 
   // ---------- Cámara ----------
+  // Centra la vista en un punto de la sala (casillas) con cierto zoom
+  focus(x, y, z = 0, zoom = this.cam.zoom) {
+    const [wx, wy] = P(x, y, z);
+    this.cam.zoom = zoom;
+    this.cam.x = this.W / 2 - wx * zoom;
+    this.cam.y = this.H / 2 - wy * zoom;
+  }
   roomBounds(grid) {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     const top = maxFloorHeight(grid) + WALL_H;
@@ -301,7 +317,7 @@ export class HotelEngine {
       if (z < base - 0.2 || z > top + 0.2) return null;
       const pos = wall === 'l' ? Math.round(along - def.w / 2) : Math.round(along - def.w / 2);
       let h = Math.round((z - base + itemH) * 4) / 4;
-      h = Math.max(0, Math.min(WALL_ITEM_MAX_H, h));
+      h = Math.max(0, Math.min(WALL_ITEM_MAX_H, wallItemMaxH(grid, def, base), h));
       return { wall, pos, h };
     };
     return wx < 0 ? pick('l') || pick('r') : pick('r') || pick('l');
@@ -329,6 +345,10 @@ export class HotelEngine {
     const placing = hotel.state.placing;
     const pdef = placing && FURNI_BY_ID[placing.type];
 
+    avatarBudget(8);
+    // Personajes de este cuadro: postura, cuadro del dibujo y dónde van
+    const avs = [...L.users.values()].map((U) => this.prepUser(U, grid, t));
+
     this.drawDoorBack(ctx, grid, floorC);
     this.drawWalls(ctx, grid, wallC);
     const pick = [];
@@ -343,21 +363,8 @@ export class HotelEngine {
         this.ghost = { ok: v.ok, reason: v.reason, target: w };
       } else this.ghost = { ok: false, reason: 'Pon el cuadro sobre una pared' };
     }
-    for (const it of ghostWall ? [...wallItems.filter((i) => i.id !== placing.itemId), ghostWall] : wallItems) {
-      const def = FURNI_BY_ID[it.type];
-      if (!def) continue;
-      const m = this.wallMatrix(grid, def, it.wall);
-      ctx.save();
-      ctx.transform(1, m.b, 0, 1, m.ox, m.oy);
-      if (it.ghost) ctx.globalAlpha = this.ghost?.ok ? 0.75 : 0.4;
-      const hov = this.hover?.kind === 'item' && this.hover.item.id === it.id;
-      drawWallItem(ctx, def, it, { t, hover: hov, ghost: !!it.ghost });
-      ctx.restore();
-      if (!it.ghost) {
-        const wb = wallBounds(def);
-        pick.push({ kind: 'item', item: it, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); const u = wx - m.ox, v = wy - m.oy - m.b * u; return u >= wb.x && u <= wb.x + wb.w && v >= wb.y && v <= wb.y + wb.h; } });
-      }
-    }
+    const wallList = ghostWall ? [...wallItems.filter((i) => i.id !== placing.itemId), ghostWall] : wallItems;
+    this.drawWallItems(ctx, grid, wallList, t, pick);
     this.drawFloor(ctx, grid, floorC);
 
     // Resaltado de la casilla bajo el puntero / huella del furni a colocar
@@ -375,9 +382,22 @@ export class HotelEngine {
         this.ghost = { ok: v.ok, reason: v.reason, target: { x: tile.x, y: tile.y, rot: placing.rot } };
       }
     } else if (tile && !placing && this.mouse && !(this.hover && this.hover.kind !== 'tile')) {
-      const ti = tileInfo(grid, tile.x, tile.y);
-      const zz = ti && ti.kind !== 'block' ? (ti.kind === 'walk' ? ti.z : tile.z) : tile.z;
-      poly(ctx, [P(tile.x, tile.y, zz), P(tile.x + 1, tile.y, zz), P(tile.x + 1, tile.y + 1, zz), P(tile.x, tile.y + 1, zz)], 'rgba(255,255,255,.16)', 'rgba(255,255,255,.85)', 1.5 / z);
+      this.tileMark(ctx, grid, tile.x, tile.y, 'rgba(255,255,255,.14)', 'rgba(255,255,255,.8)');
+    }
+    // Destino de tu caminata (se apaga al llegar)
+    const meU = L.users.get(hotel.me);
+    if (meU?.walk && !placing) {
+      const [dx, dy] = meU.walk.path[meU.walk.path.length - 1];
+      const al = 0.45 + 0.25 * Math.sin(t / 160);
+      this.tileMark(ctx, grid, dx, dy, `rgba(255,204,0,${(al * 0.3).toFixed(3)})`, `rgba(255,204,0,${al.toFixed(3)})`, 0.1);
+    }
+
+    // En la puerta: el personaje va detrás del marco (la pared de enfrente lo tapa, como en un pasillo)
+    const doorAvs = avs.filter((a) => a.inDoor);
+    if (doorAvs.length) {
+      for (const a of doorAvs) { this.drawUser(ctx, a, t); pick.push(this.userPick(a)); }
+      this.drawWalls(ctx, grid, wallC, { onlyAfterDoor: true });
+      this.drawWallItems(ctx, grid, wallList.filter((i) => i.wall.wall === 'l' && i.wall.pos > grid.door.y), t, null);
     }
 
     // Furnis y personajes
@@ -393,20 +413,33 @@ export class HotelEngine {
     };
     for (const it of L.items.values()) if (!it.wall && !(placing?.move && it.id === placing.itemId)) addItem(it);
     if (ghostItem) addItem(ghostItem);
-    for (const U of L.users.values()) {
-      const [fx, fy] = P(U.rx + 0.5, U.ry + 0.5, U.rz);
-      const lay = !!U.lay && !U.moving;
-      list.push({ key: k++, avatar: true, U, fx, fy, x1: U.rx + 0.3, x2: U.rx + 0.7, y1: U.ry + 0.3, y2: U.ry + 0.7, z1: U.rz, z2: U.rz + (lay ? 0.5 : 2.6), sx1: fx - 36, sx2: fx + 36, sy1: fy - 100, sy2: fy + 8 });
-    }
+    for (const a of avs) if (!a.inDoor) { a.key = k++; list.push(a); }
     const sorted = depthSort(list);
-    for (const d of sorted) {
-      if (d.avatar) { this.drawUser(ctx, d.U, d.fx, d.fy, t); pick.push(this.userPick(d)); continue; }
+    // Quién está sentado/acostado en cada furni (en el orden en que se dibujan)
+    const seated = new Map();
+    for (const d of sorted) if (d.avatar && d.seat) { if (!seated.has(d.seat.id)) seated.set(d.seat.id, []); seated.get(d.seat.id).push(d); }
+    const byId = new Map(sorted.filter((d) => d.item && !d.item.ghost).map((d) => [d.item.id, d]));
+    const layerOf = (id, slot) => {
+      const it = byId.get(id).item;
+      return { slot, vols: seated.get(id).map((a) => [a.vol[0] - it.x, a.vol[1] - it.y, a.vol[2] - it.x, a.vol[3] - it.y]) };
+    };
+    const drawItem = (d, layer = null) => {
       ctx.save();
       ctx.translate(d.ox, d.oy);
       if (d.item.ghost) ctx.globalAlpha = d.item.ok ? 0.8 : 0.45;
       const hov = this.hover?.kind === 'item' && this.hover.item.id === d.item.id;
-      drawFurni(ctx, d.def, d.item, { t, hover: hov, ghost: !!d.item.ghost });
+      drawFurni(ctx, d.def, d.item, { t, hover: hov, ghost: !!d.item.ghost, layer });
       ctx.restore();
+    };
+    for (const d of sorted) {
+      if (d.avatar) {
+        this.drawUser(ctx, d, t);
+        pick.push(this.userPick(d));
+        // Lo del furni que queda enfrente de esta persona (respaldo visto por detrás, brazo del sofá, piecera…)
+        if (d.seat && byId.has(d.seat.id)) drawItem(byId.get(d.seat.id), layerOf(d.seat.id, seated.get(d.seat.id).indexOf(d)));
+        continue;
+      }
+      drawItem(d, !d.item.ghost && seated.has(d.item.id) ? layerOf(d.item.id, -1) : null);
       if (!d.item.ghost) pick.push({ kind: 'item', item: d.item, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= d.sx1 && wx <= d.sx2 && wy >= d.sy1 && wy <= d.sy2 && this.inItemShape(d, wx, wy); } });
     }
     this.pick = pick;
@@ -415,8 +448,92 @@ export class HotelEngine {
 
     // Etiquetas y globitos en coordenadas de pantalla (CSS px)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const d of sorted) if (d.avatar) this.drawTags(ctx, d, t);
+    for (const a of avs) this.drawTags(ctx, a, t);
     this.drawBubbles(ctx, t);
+  }
+
+  // Rombo de una casilla (a la altura donde uno se pararía)
+  tileMark(ctx, grid, x, y, fill, stroke, inset = 0) {
+    const f = floorAt(grid, x, y);
+    if (Number.isNaN(f)) return;
+    const ti = tileInfo(grid, x, y);
+    const zz = ti?.kind === 'walk' ? ti.z : f;
+    const a = inset, b = 1 - inset;
+    poly(ctx, [P(x + a, y + a, zz), P(x + b, y + a, zz), P(x + b, y + b, zz), P(x + a, y + b, zz)], fill, stroke, 1.5 / this.cam.zoom);
+  }
+
+  drawWallItems(ctx, grid, items, t, pick) {
+    for (const it of items) {
+      const def = FURNI_BY_ID[it.type];
+      if (!def) continue;
+      const m = this.wallMatrix(grid, def, it.wall);
+      ctx.save();
+      ctx.transform(1, m.b, 0, 1, m.ox, m.oy);
+      if (it.ghost) ctx.globalAlpha = this.ghost?.ok ? 0.75 : 0.4;
+      const hov = this.hover?.kind === 'item' && this.hover.item.id === it.id;
+      drawWallItem(ctx, def, it, { t, hover: hov, ghost: !!it.ghost });
+      ctx.restore();
+      if (!it.ghost && pick) {
+        const wb = wallBounds(def);
+        pick.push({ kind: 'item', item: it, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); const u = wx - m.ox, v = wy - m.oy - m.b * u; return u >= wb.x && u <= wb.x + wb.w && v >= wb.y && v <= wb.y + wb.h; } });
+      }
+    }
+  }
+
+  // Postura, cuadro del dibujo y lugar de un personaje en este momento
+  prepUser(U, grid, t) {
+    const moving = !!U.walk;
+    const lay = !!U.lay && !moving, sit = !!U.sit && !moving;
+    let pose = 'stand', frame = 0, seatH = 0;
+    const ti = sit || lay ? tileInfo(grid, U.x, U.y) : null;
+    const seat = ti && (ti.kind === 'sit' || ti.kind === 'lay') ? ti.item : null;
+    if (moving) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
+    else if (lay) pose = 'lay';
+    else if (sit) { pose = 'sit'; const f = floorAt(grid, U.x, U.y); seatH = Number.isNaN(f) ? 0.6 : Math.max(0, U.rz - f); }
+    else if (U.act === 'wave') { pose = 'wave'; frame = Math.floor((t - (U.actT || 0)) / 280) % 2; }
+    else if (U.act === 'dance') { pose = 'dance'; frame = Math.floor((t - (U.actT || 0)) / 230) % 4; }
+    // Voltear la cabeza hacia quien habla (máximo una dirección respecto al cuerpo)
+    let head = U.dir;
+    if (U.look && !moving && !lay) {
+      const d = ((U.look.dir - U.dir + 12) % 8) - 4;
+      head = (U.dir + Math.max(-1, Math.min(1, d)) + 8) % 8;
+    }
+    const blink = !moving && (t + U.id * 1337) % 4200 < 140;
+    const talk = !!(U.talkUntil && t < U.talkUntil && Math.floor(t / 130) % 2 === 0);
+    let fr = avatarFrame(U.avatar, { dir: U.dir, head, pose, frame, blink, talk, seatH }, { force: !U._fr });
+    if (fr) U._fr = fr; else fr = U._fr;
+    // En la columna de la puerta el personaje se ve en el hueco (pegado a la pared), no detrás de ella
+    const door = grid.door;
+    let vx = U.rx + 0.5;
+    const vy = U.ry + 0.5;
+    const doorCol = U.rx < door.x + 1 - 1e-6 && Math.round(U.ry) === door.y;
+    if (doorCol) vx = door.x + 1 + (U.rx - door.x) * 0.5;
+    const [fx, fy] = P(vx, vy, U.rz);
+    const a = { avatar: true, U, fr, fx, fy, pose, seat, shadow: pose !== 'sit' && pose !== 'lay', inDoor: doorCol && vx < door.x + 1.3 };
+    let x1 = vx - 0.2, x2 = vx + 0.2, y1 = vy - 0.2, y2 = vy + 0.2, z2 = U.rz + 2.2;
+    a.vol = [x1, y1, x2, y2];
+    if (lay && seat) {
+      // Cuerpo a lo largo de la cama, de la almohada hacia el pie
+      const [dx, dy] = frontOf(seat.rot);
+      const hx = vx - dx * 0.4, hy = vy - dy * 0.4, ex = vx + dx * 1.5, ey = vy + dy * 1.5;
+      x1 = Math.min(hx, ex) - (dx ? 0 : 0.28); x2 = Math.max(hx, ex) + (dx ? 0 : 0.28);
+      y1 = Math.min(hy, ey) - (dy ? 0 : 0.28); y2 = Math.max(hy, ey) + (dy ? 0 : 0.28);
+      z2 = U.rz + 0.5;
+      a.vol = [x1, y1, x2, y2];
+    } else if (sit && seat) {
+      // Las piernas van al frente del asiento
+      const [dx, dy] = frontOf(seat.rot);
+      a.vol = [Math.min(x1, x1 + dx * 0.4), Math.min(y1, y1 + dy * 0.4), Math.max(x2, x2 + dx * 0.4), Math.max(y2, y2 + dy * 0.4)];
+    }
+    Object.assign(a, { x1, x2, y1, y2, z1: U.rz, z2 });
+    // Dentro de la tina: lo que queda bajo el agua no se ve
+    const sdef = seat && FURNI_BY_ID[seat.type];
+    if (sit && sdef?.soak) a.clipY = P(vx, vy, seat.z + sdef.soak)[1];
+    if (fr) {
+      a.sx1 = fx - fr.ax; a.sx2 = a.sx1 + fr.w; a.sy1 = fy - fr.ay; a.sy2 = a.sy1 + fr.h;
+      U._tag = [fx + fr.head[0], fy - fr.top];
+    } else { a.sx1 = fx - 30; a.sx2 = fx + 30; a.sy1 = fy - 90; a.sy2 = fy + 6; U._tag = [fx, fy - 76]; }
+    return a;
   }
 
   // Forma del furni para clics: la silueta (hexágono) de su caja, tan alta como su dibujo
@@ -435,8 +552,10 @@ export class HotelEngine {
 
   wallMatrix(grid, def, w) {
     const base = wallBase(grid, w.wall, w.pos);
-    if (w.wall === 'l') { const [ox, oy] = P(1, w.pos + def.w, base + w.h); return { ox, oy, b: -0.5 }; }
-    const [ox, oy] = P(w.pos, 1, base + w.h);
+    // Nunca se sale por arriba de la pared (ni se hunde en el piso)
+    const h = Math.max(0, Math.min(w.h, wallItemMaxH(grid, def, base)));
+    if (w.wall === 'l') { const [ox, oy] = P(1, w.pos + def.w, base + h); return { ox, oy, b: -0.5 }; }
+    const [ox, oy] = P(w.pos, 1, base + h);
     return { ox, oy, b: 0.5 };
   }
 
@@ -472,7 +591,7 @@ export class HotelEngine {
     }
     // Pared izquierda (a lo largo de +y en x = 1)
     for (const y of ly) {
-      if (onlyAfterDoor && y <= door.y) continue;
+      if (onlyAfterDoor && y < door.y) continue;
       const b = floorAt(grid, 1, y);
       const isDoor = door.x < 1 && y === door.y;
       const from = isDoor ? b + DOOR_H : b;
@@ -514,35 +633,34 @@ export class HotelEngine {
     }
   }
 
-  drawUser(ctx, U, fx, fy, t) {
-    const step = U.moving ? 1 + (Math.floor(t / 125) % 4) : 0;
-    const blink = !U.moving && (t + U.id * 1337) % 4200 < 140;
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    if (U.lay && !U.moving) {
-      // Acostado: el personaje girado a lo largo de la cama, con la cabeza hacia la cabecera
-      const it = hotel.live.grid && tileInfo(hotel.live.grid, U.x, U.y)?.item;
-      const rv = ROT_VEC[it?.rot ?? 0] || [0, 1];
-      const [hx, hy] = [-rv[0], -rv[1]];
-      const ang = Math.atan2((hx + hy) * (TILE_H / 2), (hx - hy) * (TILE_W / 2));
-      ctx.translate(fx, fy - 6);
-      ctx.rotate(ang + Math.PI / 2);
-      ctx.scale(1.75, 1.75);
-      drawAvatar(ctx, 0, 22, U.avatar, 'down', 0, false, true);
-    } else {
-      ctx.translate(fx, fy + (U.sit?.floor ? 4 : 0));
-      ctx.scale(AV_SCALE, AV_SCALE);
-      drawAvatar(ctx, 0, 0, U.avatar, U.dir, step, !!U.sit, blink);
+  drawUser(ctx, a, t) {
+    const { fr, fx, fy } = a;
+    // Sombra suave en el piso (o encima del furni donde está parado)
+    if (a.shadow) {
+      ctx.fillStyle = 'rgba(16,10,28,.12)';
+      ctx.beginPath(); ctx.ellipse(fx, fy, 17, 8.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(16,10,28,.2)';
+      ctx.beginPath(); ctx.ellipse(fx, fy, 12.5, 6, 0, 0, Math.PI * 2); ctx.fill();
     }
+    if (!fr) return;
+    // Pixel-art nítido: se pinta en píxeles del dispositivo, alineado a la rejilla y sin suavizar
+    const s = this.cam.zoom * this.dpr;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (a.clipY != null) { ctx.beginPath(); ctx.rect(0, 0, this.canvas.width, Math.round((a.clipY * this.cam.zoom + this.cam.y) * this.dpr)); ctx.clip(); }
+    ctx.imageSmoothingEnabled = s < 0.99;
+    const X = Math.round((fx * this.cam.zoom + this.cam.x) * this.dpr - fr.ax * s);
+    const Y = Math.round((fy * this.cam.zoom + this.cam.y) * this.dpr - fr.ay * s);
+    ctx.drawImage(fr.cv, X, Y, Math.round(fr.w * s), Math.round(fr.h * s));
     ctx.restore();
   }
-  userPick(d) {
-    return { kind: 'user', id: d.U.id, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= d.fx - 18 && wx <= d.fx + 18 && wy >= d.fy - (d.U.lay ? 40 : 84) && wy <= d.fy + 4; } };
+  userPick(a) {
+    return { kind: 'user', id: a.U.id, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= a.sx1 + 4 && wx <= a.sx2 - 4 && wy >= a.sy1 + 3 && wy <= a.sy2 - 2; } };
   }
 
   drawTags(ctx, d, t) {
     const U = d.U;
-    const s = this.toScr(d.fx, d.fy - (U.lay ? 40 : U.sit ? 78 : 92));
+    const s = this.toScr(U._tag[0], U._tag[1] - 3);
     const me = U.id === hotel.me;
     const hov = this.hover?.kind === 'user' && this.hover.id === U.id;
     const sel = hotel.state.selected?.userId === U.id;
@@ -582,7 +700,8 @@ export class HotelEngine {
       for (const m of L.pendingBubbles.splice(0)) {
         const U = L.users.get(m.from);
         let anchor = { x: this.W / 2, y: this.H / 2 };
-        if (U) { const [fx, fy] = P(U.rx + 0.5, U.ry + 0.5, U.rz); anchor = this.toScr(fx, fy - (U.lay ? 44 : U.sit ? 80 : 96)); }
+        if (U?._tag) anchor = this.toScr(U._tag[0], U._tag[1] - 6);
+        if (U) U.talkUntil = performance.now() + Math.min(2600, 500 + m.text.length * 45);
         const shout = m.mode === 'shout', whisper = m.mode === 'whisper';
         const size = shout ? 15 : 13;
         const font = `${whisper ? 'italic ' : ''}${shout ? 800 : 500} ${size}px ${this.font}`;

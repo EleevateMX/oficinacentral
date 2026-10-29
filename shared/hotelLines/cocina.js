@@ -6,7 +6,7 @@ const W = (id, name, cat, o) => ({ id, name, cat, kind: 'wall', line: 'cocina', 
 const CABINET = ['#f2efe8', '#7fb8a4', '#2b2d38', '#e8a33d'];
 
 export default [
-  F('cocina_counter', 'Gabinete con cubierta', 'mesas', { h: 1, stack: true, price: 10, colors: CABINET }),
+  F('cocina_counter', 'Gabinete con cubierta', 'mesas', { h: 1.1, stack: true, price: 10, colors: CABINET }),
   F('cocina_stove', 'Estufa', 'deco', { h: 1, interact: 'toggle', states: 2, price: 22, colors: ['#f2efe8', '#2b2d38', '#c0392b'] }),
   F('cocina_sink', 'Fregadero', 'deco', { h: 1, interact: 'toggle', states: 2, price: 16, colors: CABINET }),
   F('cocina_pantry', 'Alacena', 'deco', { h: 2.3, interact: 'toggle', states: 2, price: 20, colors: CABINET }),

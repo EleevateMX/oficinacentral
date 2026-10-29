@@ -5,7 +5,7 @@ const W = (id, name, cat, o) => ({ id, name, cat, kind: 'wall', w: 1, l: 1, h: 0
 
 export default [
   F('jardin_bench', 'Banca de parque', 'sillas', { w: 2, h: 1.05, sit: 0.55, price: 12, colors: ['#b5794a', '#2fb67c', '#f4f4f6'] }),
-  F('jardin_lounger', 'Camastro', 'camas', { w: 1, l: 2, h: 0.5, lay: true, price: 14, colors: ['#f4f4f6', '#FE3377', '#3a86ff', '#FFCC00'] }),
+  F('jardin_lounger', 'Camastro', 'camas', { w: 1, l: 2, h: 0.4, lay: true, price: 14, colors: ['#f4f4f6', '#FE3377', '#3a86ff', '#FFCC00'] }),
   F('jardin_fountain', 'Fuente de piedra', 'deco', { w: 2, l: 2, h: 1.5, rots: [0], interact: 'toggle', states: 2, price: 45 }),
   F('jardin_pool', 'Alberca', 'diversion', { w: 3, l: 3, h: 0.02, walk: true, rots: [0], price: 60 }),
   F('jardin_flowerbed', 'Jardinera con flores', 'plantas', { w: 2, h: 0.75, rots: [0, 2], price: 10, colors: ['#FE3377', '#FFCC00', '#8e5cf7', '#f4f4f6'] }),

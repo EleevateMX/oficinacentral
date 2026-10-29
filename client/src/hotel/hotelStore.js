@@ -4,9 +4,10 @@
 import { useSyncExternalStore } from 'react';
 import { office } from '../lib/store.js';
 import { api } from '../lib/api.js';
-import { WALK_SPEED, ROOM_MODELS } from '@shared/hotel.js';
+import { ROOM_MODELS } from '@shared/hotel.js';
 import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
-import { buildRoom, dirOf } from '@shared/hotelRoom.js';
+import { buildRoom } from '@shared/hotelRoom.js';
+import { walkAt, toDir8, dirToward } from '@shared/hotelWalk.js';
 import { playSound } from '../lib/sounds.js';
 
 const FAIL = {
@@ -51,7 +52,7 @@ class Hotel {
 
   get me() { return office.state.me?.id; }
   get socket() { return office.socket; }
-  canEdit() { const s = this.state; return !!(s.isOwner || s.admin || s.rights.includes(this.me)); }
+  canEdit() { const s = this.state; if (s.room?.official) return !!s.admin; return !!(s.isOwner || s.admin || s.rights.includes(this.me)); }
 
   // ---------- Socket ----------
   attach() {
@@ -100,7 +101,7 @@ class Hotel {
   bump(k) { this.set((st) => ({ [k]: st[k] + 1 })); }
 
   // ---------- Navegador ----------
-  async refreshRooms(tab = this.state.navTab || 'popular', q = '') {
+  async refreshRooms(tab = this.state.navTab || 'official', q = '') {
     try {
       const r = await api.get(`/hotel/rooms?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
       this.set({ rooms: r.rooms, navTab: tab, myRooms: r.mine, maxRooms: r.maxRooms });
@@ -111,6 +112,15 @@ class Hotel {
     this.password = password ?? null;
     this.set({ entering: { roomId }, waiting: null });
     this.socket?.emit('hotel:enter', { roomId, password });
+  }
+  // Al subir al Hotel: directo a la sala oficial principal (Oficina Central)
+  async enterOfficial() {
+    try {
+      const r = await api.get('/hotel/rooms?tab=official');
+      this.set({ rooms: r.rooms, navTab: 'official', myRooms: r.mine, maxRooms: r.maxRooms });
+      const hq = r.rooms.find((x) => x.officialKey === 'hq') || r.rooms[0];
+      if (hq && !this.state.roomId && !this.state.entering) this.enter(hq.id);
+    } catch { /* se queda en el navegador */ }
   }
   leave() {
     this.socket?.emit('hotel:leave');
@@ -150,54 +160,68 @@ class Hotel {
   }
   addUser(u) {
     const U = {
-      id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: u.dir || 'down', sit: u.sit, lay: u.lay,
-      rx: u.x, ry: u.y, rz: u.z, queue: [], seg: null, moving: false,
+      id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: toDir8(u.dir), sit: u.sit, lay: u.lay, act: u.act || null,
+      rx: u.x, ry: u.y, rz: u.z, walk: null, moving: false, steps: 0, look: null, actT: performance.now(),
     };
     this.live.users.set(u.id, U);
-    if (u.path?.length) this.onPath({ id: u.id, path: u.path });
+    if (u.path?.length) this.onPath({ id: u.id, from: u.from || [u.x, u.y, u.z], path: u.path, t0: u.t0, n0: u.n0, now: u.now });
   }
+  // Caminata del servidor: misma cuenta de tiempo que él (shared/hotelWalk.js), pasada a nuestro reloj.
+  // m.now − m.t0 = cuánto llevaba del primer paso cuando el servidor lo mandó.
   onPath(m) {
     const U = this.live.users.get(m.id);
     if (!U) return;
-    U.queue = m.path.map((p) => [...p]);
-    U.sit = null; U.lay = null;
-    if (!U.seg) this.nextSeg(U, performance.now());
+    const ago = m.now != null && m.t0 != null ? Math.max(0, m.now - m.t0) : 0;
+    const from = m.from ? [...m.from] : [U.rx, U.ry, U.rz];
+    U.walk = { from, path: m.path.map((p) => [...p]), t0: performance.now() - ago, n0: m.n0 || 0 };
+    U.sit = null; U.lay = null; U.act = null; U.look = null; U.pending = null;
+    this.stepUser(U, performance.now());
   }
-  nextSeg(U, t) {
-    const to = U.queue.shift();
-    if (!to) { U.seg = null; U.moving = false; return; }
-    const from = [U.rx, U.ry, U.rz];
-    const d = dirOf(Math.sign(Math.round((to[0] - from[0]) * 100)), Math.sign(Math.round((to[1] - from[1]) * 100)));
-    if (d) U.dir = d;
-    U.seg = { from, to, t0: t, dur: 1000 / WALK_SPEED };
-    U.moving = true;
+  stepUser(U, t) {
+    const p = walkAt(U.walk, t);
+    U.rx = p.x; U.ry = p.y; U.rz = p.z;
+    if (p.dir != null) U.dir = p.dir;
+    U.steps = p.steps;
+    if (p.done) {
+      // Al llegar queda justo en el centro de la casilla
+      U.walk = null; U.moving = false;
+      [U.x, U.y, U.z] = p.to;
+      if (U.pending) { this.applyUser(U, U.pending); U.pending = null; }
+    } else { U.moving = true; U.x = p.from[0]; U.y = p.from[1]; }
   }
   // Avanza las animaciones (lo llama el motor cada cuadro)
   tick(t) {
     for (const U of this.live.users.values()) {
-      let guard = 0;
-      while (U.seg && guard++ < 4) {
-        const k = (t - U.seg.t0) / U.seg.dur;
-        if (k >= 1) {
-          [U.rx, U.ry, U.rz] = U.seg.to;
-          const t1 = U.seg.t0 + U.seg.dur;
-          if (U.queue.length) this.nextSeg(U, Math.max(t1, t - 50)); else { U.seg = null; U.moving = false; }
-        } else {
-          const [a, b, c] = U.seg.from, [x, y, z] = U.seg.to;
-          U.rx = a + (x - a) * k; U.ry = b + (y - b) * k;
-          // Al subir/bajar un escalón, la altura cambia a la mitad del paso
-          U.rz = c + (z - c) * Math.min(1, Math.max(0, (k - 0.25) * 2));
-          break;
-        }
-      }
+      if (U.walk) this.stepUser(U, t);
+      if (U.look && t > U.look.until) U.look = null;
     }
+  }
+  applyUser(U, m) {
+    const act = m.act || null;
+    if (act !== U.act) U.actT = performance.now();
+    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), sit: m.sit, lay: m.lay, act });
+    U.rx = m.x; U.ry = m.y; U.rz = m.z;
   }
   onUser(m) {
     const U = this.live.users.get(m.id);
     if (!U) return;
-    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: m.dir, sit: m.sit, lay: m.lay });
-    if (m.tp || !U.seg) { U.queue = []; U.seg = null; U.moving = false; U.rx = m.x; U.ry = m.y; U.rz = m.z; }
+    if (m.tp || !U.walk) { U.walk = null; U.moving = false; U.pending = null; this.applyUser(U, m); }
+    // Aún va dando su último paso aquí: se aplica al llegar (sentarse, acostarse…)
+    else U.pending = m;
     if (m.tp && m.id === this.me) playSound('power', 0.5);
+  }
+  // Voltear la cabeza hacia quien habla (solo la cabeza, como en el original)
+  lookAt(id) {
+    const S = this.live.users.get(id);
+    if (!S) return;
+    const t = performance.now();
+    for (const U of this.live.users.values()) {
+      if (U === S || U.walk || U.lay) continue;
+      if (Math.hypot(U.rx - S.rx, U.ry - S.ry) > 9) continue;
+      const d = dirToward(U.rx, U.ry, S.rx, S.ry);
+      if (d == null) continue;
+      U.look = { dir: d, until: t + 4500 };
+    }
   }
 
   // ---------- Furnis ----------
@@ -259,6 +283,7 @@ class Hotel {
     L.typing.delete(m.from);
     L.pendingBubbles = L.pendingBubbles || [];
     L.pendingBubbles.push(m);
+    if (m.mode !== 'whisper') this.lookAt(m.from);
     if (m.mode === 'whisper' && m.from !== this.me) playSound('message', 0.4);
   }
   say(text) {
@@ -266,6 +291,8 @@ class Hotel {
     if (!t) return;
     const st = this.state;
     if (t === ':sit' || t === ':sentar') return this.socket.emit('hotel:sit');
+    if (t === ':wave' || t === ':saludar' || t === 'o/') { this.socket.emit('hotel:act', { act: 'wave' }); if (t !== 'o/') return; }
+    if (t === ':dance' || t === ':bailar') return this.socket.emit('hotel:act', { act: 'dance' });
     if (t.startsWith(':shout ') || t.startsWith(':gritar ')) return this.socket.emit('hotel:chat', { text: t.replace(/^:\S+\s/, ''), mode: 'shout' });
     if (st.chatMode === 'whisper' && st.whisperTo && this.live.users.has(st.whisperTo)) return this.socket.emit('hotel:chat', { text: t, mode: 'whisper', to: st.whisperTo });
     this.socket.emit('hotel:chat', { text: t, mode: st.chatMode === 'shout' ? 'shout' : 'say' });
