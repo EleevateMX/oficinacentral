@@ -11,6 +11,8 @@ import './hotel.css';
 import ConsolePanel, { ConsoleButton } from './social/Console.jsx'; // B: social
 import PersonCard from './social/PersonCard.jsx'; // B: social
 import { RoomSocialBar, EventBanner } from './social/RoomSocial.jsx'; // B: social
+import Catalog from './economy/Catalog.jsx'; // A: tienda con créditos HUB
+import EconomyLayer, { WalletBadge } from './economy/EconomyLayer.jsx'; // A: monedero, intercambios y regalos
 
 const isTyping = () => { const a = document.activeElement; return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable); };
 
@@ -109,6 +111,7 @@ function RoomView({ onExit }) {
           <span>{room.official ? 'Sala oficial GTAHUB' : `de ${owner?.displayName || room.ownerName}`}</span>
         </div>
         <RoomSocialBar />
+        <WalletBadge />
       </div>
       <div className="ht-sidebar">
         <button className={`ht-tool ${panel === 'inventory' ? 'on' : ''}`} onClick={() => togglePanel('inventory')} title="Inventario"><Package size={20} /><span>Inventario</span></button>
@@ -142,7 +145,7 @@ function RoomView({ onExit }) {
       )}
       <div className="ht-panels">
         {panel === 'inventory' && <InventoryPanel />}
-        {panel === 'catalog' && <CatalogPanel />}
+        {panel === 'catalog' && <Catalog />}
         {panel === 'settings' && <SettingsPanel key={room.id} />}
         {panel === 'log' && <ChatLogPanel />}
       </div>
@@ -150,6 +153,7 @@ function RoomView({ onExit }) {
         {sel && <ItemCard key={`i${sel.id}`} item={sel} />}
         {selected?.userId && <PersonCard key={`u${selected.userId}`} userId={selected.userId} />}
       </div>
+      <EconomyLayer />
       <ChatBar />
     </div>
   );

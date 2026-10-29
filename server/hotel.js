@@ -12,6 +12,7 @@ import { buildRoom, tileInfo, findPath, canPlace, canPlaceWall, roomAddItem, roo
 import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8 } from '../shared/hotelWalk.js';
 import { layHeadTile } from '../shared/hotelSeat.js';
 import { initHotelSocial, registerHotelSocialRoutes, roomSocialOut, userSocialOut, saveRoomSocial } from './hotelSocial.js'; // B: social
+import { initHotelEconomy, registerEconomyRoutes } from './hotelEconomy.js'; // créditos, tienda, intercambios, regalos (agente A)
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS hotel_rooms (
@@ -349,6 +350,7 @@ export function initHotel(io, socket, userId) {
   const walkOk = limiter(12, 1000), chatOk = limiter(6, 5000), furniOk = limiter(12, 1000), bellOk = limiter(3, 15000);
   const mine = () => { const w = where.get(userId); return w && w.socket === socket ? live.get(w.roomId) : null; };
   const err = (text) => socket.emit('hotel:notice', { text, error: true });
+  initHotelEconomy(io, socket, userId);
 
   socket.on('hotel:enter', (m) => {
     const roomId = Number(m?.roomId);
@@ -591,6 +593,7 @@ export function initHotel(io, socket, userId) {
       if (!startWalk(R, U, { x: it.x, y: it.y })) err('No se puede llegar al teletransportador');
       return;
     }
+    if (hotelCtx.useHandlers.has(def.interact)) return hotelCtx.useHandlers.get(def.interact)({ R, it, def, U, socket, userId });
     if (!def.interact || def.states < 2) return;
     // En salas oficiales cualquiera prende/apaga (lámparas, maquinitas, tele…); rejas y lo demás, solo admins
     if (!canEdit(R, userId) && !(R.row.official && def.interact === 'toggle')) return err('Solo quien tiene permisos puede usar esto');
@@ -635,7 +638,6 @@ function broadcastRoom(R) {
 // ---------- REST ----------
 export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   const roomLimiter = new Map();
-  const buyTimes = new Map();
   setImmediate(ensureOfficialRooms); // al arrancar (después de crear el primer admin)
   registerHotelSocialRoutes(api, { fail, wrap }); // B: /hotel/social…
   const MINE = 'SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ? AND official = 0';
@@ -778,22 +780,8 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     res.json({ items: inventory(req.user.id), max: MAX_INVENTORY });
   }));
 
-  // Tienda (por ahora todo es gratis)
-  api.post('/hotel/buy', wrap((req, res) => {
-    const uid = req.user.id;
-    const def = FURNI_BY_ID[req.body?.type];
-    if (!def) return fail(res, 400, 'Ese furni no existe');
-    const t = Date.now();
-    const times = (buyTimes.get(uid) || []).filter((x) => t - x < 60e3);
-    if (times.length >= 30) return fail(res, 429, 'Vas muy rápido: espera un minuto');
-    if (def.exclusive && req.user.role !== 'admin') return fail(res, 403, 'Este furni es exclusivo HUB: solo los admins pueden obtenerlo');
-    const need = def.interact === 'teleport' ? 2 : 1;
-    if (invCount(uid) + need > MAX_INVENTORY) return fail(res, 400, `Tu inventario está lleno (máximo ${MAX_INVENTORY})`);
-    times.push(t);
-    buyTimes.set(uid, times);
-    const color = typeof req.body?.color === 'string' ? req.body.color : null;
-    res.json({ items: buy(uid, def.id, color) });
-  }));
+  // Tienda con créditos HUB, regalos, canjes e intercambios: server/hotelEconomy.js
+  registerEconomyRoutes(api, { fail, wrap, notify });
 
   // Regalar un furni (solo admins; incluye exclusivos): llega al inventario de la persona con aviso
   const giftTimes = new Map();
@@ -820,8 +808,13 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   }));
 }
 
-// Contexto para los módulos de la parte 2 (cada quien solo AGREGA llaves)
-export const hotelCtx = { live, where, roomRow, roomOut, canEdit, isAdmin, isBanned, capOf, broadcastRoom, getUser, cleanText, key };
+// Contexto para los módulos del Hotel (economía, social, mecánicas…). Solo se AGREGAN llaves.
+export const hotelCtx = {
+  roomRow, roomOut, isBanned, capOf, broadcastRoom,
+  live, where, key, itemOut, addItem, buy, invCount, inventory, persist, refreshUsers, footTiles, canEdit, getUser, isAdmin, cleanText, leaveRoom,
+  get IO() { return IO; },
+  useHandlers: new Map(), // interact → ({ R, it, def, U, socket, userId }) => void
+};
 
 // Para pruebas
 export const _hotel = { live, where, seedOfficialRooms };

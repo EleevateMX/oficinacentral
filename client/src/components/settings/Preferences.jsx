@@ -18,6 +18,8 @@ import { THEMES } from '../../lib/themes.js';
 import { OfficeMark, ByNuvora } from '../brand.jsx';
 import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
 import { AnniversarySettings } from '../SeasonExtras.jsx';
+import EconomyAdmin from '../../hotel/economy/EconomyAdmin.jsx'; // Hotel: créditos HUB y códigos
+import { Coins } from 'lucide-react';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -39,6 +41,7 @@ const SECTIONS = [
   { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
   { id: 'feedback', label: 'Comentarios', icon: MessageSquareHeart, admin: true },
   { id: 'stats', label: 'Estadísticas', icon: BarChart3, admin: true },
+  { id: 'hotel-economy', label: 'Créditos HUB', icon: Coins, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -88,6 +91,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'security' && <SecurityAdmin />}
             {cur === 'feedback' && <FeedbackAdmin api={api} />}
             {cur === 'stats' && <StatsAdmin />}
+            {cur === 'hotel-economy' && <EconomyAdmin />}
           </div>
         </section>
       </div>

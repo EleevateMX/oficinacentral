@@ -22,3 +22,8 @@ export const LINE_FLOOR = Object.assign({}, ...ALL.map((m) => m.floor || {}));
 export const LINE_WALL = Object.assign({}, ...ALL.map((m) => m.wall || {}));
 export const LINE_PERIOD = Object.assign({}, ...ALL.map((m) => m.period || {}));
 export const LINE_DEFAULT_COLOR = Object.assign({}, ...ALL.map((m) => m.defaultColor || {}));
+
+// Línea "Economía HUB" (agente A): registro aparte para no chocar con otras líneas
+import economia from './economia.js';
+Object.assign(LINE_FLOOR, economia.floor); Object.assign(LINE_WALL, economia.wall || {});
+Object.assign(LINE_PERIOD, economia.period || {}); Object.assign(LINE_DEFAULT_COLOR, economia.defaultColor || {});

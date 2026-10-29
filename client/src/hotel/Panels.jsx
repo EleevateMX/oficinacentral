@@ -10,6 +10,8 @@ import { hotel, useHotel } from './hotelStore.js';
 import { drawFurniIcon, DEFAULT_FLOOR, DEFAULT_WALL } from './engine.js';
 import { ACCESS_LABEL, ACCESS_DESC, AccessIcon } from './Navigator.jsx';
 import { RoomSocialSettings } from './social/RoomSocial.jsx'; // B: categoría y etiquetas
+import { UserEconomyActions, ItemEconomyActions } from './economy/CardActions.jsx'; // A: intercambiar, regalar, canjear
+import { ECO_INTERACT } from '@shared/hotelEconomy.js';
 
 const { HOTEL_CATS, HOTEL_FURNI, FURNI_BY_ID } = HC;
 const fmt = (n) => Number(n || 0).toLocaleString('es-MX');
@@ -306,7 +308,8 @@ export function ItemCard({ item }) {
           {def.interact === 'dice' && live.state > 0 && <span className="ht-muted">Salió {live.state} 🎲</span>}</div>
       </div>
       <div className="ht-card-actions">
-        {def.interact && (def.interact === 'dice' || def.interact === 'teleport' || can || (hotel.state.room?.official && def.interact === 'toggle')) && <button className="ht-btn primary" onClick={() => s.emit('hotel:use', { itemId: item.id })}><Play size={14} /> {useLabel}</button>}
+        <ItemEconomyActions item={live} def={def} />
+        {def.interact && !ECO_INTERACT.has(def.interact) && (def.interact === 'dice' || def.interact === 'teleport' || can || (hotel.state.room?.official && def.interact === 'toggle')) && <button className="ht-btn primary" onClick={() => s.emit('hotel:use', { itemId: item.id })}><Play size={14} /> {useLabel}</button>}
         {can && !live.wall && def.rots.length > 1 && <button className="ht-btn" onClick={() => s.emit('hotel:rotate', { itemId: item.id })}><RotateCw size={14} /> Rotar</button>}
         {can && <button className="ht-btn" onClick={() => hotel.startPlacing(live, { move: true })}><Move size={14} /> Mover</button>}
         {can && <button className="ht-btn" onClick={() => { s.emit('hotel:pickup', { itemId: item.id }); hotel.set({ selected: null }); }}><Hand size={14} /> Recoger</button>}
@@ -348,6 +351,7 @@ export function UserCard({ userId }) {
           <>
             <button className="ht-btn primary" onClick={() => { hotel.set({ chatMode: 'whisper', whisperTo: userId, selected: null }); window.dispatchEvent(new Event('hotel:focus-chat')); }}><MessageCircle size={14} /> Susurrar</button>
             <button className="ht-btn" onClick={() => office.set({ profileCard: userId })}>Perfil</button>
+            <UserEconomyActions userId={userId} />
             {(isOwner || admin) && !room.official && target !== 'owner' && (rights.includes(userId)
               ? <button className="ht-btn" onClick={() => setRight(false)}><ShieldOff size={14} /> Quitar permisos</button>
               : <button className="ht-btn" onClick={() => setRight(true)}><Shield size={14} /> Dar permisos</button>)}

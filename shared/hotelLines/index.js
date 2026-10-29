@@ -40,3 +40,8 @@ export const HOTEL_LINES = [
 ];
 
 export const LINE_FURNI = [urbana, puravida, plastik, hielo, cabana, oficina, cristal, castillo, vintage, zen, retro70, cocina, bano, jardin, deportes, fiesta, hub].flat();
+
+// Línea "Economía HUB" (agente A: monedas canjeables y caja de regalo). Registro aparte para no chocar con otras líneas.
+import economia from './economia.js';
+HOTEL_LINES.push({ id: 'economia', name: 'Economía HUB', desc: 'Monedas y lingotes que se canjean por créditos' });
+LINE_FURNI.push(...economia);
