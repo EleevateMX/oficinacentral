@@ -164,6 +164,7 @@ class Hotel {
     const U = {
       id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: toDir8(u.dir), sit: u.sit, lay: u.lay, act: u.act || null, hand: u.hand ?? null, bot: u.bot || null,
       rx: u.x, ry: u.y, rz: u.z, walk: null, moving: false, steps: 0, look: null, actT: performance.now(),
+      hand: u.hand ?? null, effect: u.effect ?? null, sign: u.sign ?? null,
     };
     this.live.users.set(u.id, U);
     if (u.path?.length) this.onPath({ id: u.id, from: u.from || [u.x, u.y, u.z], path: u.path, t0: u.t0, n0: u.n0, now: u.now });
@@ -201,12 +202,13 @@ class Hotel {
   applyUser(U, m) {
     const act = m.act || null;
     if (act !== U.act) U.actT = performance.now();
-    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), sit: m.sit, lay: m.lay, act, hand: m.hand ?? null });
+    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), sit: m.sit, lay: m.lay, act, hand: m.hand ?? null, effect: m.effect ?? null, sign: m.sign ?? null });
     U.rx = m.x; U.ry = m.y; U.rz = m.z;
   }
   onUser(m) {
     const U = this.live.users.get(m.id);
     if (!U) return;
+    Object.assign(U, { hand: m.hand ?? null, effect: m.effect ?? null, sign: m.sign ?? null }); // se ve al momento, aunque vaya caminando
     if (m.tp || !U.walk) { U.walk = null; U.moving = false; U.pending = null; this.applyUser(U, m); }
     // Aún va dando su último paso aquí: se aplica al llegar (sentarse, acostarse…)
     else U.pending = m;

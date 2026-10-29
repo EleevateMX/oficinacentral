@@ -10,6 +10,7 @@ import { drawFurni, furniBounds, drawWallItem, wallBounds } from './furniArt.js'
 import { drawAvatarFace } from '../lib/render.js';
 import { hotel } from './hotelStore.js';
 import { avatarFrame, avatarBudget } from './avatarIso.js';
+import { drawAvatarBehind, drawAvatarFront, drawTyping, avatarAlpha, avatarOpts } from './avatarFx.js';
 import { frontOf } from '@shared/hotelSeat.js';
 import { itemPos, mechTint, drawRoomTint } from './mechanics.js';
 
@@ -505,7 +506,8 @@ export class HotelEngine {
     }
     const blink = !moving && (t + U.id * 1337) % 4200 < 140;
     const talk = !!(U.talkUntil && t < U.talkUntil && Math.floor(t / 130) % 2 === 0);
-    let fr = avatarFrame(U.avatar, { dir: U.dir, head, pose, frame, blink, talk, seatH }, { force: !U._fr });
+    if (pose === 'stand' && U.sign != null) pose = 'sign';
+    let fr = avatarFrame(U.avatar, { dir: U.dir, head, pose, frame, blink, talk, seatH, ...avatarOpts(U, t, moving) }, { force: !U._fr });
     if (fr) U._fr = fr; else fr = U._fr;
     // En la columna de la puerta el personaje se ve en el hueco (pegado a la pared), no detrás de ella
     const door = grid.door;
@@ -642,22 +644,26 @@ export class HotelEngine {
     const { fr, fx, fy } = a;
     // Sombra suave en el piso (o encima del furni donde está parado)
     if (a.shadow) {
-      ctx.fillStyle = 'rgba(16,10,28,.12)';
-      ctx.beginPath(); ctx.ellipse(fx, fy, 17, 8.5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(16,10,28,.2)';
-      ctx.beginPath(); ctx.ellipse(fx, fy, 12.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(16,10,28,.1)';
+      ctx.beginPath(); ctx.ellipse(fx, fy, 15, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(16,10,28,.18)';
+      ctx.beginPath(); ctx.ellipse(fx, fy, 10.5, 5.2, 0, 0, Math.PI * 2); ctx.fill();
     }
+    drawAvatarBehind(ctx, a, t);
     if (!fr) return;
-    // Pixel-art nítido: se pinta en píxeles del dispositivo, alineado a la rejilla y sin suavizar
-    const s = this.cam.zoom * this.dpr;
+    // Pixel-art nítido: cada píxel del dibujo = un número entero de píxeles del dispositivo, sin suavizar
+    const raw = this.cam.zoom * this.dpr * fr.k;
+    const ks = raw >= 1.5 ? Math.round(raw) : raw;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (a.clipY != null) { ctx.beginPath(); ctx.rect(0, 0, this.canvas.width, Math.round((a.clipY * this.cam.zoom + this.cam.y) * this.dpr)); ctx.clip(); }
-    ctx.imageSmoothingEnabled = s < 0.99;
-    const X = Math.round((fx * this.cam.zoom + this.cam.x) * this.dpr - fr.ax * s);
-    const Y = Math.round((fy * this.cam.zoom + this.cam.y) * this.dpr - fr.ay * s);
-    ctx.drawImage(fr.cv, X, Y, Math.round(fr.w * s), Math.round(fr.h * s));
+    ctx.imageSmoothingEnabled = raw < 1.5;
+    ctx.globalAlpha = avatarAlpha(a.U, t);
+    const X = Math.round((fx * this.cam.zoom + this.cam.x) * this.dpr - fr.sax * ks);
+    const Y = Math.round((fy * this.cam.zoom + this.cam.y) * this.dpr - fr.say * ks);
+    ctx.drawImage(fr.cv, X, Y, Math.round(fr.sw * ks), Math.round(fr.sh * ks));
     ctx.restore();
+    drawAvatarFront(ctx, a, t);
   }
   userPick(a) {
     return { kind: 'user', id: a.U.id, test: (p) => { const { wx, wy } = this.toWorld(p.x, p.y); return wx >= a.sx1 + 4 && wx <= a.sx2 - 4 && wy >= a.sy1 + 3 && wy <= a.sy2 - 2; } };
@@ -684,16 +690,7 @@ export class HotelEngine {
     }
     // Escribiendo…
     const ty = hotel.live.typing.get(U.id);
-    if (ty && Date.now() - ty < 6000) {
-      const y = s.y - (hov || sel ? 28 : 8);
-      ctx.fillStyle = '#fff';
-      roundRect(ctx, s.x - 17, y - 16, 34, 16, 8); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
-      for (let i = 0; i < 3; i++) {
-        ctx.fillStyle = Math.floor(t / 250) % 3 === i ? '#141414' : '#9a9aa2';
-        ctx.beginPath(); ctx.arc(s.x - 8 + i * 8, y - 8, 2.4, 0, Math.PI * 2); ctx.fill();
-      }
-    }
+    if (ty && Date.now() - ty < 6000) drawTyping(ctx, s.x, s.y - (hov || sel ? 26 : 6), t, Date.now() - ty);
   }
 
   // Globitos de chat: aparecen sobre la cabeza y suben en filas, como en el hotel clásico

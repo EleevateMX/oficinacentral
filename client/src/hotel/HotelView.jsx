@@ -1,6 +1,6 @@
 // Hotel: vista principal (navegador → sala). Se abre desde el riel ("Hotel") o el elevador de la oficina.
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Package, ShoppingBag, Settings, MessageSquare, ZoomIn, ZoomOut, LocateFixed, Compass, Send, RotateCw, X, Bell, Megaphone, MessageCircle } from 'lucide-react';
+import { ArrowLeft, ArrowUpDown, Package, ShoppingBag, Settings, MessageSquare, ZoomIn, ZoomOut, LocateFixed, Compass, Send, RotateCw, X, Bell, Megaphone, MessageCircle } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
 import { hotel, useHotel } from './hotelStore.js';
@@ -9,6 +9,8 @@ import Navigator from './Navigator.jsx';
 import { InventoryPanel, CatalogPanel, SettingsPanel, ChatLogPanel, ItemCard, UserCard } from './Panels.jsx';
 import { MechLayer } from './MechPanels.jsx';
 import { mechPick } from './mechanics.js';
+import { HotelLanding, ElevatorRide, ElevatorPopover } from './HotelLanding.jsx';
+import { elevator, useElevator, getSkip } from './elevator.js';
 import './hotel.css';
 import ConsolePanel, { ConsoleButton } from './social/Console.jsx'; // B: social
 import PersonCard from './social/PersonCard.jsx'; // B: social
@@ -21,37 +23,36 @@ const isTyping = () => { const a = document.activeElement; return a && (a.tagNam
 export default function HotelView() {
   const screen = useHotel((s) => s.screen);
   const fx = useOffice((s) => s.hotelFx);
-  const [riding, setRiding] = useState(fx === 'elevator');
+  const landing = useElevator((s) => s.landing);
 
   useEffect(() => {
     hotel.attach();
     hotel.loadInventory();
-    hotel.enterOfficial(); // entrar directo a la Oficina Central (el navegador sigue a un clic)
+    // Primero la vista del Hotel con el elevador (o directo a la Oficina Central si así lo eligió)
+    if (getSkip()) hotel.enterOfficial();
+    else elevator.set({ landing: true });
+    elevator.refresh();
     return () => {
       if (hotel.state.roomId) hotel.socket?.emit('hotel:leave');
       hotel.clearRoom();
       hotel.detach();
+      elevator.set({ landing: false, ride: null, panel: false });
     };
   }, []);
-  // Elevador: un momento de "subiendo…"
+  // Desde el elevador de la oficina: las puertas se abren en el Hotel
   useEffect(() => {
-    if (fx !== 'elevator') return undefined;
-    setRiding(true);
-    const t = setTimeout(() => { setRiding(false); office.set({ hotelFx: null }); }, 1500);
-    return () => clearTimeout(t);
+    if (fx !== 'elevator') return;
+    office.set({ hotelFx: null });
+    elevator.arrive();
   }, [fx]);
 
   const exit = () => office.set({ view: 'map' });
   return (
     <div className="hotel">
-      {screen === 'room' ? <RoomView onExit={exit} /> : <Navigator onExit={exit} />}
+      {landing && screen !== 'room' ? <HotelLanding onExit={exit} /> : screen === 'room' ? <RoomView onExit={exit} /> : <Navigator onExit={exit} />}
       <ConsolePanel />
-      {riding && (
-        <div className="ht-elevator">
-          <div className="ht-elev-doors"><span /><span /></div>
-          <div className="ht-elev-text"><b>▲</b> Subiendo al Hotel…</div>
-        </div>
-      )}
+      <ElevatorPopover />
+      <ElevatorRide />
     </div>
   );
 }
@@ -109,6 +110,7 @@ function RoomView({ onExit }) {
       <div className="ht-topbar">
         <button className="ht-btn dark" onClick={onExit} title="Volver a la oficina"><ArrowLeft size={16} /> <span className="ht-hide-sm">Oficina</span></button>
         <button className="ht-btn dark" onClick={() => hotel.leave()} title="Ver otras salas"><Compass size={16} /> <span className="ht-hide-sm">Navegador</span></button>
+        <button className="ht-btn dark ht-elev-btn" onClick={() => elevator.set({ panel: !elevator.state.panel })} title="Elevador: cambiar de piso"><ArrowUpDown size={16} /> <span className="ht-hide-sm">Elevador</span></button>
         <div className="ht-roomname">
           <b>{room.name}</b>
           <span>{room.official ? 'Sala oficial GTAHUB' : `de ${owner?.displayName || room.ownerName}`}</span>

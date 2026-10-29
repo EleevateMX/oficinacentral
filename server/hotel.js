@@ -14,6 +14,8 @@ import { layHeadTile } from '../shared/hotelSeat.js';
 import { initHotelSocial, registerHotelSocialRoutes, roomSocialOut, userSocialOut, saveRoomSocial } from './hotelSocial.js'; // B: social
 import { initHotelEconomy, registerEconomyRoutes } from './hotelEconomy.js'; // créditos, tienda, intercambios, regalos (agente A)
 import { initHotelMechanics } from './hotelMechanics.js';
+import { initHotelAvatar } from './hotelAvatar.js';
+import { registerHotelLanding } from './hotelLanding.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS hotel_rooms (
@@ -165,14 +167,14 @@ const destOf = (U) => (U.path ? { x: U.path[U.path.length - 1][0], y: U.path[U.p
 function userOut(U) {
   const t = Date.now();
   const p = logical(U, t);
-  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null };
+  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null };
   Object.assign(out, userSocialOut(U.id)); // B: motto, badges, respects
   // Quien llega a media caminata la ve en el mismo paso: desde la casilla del paso en curso y cuándo empezó
   if (U.path && p.moving) Object.assign(out, { path: U.path.slice(p.i), from: [p.x, p.y, p.z], t0: U.t0 + p.i * STEP_MS, n0: (U.n0 || 0) + p.i, now: t });
   else out.path = null;
   return out;
 }
-const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null });
+const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null });
 
 function snapshot(R, uid) {
   const m = ROOM_MODELS[R.row.model] || ROOM_MODELS.a;
@@ -209,6 +211,7 @@ function enterRoom(socket, uid, R, { spawn = null } = {}) {
   const door = R.grid.door;
   const s = spawn || { x: door.x, y: door.y, z: tileInfo(R.grid, door.x, door.y)?.z ?? 0, dir: dirToward(door.x, door.y, door.x + 1, door.y) ?? 2 }; // entra mirando hacia la sala
   const U = { id: uid, name: u.display_name, avatar: parse(u.avatar, {}), x: s.x, y: s.y, z: s.z, dir: toDir8(s.dir), sit: null, lay: null, path: null, t0: 0, n0: 0, act: null, timer: null, socket };
+  for (const f of hotelCtx.userInit) f(U);
   R.users.set(uid, U);
   where.set(uid, { roomId: R.id, socket });
   socket.join(key(R.id));
@@ -353,11 +356,12 @@ const persist = (it) => db.prepare('UPDATE hotel_items SET room_id = ?, x = ?, y
 export function initHotel(io, socket, userId) {
   IO = io;
   const limiter = (n, ms) => { let ts = []; return () => { const t = Date.now(); ts = ts.filter((x) => t - x < ms); if (ts.length >= n) return false; ts.push(t); return true; }; };
-  const walkOk = limiter(12, 1000), chatOk = limiter(6, 5000), furniOk = limiter(12, 1000), bellOk = limiter(3, 15000);
+  const walkOk = limiter(12, 1000), chatOk = limiter(6, 5000), cmdOk = limiter(15, 5000), furniOk = limiter(12, 1000), bellOk = limiter(3, 15000);
   const mine = () => { const w = where.get(userId); return w && w.socket === socket ? live.get(w.roomId) : null; };
   const err = (text) => socket.emit('hotel:notice', { text, error: true });
   initHotelEconomy(io, socket, userId);
   for (const fn of hotelCtx.socketInits) fn(socket, userId);
+  initHotelAvatar(socket, userId);
 
   socket.on('hotel:enter', (m) => {
     const roomId = Number(m?.roomId);
@@ -454,10 +458,12 @@ export function initHotel(io, socket, userId) {
     if (!R) return;
     const text = cleanText(m?.text);
     const mode = CHAT_MODES.includes(m?.mode) ? m.mode : 'say';
-    if (!text || !chatOk()) return;
+    if (!text) return;
     const U = R.users.get(userId);
-    const cmd = chatCommands.get(text.split(' ')[0].toLowerCase());
-    if (cmd) return cmd({ R, U, socket, text, args: text.split(' ').slice(1), err });
+    // Comandos (":algo"): su propio límite, no cuentan como mensajes
+    const cmd = text.startsWith(':') && chatCommands.get(text.split(' ')[0].toLowerCase());
+    if (cmd) { if (!cmdOk()) return; if (cmd({ R, U, text, args: text.split(' ').slice(1), socket, userId, err }) !== false) return; }
+    if (!chatOk()) return;
     const msg = { id: `${userId}-${Date.now()}`, from: userId, name: U.name, text, mode, at: Date.now() };
     if (mode === 'whisper') {
       const to = R.users.get(Number(m?.to));
@@ -654,6 +660,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   const roomLimiter = new Map();
   setImmediate(ensureOfficialRooms); // al arrancar (después de crear el primer admin)
   registerHotelSocialRoutes(api, { fail, wrap }); // B: /hotel/social…
+  registerHotelLanding(api, { fail, wrap });
   const MINE = 'SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ? AND official = 0';
   const officialFirst = (a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (a.official && b.official ? a.official - b.official : 0);
 
@@ -834,6 +841,7 @@ export const hotelCtx = {
   get io() { return IO; }, get IO() { return IO; }, useHandlers: new Map(), roomRow, itemOut, db, live, where, key, logical, startWalk, arrive, leaveRoom, userState, userOut, persist, flash, refreshUsers, footTiles,
   canEdit, isAdmin, getUser, cleanText, chatCommands, socketInits: [],
   roomOut, isBanned, capOf, broadcastRoom, addItem, buy, invCount, inventory, // social y economía
+  tileInfo, emitUser: (R, U) => IO?.to(key(R.id)).emit('hotel:user', userState(U)), userInit: [], // avatar (D)
   hooks: { use: [], walk: [], arrive: [], enter: [], leave: [], chat: [], place: [], users: [], occupied: [] },
 };
 function hook(name, ...a) { for (const fn of hotelCtx.hooks[name]) { const r = fn(...a); if (r) return r; } return null; }

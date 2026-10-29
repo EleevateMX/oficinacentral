@@ -63,6 +63,12 @@ export const POSE_COL0 = 5;
 export const FULL_COLS = POSE_COL0 + POSES.length;
 export const FULL_SHEET_W = FRAME_W * FULL_COLS;
 
+// Hotel: posturas extra que solo usan las vistas del Hotel (no cambian la hoja de la oficina)
+export const HOTEL_POSE_DEFS = {
+  sign: { a: 'idle', b: 'idle' }, // el brazo que sostiene el cartel se pone en opt.sign
+};
+const NO_OPT = {};
+
 // Columna de la hoja para un paso/postura; cols = columnas que tiene la hoja.
 export function frameCol(step = 0, pose = null, cols = 3) {
   if (pose && cols >= FULL_COLS) {
@@ -211,9 +217,16 @@ class Frame {
 }
 
 // ---------- dibujo de un personaje ----------
-function drawFrame(spec, dir, step, poseName = null) {
-  const f = new Frame();
-  const P = (poseName && POSE_DEFS[poseName]) || null;
+function drawFrame(spec, dir, step, poseName = null, opt = NO_OPT) {
+  let f = new Frame();
+  const P = (poseName && (POSE_DEFS[poseName] || HOTEL_POSE_DEFS[poseName])) || null;
+  // Vistas de 3/4 (Hotel): 'dl' = de frente hacia la izquierda, 'ul' = de espaldas hacia la izquierda;
+  // las de la derecha son su espejo. part: 'body' (sin cabeza) o 'head' (solo la cabeza) para voltear la cabeza.
+  const Q = dir === 'downLeft' || dir === 'downRight' ? 'dl' : dir === 'upLeft' || dir === 'upRight' ? 'ul' : null;
+  const flip = dir === 'right' || dir === 'downRight' || dir === 'upRight';
+  const doBody = opt.part !== 'head', doHead = opt.part !== 'body';
+  const meta = { hands: {}, holdArm: null };
+  f.meta = meta;
   const walk = P ? 0 : Math.max(0, Math.min(4, step | 0));
   const contact = walk === 1 ? 1 : walk === 3 ? -1 : 0; // 1: pie A al frente, -1: pie B
   const C = {
@@ -238,9 +251,11 @@ function drawFrame(spec, dir, step, poseName = null) {
   const top = spec.top || 'tee';
   const hs = spec.hairStyle || 'short';
   const longHair = hs === 'long' || hs === 'bob';
-  const d = dir === 'right' ? 'left' : dir; // "derecha" = espejo de "izquierda"
+  const d = Q === 'dl' ? 'down' : Q === 'ul' ? 'up' : dir === 'right' ? 'left' : dir; // "derecha" = espejo de "izquierda"
   const hy = 13 + bob; // tope de la cabeza
   const ty = 30 + bob; // tope del torso
+  const out = f, junk = new Frame();
+  if (!doBody) f = junk;
 
   // ===== Capas de atrás =====
   if (spec.extra === 'backpack' && d !== 'down') {
@@ -253,6 +268,7 @@ function drawFrame(spec, dir, step, poseName = null) {
   if (hs === 'ponytail') {
     if (d === 'up') f.rect(14, hy + 10, 4, 12, hairD);
     if (d === 'left') { f.rect(22, hy + 6, 3, 10, hairD); f.set(23, hy + 16, hairD); }
+    if (Q === 'dl') f.rect(23, hy + 6, 3, 10, hairD);
   }
 
   // ===== Piernas, ropa de abajo y zapatos =====
@@ -266,7 +282,7 @@ function drawFrame(spec, dir, step, poseName = null) {
     const lift = (k) => ((contact === 1 && k === 0) || (contact === -1 && k === 1) ? 1
       : (legs === 'kickA' && k === 0) || (legs === 'kickB' && k === 1) ? 3 : 0);
     const spread = legs === 'wide' || legs === 'squat' ? 1 : 0;
-    const legX = (k) => (k === 0 ? 11 - spread - (legs === 'kickA' ? 2 : 0) : 17 + spread + (legs === 'kickB' ? 2 : 0));
+    const legX = (k) => (k === 0 ? 11 - spread - (legs === 'kickA' ? 2 : 0) : 17 + spread + (legs === 'kickB' ? 2 : 0)) - (Q ? (k === 1 ? 2 : 1) : 0);
     [0, 1].forEach((k) => {
       const x = legX(k);
       const up = lift(k);
@@ -274,8 +290,9 @@ function drawFrame(spec, dir, step, poseName = null) {
         f.rect(x, y, 4, 1, legColor(y));
         f.set(x, y, shade(legColor(y), 0.1));
       }
-      f.rect(x - (k === 0 ? 1 : 0), 45 - up, 5, 2, C.shoes);
-      f.rect(x - (k === 0 ? 1 : 0), 46 - up, 5, 1, shade(C.shoes, -0.25));
+      const sx = x - (k === 0 || Q ? 1 : 0);
+      f.rect(sx, 45 - up, 5, 2, Q && k === (Q === 'dl' ? 0 : 1) ? shade(C.shoes, -0.12) : C.shoes);
+      f.rect(sx, 46 - up, 5, 1, shade(C.shoes, -0.25));
     });
   } else {
     const off = contact === 1 ? 2 : contact === -1 ? -2
@@ -322,6 +339,11 @@ function drawFrame(spec, dir, step, poseName = null) {
     across: { pts: [[7, t0 + 1], [9, t0 + 5], [18, t0 + 7]], hand: [20, t0 + 7, 2, 2], inFront: true },
     head: { pts: [[7, t0 + 1], [4, t0 - 3], [5, t0 - 8]], hand: [6, t0 - 10, 2, 2] },
     lap: { pts: [[7, t0 + 1], [7, t0 + 6], [9, t0 + 8]], hand: [10, t0 + 9, 2, 2], inFront: true },
+    // Hotel: sostener algo, llevárselo a la boca y levantar un cartel
+    hold: { pts: [[7, t0 + 1], [7, t0 + 5], [9, t0 + 6]], hand: [9, t0 + 6, 2, 2], inFront: true },
+    drink: { pts: [[7, t0 + 1], [8, t0 + 4], [11, t0 + 1], [12, t0 - 2]], hand: [12, t0 - 4, 2, 2], inFront: true, layer: 'top' },
+    drinkQ: { pts: [[7, t0 + 1], [8, t0 + 4], [13, t0 + 1], [14, t0 - 2]], hand: [15, t0 - 4, 2, 2], inFront: true, layer: 'top' },
+    sign: { pts: [[7, t0 + 1], [5, t0 - 3], [5, t0 - 9]], hand: [4, t0 - 12, 3, 3], layer: 'top' },
   };
   const SIDE = {
     idle: { pts: [[16, t0 + 1], [16, t0 + 5]], hand: [16, t0 + 7, 2, 2] },
@@ -344,6 +366,9 @@ function drawFrame(spec, dir, step, poseName = null) {
     belly: { pts: [[16, t0 + 1], [15, t0 + 5], [12, t0 + 6]], hand: [10, t0 + 5, 2, 2] },
     head: { pts: [[16, t0 + 1], [20, t0 - 3], [19, t0 - 8]], hand: [17, t0 - 10, 2, 2], layer: 'top' },
     lap: { pts: [[16, t0 + 1], [15, t0 + 5], [12, t0 + 7]], hand: [10, t0 + 7, 2, 2] },
+    hold: { pts: [[16, t0 + 1], [16, t0 + 5], [13, t0 + 6]], hand: [11, t0 + 6, 2, 2] },
+    drink: { pts: [[16, t0 + 1], [15, t0 + 4], [12, t0 + 2], [10, t0 - 1]], hand: [9, t0 - 3, 2, 2], layer: 'top' },
+    sign: { pts: [[16, t0 + 1], [14, t0 - 4], [13, t0 - 9]], hand: [12, t0 - 12, 3, 3], layer: 'top' },
   };
   SIDE.low = SIDE.fwd; SIDE.across = SIDE.bwd; SIDE.cross = SIDE.chest;
   // Brazos según el paso o la postura
@@ -353,6 +378,16 @@ function drawFrame(spec, dir, step, poseName = null) {
     // De frente se balancea el brazo contrario a la pierna que avanza; de lado, el cercano va al frente con el paso A
     if (side) { armA = contact === 1 ? 'fwd' : 'bwd'; armB = contact === 1 ? 'bwd' : 'fwd'; }
     else { armA = contact === 1 ? 'bwd' : 'fwd'; armB = contact === 1 ? 'fwd' : 'bwd'; }
+  }
+  // Hotel: el brazo cercano a la cámara sostiene la bebida o el cartel
+  const holdArm = side || Q === 'ul' ? 'a' : 'b';
+  const farQ = Q === 'dl' ? 'a' : Q === 'ul' ? 'b' : null;
+  if (opt.hold || opt.sign != null) {
+    meta.holdArm = holdArm;
+    const cur = holdArm === 'a' ? armA : armB;
+    const free = !P || cur === 'idle' || cur === 'lap' || poseName === 'sign';
+    const g = opt.sign != null ? 'sign' : opt.drink ? (Q === 'dl' ? 'drinkQ' : 'drink') : 'hold';
+    if (free || opt.sign != null) { if (holdArm === 'a') armA = g; else armB = g; }
   }
   const linePts = (pts) => {
     const out = [];
@@ -373,11 +408,11 @@ function drawFrame(spec, dir, step, poseName = null) {
     return out;
   };
   // Dibuja un brazo en su propia capa y lo pega con un contorno donde tapa al cuerpo
-  const paintArm = (g, mirror, far) => {
+  const paintArm = (g, mirror, far, id) => {
     const a = new Frame();
     const mx = (x, w = 1) => (mirror ? 31 - x - w + 1 : x);
-    const ox = far ? 1 : 0, oy = far ? -1 : 0;
-    const dark = far || mirror || g.dim;
+    const ox = (far ? 1 : 0) + (Q && id === 'b' ? 1 : 0), oy = far ? -1 : 0;
+    const dark = Q ? id === farQ || g.dim : far || mirror || g.dim;
     const slv = dark ? shade(sleeve, -0.15) : sleeve;
     const skin = dark ? skinD : C.skin;
     linePts(g.pts).forEach(([x, y], i) => {
@@ -385,7 +420,10 @@ function drawFrame(spec, dir, step, poseName = null) {
     });
     if (g.bump) a.rect(mx(g.bump[0] + ox), g.bump[1] + oy, 1, 1, slv);
     const [hx, hy2, hw, hh] = g.hand;
-    a.rect(mx(hx + ox, hw), hy2 + oy, hw, hh, skin);
+    const hpx = mx(hx + ox, hw), hpy = hy2 + oy;
+    meta.hands[id] = [hpx + hw / 2, hpy + hh / 2];
+    if (opt.hold && id === meta.holdArm && opt.sign == null) paintHandItem((x, y, c) => a.set(x, y, c), opt.hold, hpx, hpy, hw, hh, { up: d === 'up', drink: !!opt.drink });
+    a.rect(hpx, hpy, hw, hh, skin);
     for (const [x, y] of g.finger || []) a.set(mx(x + ox), y + oy, skin);
     // Contorno solo encima de lo ya dibujado (el borde exterior lo pone outline())
     // ropa muy oscura: el borde va más claro para que el brazo se lea encima del torso
@@ -410,12 +448,12 @@ function drawFrame(spec, dir, step, poseName = null) {
   function drawArms(layer) {
     if (side) {
       const ga = SIDE[armA] || SIDE.idle, gb = SIDE[armB] || SIDE.idle;
-      if (armLayer(gb, true) === layer) paintArm(gb, false, true);
-      if (armLayer(ga, false) === layer) paintArm(ga, false, false);
+      if (armLayer(gb, true) === layer) paintArm(gb, false, true, 'b');
+      if (armLayer(ga, false) === layer) paintArm(ga, false, false, 'a');
     } else {
       const ga = FRONT[armA] || FRONT.idle, gb = FRONT[armB] || FRONT.idle;
-      if (armLayer(ga, false) === layer) paintArm(ga, false, false);
-      if (armLayer(gb, false) === layer) paintArm(gb, true, false);
+      if (armLayer(ga, false) === layer) paintArm(ga, false, false, 'a');
+      if (armLayer(gb, false) === layer) paintArm(gb, true, false, 'b');
     }
   }
   // Piernas sentado: de frente, muslos hacia la cámara (regazo), espinillas cortas y zapatos;
@@ -424,7 +462,21 @@ function drawFrame(spec, dir, step, poseName = null) {
     const skirt = bottom === 'skirt';
     const thigh = C.pants;
     const shin = bottom === 'pants' ? C.pants : C.skin;
-    if (d === 'down') {
+    if (Q === 'dl') {
+      // 3/4 de frente: muslos al frente y hacia un lado, la pierna lejana más oscura
+      const far = shade(thigh, -0.18);
+      for (let j = 0; j < 3; j++) { f.rect(9 - j, 41 + j, 6, 1, far); f.rect(14 - j, 41 + j, 8, 1, thigh); }
+      f.rect(14, 41, 6, 1, shade(thigh, 0.14));
+      if (skirt) f.rect(7, 43, 15, 1, shade(thigh, -0.2));
+      f.rect(7, 44, 3, 1, shade(shin, -0.18));
+      f.rect(5, 45, 5, 2, shade(C.shoes, -0.2));
+      f.rect(12, 44, 4, 1, shin);
+      f.rect(10, 45, 6, 2, C.shoes);
+      f.rect(10, 46, 6, 1, shade(C.shoes, -0.25));
+    } else if (Q === 'ul') {
+      // 3/4 de espaldas: casi todo lo tapa el cuerpo; asoma el muslo cercano
+      f.rect(10, 43, 11, 2, shade(thigh, -0.1));
+    } else if (d === 'down') {
       f.rect(10, 41, 12, 3, thigh);
       f.rect(11, 41, 3, 1, shade(thigh, 0.14)); f.rect(18, 41, 3, 1, shade(thigh, 0.14));
       f.rect(15, 42, 2, 2, shade(thigh, -0.22));
@@ -453,10 +505,11 @@ function drawFrame(spec, dir, step, poseName = null) {
 
   // ===== Torso =====
   const tx = side ? 11 : 9;
-  const tw = side ? 10 : 14;
+  const tw = side ? 10 : Q ? 13 : 14;
   f.rrect(tx, ty, tw, 10, 2, C.top);
   f.rect(tx + tw - 2, ty + 1, 2, 8, topD);
   f.rect(tx + 1, ty + 1, 1, 6, topL);
+  if (Q === 'dl') f.rect(tx + tw - 3, ty + 2, 1, 7, shade(C.top, -0.1)); // el costado que se ve
 
   if (top === 'hoodie') {
     if (d === 'down') {
@@ -541,13 +594,16 @@ function drawFrame(spec, dir, step, poseName = null) {
   if (legs === 'sit') drawSitLegs();
 
   drawArms('mid');
+  f = doHead ? out : junk;
 
   // ===== Cabeza =====
   f.rrect(7, hy, 18, 17, 4, C.skin);
   f.rect(8, hy + 15, 16, 1, skinD);
   if (d === 'left') f.rect(19, hy + 8, 2, 3, skinD);
   if (spec.extra === 'earrings') {
-    if (d === 'down') { f.set(6, hy + 12, [255, 204, 0]); f.set(25, hy + 12, [255, 204, 0]); }
+    if (Q === 'dl') f.set(21, hy + 12, [255, 204, 0]);
+    else if (Q === 'ul') f.set(8, hy + 12, [255, 204, 0]);
+    else if (d === 'down') { f.set(6, hy + 12, [255, 204, 0]); f.set(25, hy + 12, [255, 204, 0]); }
     if (d === 'left') f.set(20, hy + 12, [255, 204, 0]);
   }
 
@@ -562,7 +618,19 @@ function drawFrame(spec, dir, step, poseName = null) {
   };
   const mouth = spec.mouth || 'neutral';
   const mouthC = shade(C.skin, -0.38);
-  if (d === 'down') {
+  if (Q === 'dl') {
+    // 3/4: la cara se recorre hacia donde mira; el ojo lejano queda más cerca de la orilla
+    const wide = eyes === 'big' || eyes === 'happy';
+    drawEye(wide ? 8 : 9, false);
+    drawEye(wide ? 14 : 15, eyes === 'wink');
+    const blush = [Math.min(255, C.skin[0] + 18), Math.max(0, C.skin[1] - 18), Math.max(0, C.skin[2] - 12)];
+    f.set(8, hy + 11, blush); f.rect(17, hy + 11, 2, 1, blush);
+    if (mouth === 'neutral') f.rect(12, hy + 13, 2, 1, mouthC);
+    if (mouth === 'smile') { f.set(11, hy + 12, mouthC); f.rect(12, hy + 13, 2, 1, mouthC); f.set(14, hy + 12, mouthC); }
+    if (mouth === 'grin') { f.rect(11, hy + 12, 4, 2, mouthC); f.rect(11, hy + 12, 4, 1, C.white); }
+    if (mouth === 'open') f.rect(12, hy + 12, 2, 2, mouthC);
+    f.rect(20, hy + 8, 2, 3, skinD); // oreja
+  } else if (d === 'down') {
     drawEye(eyes === 'big' ? 10 : 11, false);
     drawEye(19, eyes === 'wink');
     const blush = [Math.min(255, C.skin[0] + 18), Math.max(0, C.skin[1] - 18), Math.max(0, C.skin[2] - 12)];
@@ -582,7 +650,15 @@ function drawFrame(spec, dir, step, poseName = null) {
   const fh = spec.facialHair || 'none';
   if (fh !== 'none' && d !== 'up') {
     const hc = fh === 'stubble' ? shade(C.skin, -0.3) : C.hair;
-    if (d === 'down') {
+    if (Q === 'dl') {
+      if (fh === 'mustache') f.rect(10, hy + 12, 6, 1, hc);
+      if (fh === 'goatee') { f.rect(11, hy + 12, 4, 1, hc); f.rect(12, hy + 14, 2, 2, hc); }
+      if (fh === 'beard' || fh === 'stubble') {
+        f.rect(7, hy + 10, 1, 5, hc); f.rect(18, hy + 10, 3, 5, hc);
+        f.rect(8, hy + 14, 12, 2, hc); f.rect(10, hy + 12, 6, 1, hc);
+        if (mouth !== 'neutral') f.rect(12, hy + 13, 2, 1, mouthC);
+      }
+    } else if (d === 'down') {
       if (fh === 'mustache') f.rect(13, hy + 12, 6, 1, hc);
       if (fh === 'goatee') { f.rect(14, hy + 12, 4, 1, hc); f.rect(15, hy + 14, 2, 2, hc); }
       if (fh === 'beard' || fh === 'stubble') {
@@ -645,6 +721,23 @@ function drawFrame(spec, dir, step, poseName = null) {
       if (hs === 'pigtails') f.rrect(23, hy + 6, 4, 9, 2, C.hair);
     }
   }
+  // 3/4: de frente se ve la parte de atrás del pelo a un lado (con la oreja); de espaldas, la mejilla y la oreja
+  if (Q === 'dl' && hs !== 'afro') {
+    if (hs === 'mohawk') f.rect(18, hy + 2, 4, 4, shade(C.skin, -0.25));
+    else if (hs === 'buzz') f.rect(19, hy + 1, 6, 5, C.hair);
+    else {
+      f.rect(20, hy + 3, 6, longHair ? 12 : 6, C.hair);
+      f.rect(24, hy + 4, 1, longHair ? 10 : 4, hairD);
+      if (!longHair) f.rect(8, hy + 4, 1, 5, C.skin);
+    }
+    if (!longHair) f.rect(20, hy + 8, 2, 3, skinD);
+  }
+  if (Q === 'ul' && hs !== 'afro' && !longHair) {
+    for (let j = 6; j <= 14; j++) f.px[(hy + j) * FRAME_W + 6] = null;
+    f.rect(7, hy + 6, 2, 9, C.skin);
+    f.rect(9, hy + 12, 2, 3, C.skin);
+    f.rect(9, hy + 8, 2, 3, skinD);
+  }
   if (hs === 'spiky' && !hatCovers) {
     for (const sx of [8, 12, 16, 20]) {
       f.rect(sx + (d === 'left' ? 1 : 0), hy - 3, 3, 2, C.hair);
@@ -663,11 +756,23 @@ function drawFrame(spec, dir, step, poseName = null) {
 
   // ===== Lentes =====
   const ew = spec.eyewear || 'none';
-  if (ew !== 'none' && d !== 'up') {
+  if (ew !== 'none' && (d !== 'up' || Q === 'ul')) {
     const sun = ew === 'sunglasses';
     const lens = sun ? [24, 24, 30] : shade(C.skin, 0.25);
     const frame = sun ? [20, 20, 26] : C.ink;
-    if (d === 'down') {
+    if (Q === 'ul') {
+      if (!longHair) f.rect(7, hy + 8, 3, 1, frame);
+    } else if (Q === 'dl') {
+      for (const ex of [8, 14]) {
+        if (ew === 'round') f.rrect(ex, hy + 7, 4, 4, 1, frame);
+        else f.rect(ex, hy + 7, 4, 4, frame);
+        f.rect(ex + 1, hy + 8, 2, 2, lens);
+        if (!sun) f.set(ex + 1, hy + 8, C.eye);
+      }
+      f.rect(12, hy + 8, 2, 1, frame);
+      f.rect(18, hy + 8, 3, 1, frame);
+      if (sun) { f.set(9, hy + 8, [120, 120, 140]); f.set(15, hy + 8, [120, 120, 140]); }
+    } else if (d === 'down') {
       for (const ex of [10, 18]) {
         if (ew === 'round') f.rrect(ex, hy + 7, 4, 4, 1, frame);
         else f.rect(ex, hy + 7, 4, 4, frame);
@@ -689,7 +794,15 @@ function drawFrame(spec, dir, step, poseName = null) {
   if (au !== 'none') {
     const cup = au === 'headphones' ? (spec.hatColor ? C.hat : C.accent) : [52, 52, 62];
     const band = shade(cup, -0.35);
-    if (d !== 'left') {
+    if (Q) {
+      // 3/4: el audífono cercano sobre la oreja y del otro solo la orilla
+      const ul = Q === 'ul';
+      if (!hatCovers) f.rect(ul ? 9 : 9, hy - 2, 14, 1, band);
+      f.rect(ul ? 8 : 22, hy - 1, 1, 6, band);
+      f.rrect(ul ? 7 : 19, hy + 5, 4, 7, 1, cup);
+      f.rrect(ul ? 24 : 5, hy + 6, 3, 6, 1, shade(cup, -0.2));
+      if (au === 'headset' && !ul) { f.rect(14, hy + 12, 6, 1, [52, 52, 62]); f.rect(13, hy + 12, 2, 2, [229, 72, 77]); }
+    } else if (d !== 'left') {
       if (!hatCovers) f.rect(8, hy - 2, 16, 1, band);
       f.rect(7, hy - 1, 1, 6, band); f.rect(24, hy - 1, 1, 6, band);
       f.rrect(4, hy + 5, 4, 7, 1, cup); f.rrect(24, hy + 5, 4, 7, 1, cup);
@@ -707,9 +820,11 @@ function drawFrame(spec, dir, step, poseName = null) {
   if (hat === 'cap') {
     f.rrect(6, hy - 3, 20, 7, 4, H);
     f.rect(9, hy - 2, 4, 1, shade(H, 0.25));
-    if (d === 'down') f.rect(8, hy + 3, 16, 2, shade(H, -0.22));
+    if (Q === 'dl') f.rect(4, hy + 3, 15, 2, shade(H, -0.22));
+    else if (Q === 'ul') { f.rect(16, hy + 2, 6, 2, shade(H, -0.22)); f.rect(3, hy + 3, 5, 2, shade(H, -0.22)); }
+    else if (d === 'down') f.rect(8, hy + 3, 16, 2, shade(H, -0.22));
     if (d === 'left') f.rect(2, hy + 3, 8, 2, shade(H, -0.22));
-    if (d === 'up') f.rect(13, hy + 2, 6, 2, shade(H, -0.22));
+    if (d === 'up' && !Q) f.rect(13, hy + 2, 6, 2, shade(H, -0.22));
   }
   if (hat === 'beanie') {
     f.rrect(6, hy - 4, 20, 9, 5, H);
@@ -724,7 +839,7 @@ function drawFrame(spec, dir, step, poseName = null) {
   }
   if (hat === 'headband') {
     f.rect(6, hy + 3, 20, 2, H);
-    if (d === 'left') f.rect(24, hy + 4, 2, 4, H);
+    if (d === 'left' || Q === 'dl') f.rect(24, hy + 4, 2, 4, H);
   }
   if (hat === 'cowboy') {
     f.rrect(9, hy - 6, 14, 8, 3, H);
@@ -734,10 +849,15 @@ function drawFrame(spec, dir, step, poseName = null) {
     f.rect(9, hy, 14, 1, C.accent);
   }
 
+  f = doBody ? out : junk;
   drawArms('top');
+  f = out;
 
-  f.outline();
-  return dir === 'right' ? f.mirror() : f;
+  if (!opt.noOutline) f.outline();
+  const res = flip ? f.mirror() : f;
+  if (flip) for (const k of Object.keys(meta.hands)) meta.hands[k] = [FRAME_W - meta.hands[k][0], meta.hands[k][1]];
+  res.meta = meta;
+  return res;
 }
 
 function paintSheet(spec, cols) {
@@ -772,6 +892,124 @@ export function renderFullSheet(spec) {
 }
 
 export const COLOR_KEYS = ['skin', 'hair', 'eyeColor', 'shirt', 'accent', 'pants', 'shoes', 'hatColor'];
+
+// ================= Hotel: 8 direcciones, objetos en la mano =================
+// Las vistas de 3/4 usan el mismo dibujo (cara, peinado, ropa, proporciones) que la oficina.
+// Dirección del Hotel (0–7, ver shared/hotelWalk.js) → vista del personaje.
+export const DIRS8 = ['upRight', 'right', 'downRight', 'down', 'downLeft', 'left', 'upLeft', 'up'];
+export const DIAG_DIRS = ['downLeft', 'downRight', 'upLeft', 'upRight'];
+export const HAND_ITEMS = ['refresco', 'cafe', 'agua', 'helado', 'palomitas', 'rosa'];
+
+// Objeto en la mano (pixel-art original): la mano (hx, hy, hw, hh) lo agarra por abajo.
+export function paintHandItem(set, id, hx, hy, hw = 2, hh = 2, o = {}) {
+  const x0 = hx + Math.floor(hw / 2) - 1;
+  const R = (x, y, w, h, c) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) set(x + i, y + j, c); };
+  switch (id) {
+    case 'refresco': {
+      const y0 = hy - 4;
+      R(x0, y0 + 1, 3, 5, [254, 51, 119]);
+      R(x0, y0, 3, 1, [206, 208, 218]);
+      R(x0, y0 + 2, 3, 1, [255, 255, 255]);
+      set(x0, y0 + 3, [255, 128, 170]);
+      break;
+    }
+    case 'cafe': {
+      const y0 = hy - 3;
+      R(x0, y0, 3, 1, [60, 42, 36]);
+      R(x0, y0 + 1, 3, 4, [250, 246, 238]);
+      R(x0, y0 + 2, 3, 2, [168, 112, 66]);
+      if (!o.drink) { set(x0 + 1, y0 - 2, [236, 236, 244]); set(x0 + 2, y0 - 3, [236, 236, 244]); set(x0 + 1, y0 - 4, [220, 220, 232]); }
+      break;
+    }
+    case 'agua': {
+      const y0 = hy - 5;
+      R(x0 + 1, y0, 1, 1, [40, 110, 210]);
+      R(x0, y0 + 1, 3, 6, [150, 205, 245]);
+      R(x0 + 2, y0 + 1, 1, 6, [110, 175, 230]);
+      set(x0, y0 + 2, [235, 248, 255]);
+      R(x0, y0 + 4, 3, 1, [40, 110, 210]);
+      break;
+    }
+    case 'helado': {
+      const y0 = hy - 5;
+      R(x0, y0, 3, 1, [255, 170, 205]);
+      R(x0 - 1, y0 + 1, 5, 2, [255, 150, 190]);
+      set(x0, y0 + 1, [255, 225, 236]);
+      R(x0 - 1, y0 + 3, 5, 1, [250, 240, 214]);
+      R(x0, y0 + 4, 3, 2, [214, 160, 90]);
+      set(x0 + 1, y0 + 6, [190, 132, 66]);
+      set(x0 + 1, y0 + 4, [180, 124, 60]);
+      break;
+    }
+    case 'palomitas': {
+      const y0 = hy - 4;
+      R(x0 - 1, y0, 5, 2, [255, 238, 190]);
+      set(x0, y0 - 1, [255, 246, 214]); set(x0 + 2, y0 - 1, [255, 230, 170]);
+      for (let i = 0; i < 5; i++) R(x0 - 1 + i, y0 + 2, 1, 4, i % 2 ? [255, 255, 255] : [230, 40, 60]);
+      break;
+    }
+    case 'rosa': {
+      const y0 = hy - 6;
+      R(x0, y0, 3, 2, [220, 30, 66]);
+      set(x0 + 1, y0, [255, 90, 120]);
+      set(x0 + 1, y0 - 1, [190, 20, 50]);
+      R(x0 + 1, y0 + 2, 1, 6, [56, 150, 70]);
+      set(x0 + 2, y0 + 4, [86, 180, 90]);
+      break;
+    }
+    default: break;
+  }
+}
+
+const toRGBA = (fr) => {
+  const out = new Uint8ClampedArray(FRAME_W * FRAME_H * 4);
+  for (let i = 0; i < fr.px.length; i++) {
+    const c = fr.px[i];
+    if (!c) continue;
+    out[i * 4] = c[0]; out[i * 4 + 1] = c[1]; out[i * 4 + 2] = c[2]; out[i * 4 + 3] = 255;
+  }
+  return out;
+};
+
+// Un cuadro del Hotel (32×48, mismo formato que la hoja de la oficina; pies en la fila 46).
+//   dir/head: 'down' | 'left' | 'right' | 'up' | DIAG_DIRS · step: 0 quieto, 1–4 caminar
+//   pose: nombre de POSES (o 'sit') · hold: objeto en la mano (HAND_ITEMS) · drink: llevárselo a la boca
+//   sign: levantar un cartel · blink / talk: ojos cerrados / boca abierta
+// → { data (RGBA), width, height, hands: { a: [x, y], b: [x, y] }, holdArm }
+export function hotelFrame(spec, o = {}) {
+  let s = normalizeSpec(spec);
+  if (o.blink && s.eyewear !== 'sunglasses') s = { ...s, eyes: 'sleepy' };
+  if (o.talk) s = { ...s, mouth: s.mouth === 'open' ? 'neutral' : 'open' };
+  const dir = o.dir || 'down';
+  const opt = { hold: HAND_ITEMS.includes(o.hold) ? o.hold : null, drink: !!o.drink, sign: o.sign ?? null };
+  let fr;
+  if (o.head && o.head !== dir) {
+    fr = drawFrame(s, dir, o.step || 0, o.pose || null, { ...opt, part: 'body', noOutline: true });
+    const hd = drawFrame(s, o.head, o.step || 0, o.pose || null, { ...opt, part: 'head', noOutline: true });
+    for (let i = 0; i < hd.px.length; i++) if (hd.px[i]) fr.px[i] = hd.px[i];
+    fr.outline();
+  } else fr = drawFrame(s, dir, o.step || 0, o.pose || null, opt);
+  return { data: toRGBA(fr), width: FRAME_W, height: FRAME_H, hands: fr.meta.hands, holdArm: fr.meta.holdArm };
+}
+
+// Hoja de las 4 vistas de 3/4 (filas: DIAG_DIRS) para vistas previas y pruebas:
+// columnas 0 quieto, 1–4 caminar (WALK_COLS), 5 sentado, 6–7 saludar
+export const DIAG_COLS = 8;
+export function renderDiagSheet(spec) {
+  const W = FRAME_W * DIAG_COLS;
+  const out = new Uint8ClampedArray(W * SHEET_H * 4);
+  const cols = [[0, null], [1, null], [3, null], [2, null], [4, null], [0, SIT_POSE], [0, 'wave1'], [0, 'wave2']];
+  DIAG_DIRS.forEach((dir, row) => {
+    cols.forEach(([step, pose], col) => {
+      const { data } = hotelFrame(spec, { dir, step, pose });
+      for (let y = 0; y < FRAME_H; y++) {
+        const i = ((row * FRAME_H + y) * W + col * FRAME_W) * 4;
+        out.set(data.subarray(y * FRAME_W * 4, (y + 1) * FRAME_W * 4), i);
+      }
+    });
+  });
+  return { data: out, width: W, height: SHEET_H };
+}
 
 // Normaliza un avatar guardado (incluye avatares de formatos anteriores)
 export function normalizeSpec(av = {}) {
