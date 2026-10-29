@@ -59,40 +59,70 @@ export class LiveKitManager extends EventTarget {
   }
 
   async switchRoom() {
-    if (this.switching) { this.switchAgain = true; return; }
-    this.switching = true;
-    try {
-      do {
-        this.switchAgain = false;
-        await this.ready;
-        const old = this.room;
-        const local = [this.audioTrack, this.videoTrack, this.screenTrack, this.screenAudioTrack].filter(Boolean);
-        this.room = this.makeRoom();
-        await old.disconnect(false); // sin detener las pistas locales
-        for (const el of this.audioEls.values()) el.srcObject = null;
-        this.audioEls.clear();
-        this.emitPeers();
-        this.ready = this.connect();
-        await this.ready;
-        for (const t of local) {
-          try { await this.room.localParticipant.publishTrack(t, this.pubOpts.get(t)); } catch (e) { console.warn('LiveKit: no se pudo volver a publicar', e); }
-        }
-      } while (this.switchAgain);
-    } finally {
-      this.switching = false;
-    }
+    if (this.switching) { this.switchAgain = true; return this.switching; }
+    this.switching = (async () => {
+      try {
+        do {
+          this.switchAgain = false;
+          await this.ready;
+          const old = this.room;
+          const local = [this.audioTrack, this.videoTrack, this.screenTrack, this.screenAudioTrack].filter(Boolean);
+          this.room = this.makeRoom();
+          this.ready = (async () => {
+            await old.disconnect(false); // sin detener las pistas locales
+            for (const el of this.audioEls.values()) el.srcObject = null;
+            this.audioEls.clear();
+            this.emitPeers();
+            await this.connect();
+          })();
+          await this.ready;
+          if (this.room.state !== 'connected') continue;
+          for (const t of local) {
+            try { await this.room.localParticipant.publishTrack(t, this.pubOpts.get(t)); } catch (e) { console.warn('LiveKit: no se pudo volver a publicar', e); }
+          }
+        } while (this.switchAgain);
+      } finally {
+        this.switching = null;
+      }
+    })();
+    return this.switching;
   }
 
+  // Intenta conectar varias veces; nunca lanza (el error queda en lastError)
   async connect() {
-    try {
-      const { url, token } = await this.getToken();
-      await this.room.connect(url, token, { autoSubscribe: false });
-      this.applySubscriptions();
-      this.emitPeers();
-    } catch (e) {
-      console.warn('LiveKit: no se pudo conectar', e);
-      this.dispatchEvent(new CustomEvent('error', { detail: e }));
+    const room = this.room;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (this.room !== room) return;
+      try {
+        const { url, token } = await this.getToken();
+        await room.connect(url, token, { autoSubscribe: false });
+        this.lastError = null;
+        this.applySubscriptions();
+        this.emitPeers();
+        return;
+      } catch (e) {
+        this.lastError = e;
+        console.warn(`LiveKit: no se pudo conectar (intento ${attempt + 1})`, e);
+        if (e?.status === 403 || e?.response?.status === 403) break; // sin permiso de voz: no insistir
+        await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+      }
     }
+    this.dispatchEvent(new CustomEvent('error', { detail: this.lastError }));
+  }
+
+  // Espera a que la sala esté conectada (y a que termine un cambio de sala) antes de publicar
+  async ensureConnected() {
+    for (let round = 0; round < 2; round++) {
+      await this.ready;
+      if (this.switching) await this.switching;
+      if (this.room.state === 'connected') return this.room;
+      if (round === 0 && this.room.state === 'disconnected') this.ready = this.connect();
+    }
+    if (this.room.state === 'connected') return this.room;
+    const why = this.lastError?.message ? ` (${this.lastError.message})` : '';
+    const err = new Error(`No se pudo conectar con el servidor de voz${why}. Revisa tu conexión e inténtalo de nuevo.`);
+    err.voiceServer = true;
+    throw err;
   }
 
   emit(type, detail) {
@@ -121,9 +151,19 @@ export class LiveKitManager extends EventTarget {
   }
 
   async publish(track, opts) {
-    await this.ready;
     this.pubOpts.set(track, opts);
-    await this.room.localParticipant.publishTrack(track, opts);
+    for (let attempt = 0; ; attempt++) {
+      const room = await this.ensureConnected();
+      try {
+        await room.localParticipant.publishTrack(track, opts);
+        return;
+      } catch (e) {
+        // Si la sala cambió o se cayó mientras publicaba, se intenta una vez más en la sala nueva
+        if (attempt === 0 && (this.room !== room || room.state !== 'connected' || /not connected|timeout/i.test(e?.message || ''))) continue;
+        this.pubOpts.delete(track);
+        throw e;
+      }
+    }
   }
 
   async unpublish(track) {

@@ -160,7 +160,7 @@ export function officeConfig() {
     // Aniversario de la comunidad: fecha 'MM-DD' y año de fundación (para "N años")
     anniversary: { date: getSetting('anniversary_date') || null, year: Number(getSetting('anniversary_year')) || null },
     // Estilo de los personajes generados: 'v2' (HUB v2, predeterminado) o 'classic'
-    avatarStyle: getSetting('avatar_style') === 'classic' ? 'classic' : 'v2',
+    avatarStyle: getSetting('avatar_style') === 'v2' ? 'v2' : 'classic',
     // Resumen de reuniones con IA: si el admin lo permite y si el servidor tiene llave
     ...notesConfig(),
   };

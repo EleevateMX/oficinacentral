@@ -1105,10 +1105,10 @@ function BrandAdmin() {
         <div className="row gap8 muted small">La firma <ByNuvora /> se mantiene siempre en el inicio de sesión.</div>
       </Section>
       <Section title="Personajes">
-        <Row title="Estilo de personajes" desc="HUB v2: más altos y con más detalle, caminan con más cuadros y se ven en diagonal. Clásico: los de siempre. Cambia la oficina y el Hotel para todos; los personajes subidos (dibujados a mano) se ven igual en los dos.">
-          <select value={config.avatarStyle || 'v2'} onChange={(e) => save({ avatarStyle: e.target.value })}>
-            <option value="v2">HUB v2</option>
+        <Row title="Estilo de personajes" desc="Clásico: los de siempre (con el movimiento suave nuevo). HUB v2 (prueba): más altos y con más detalle. Cambia la oficina y el Hotel para todos; los personajes subidos (dibujados a mano) se ven igual en los dos.">
+          <select value={config.avatarStyle || 'classic'} onChange={(e) => save({ avatarStyle: e.target.value })}>
             <option value="classic">Clásico</option>
+            <option value="v2">HUB v2 (prueba)</option>
           </select>
         </Row>
       </Section>

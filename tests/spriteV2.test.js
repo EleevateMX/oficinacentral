@@ -110,7 +110,7 @@ describe('HUB v2: hojas', () => {
 });
 
 describe('HUB v2: estilo y dibujo', () => {
-  after(() => setAvatarStyle('v2'));
+  after(() => setAvatarStyle('classic'));
   test('el estilo cambia al personaje del Hotel; los personajes subidos siguen con su hoja', () => {
     setAvatarStyle('v2');
     assert.equal(avatarStyle(), 'v2');
@@ -124,8 +124,9 @@ describe('HUB v2: estilo y dibujo', () => {
     assert.ok(!usesV2(PRESETS[0]));
     const c = renderAvatarPixels(PRESETS[0], { dir: 3, pose: 'stand' });
     assert.equal(c.w, 64); assert.equal(c.h, 96);
+    setAvatarStyle('v2');
     setAvatarStyle('cualquier-cosa');
-    assert.equal(avatarStyle(), 'v2');
+    assert.equal(avatarStyle(), 'classic', 'un valor raro regresa al clásico');
   });
 
   test('escala nítida: entero cuando queda cerca; si no, el tamaño exacto', () => {
@@ -211,7 +212,9 @@ describe('Ajuste del admin: estilo de personajes', () => {
   let srv, admin;
   before(async () => { srv = await startServer(); admin = await adminClient(srv.url); });
   after(async () => { await srv?.stop(); });
-  test('HUB v2 por omisión; el admin lo cambia y lo puede regresar', async () => {
+  test('Clásico por omisión; el admin lo cambia y lo puede regresar', async () => {
+    assert.equal((await admin.get('/config')).data.avatarStyle, 'classic');
+    assert.equal((await admin.patch('/admin/office', { avatarStyle: 'v2' })).status, 200);
     assert.equal((await admin.get('/config')).data.avatarStyle, 'v2');
     assert.equal((await admin.patch('/admin/office', { avatarStyle: 'classic' })).status, 200);
     assert.equal((await admin.get('/config')).data.avatarStyle, 'classic');

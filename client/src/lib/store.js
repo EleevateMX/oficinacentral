@@ -737,6 +737,8 @@ class Office {
     const msg = e?.name === 'NotAllowedError' ? 'Permiso denegado. Revisa los permisos de micrófono/cámara del navegador.'
       : e?.name === 'NotFoundError' ? 'No se encontró el dispositivo.'
         : !window.isSecureContext ? 'El micrófono y la cámara requieren HTTPS (o localhost).'
+          : e?.voiceServer ? e.message
+          : /engine not connected|not connected within timeout|could not establish/i.test(e?.message || '') ? 'No se pudo conectar con el servidor de voz. Revisa tu conexión e inténtalo de nuevo.'
           : `No se pudo acceder al dispositivo: ${e?.message || e}`;
     this.toast({ title: msg, kind: 'error' });
   }
