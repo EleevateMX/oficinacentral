@@ -13,8 +13,8 @@ function androidIntent(url) {
   return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.discord;S.browser_fallback_url=${encodeURIComponent(url)};end`;
 }
 
-export default function DiscordButton({ mode, invite, className = 'btn block discord-btn', children }) {
-  const fallback = `/api/auth/discord?${new URLSearchParams({ mode, ...(invite ? { invite } : {}) })}`;
+export default function DiscordButton({ mode, invite, slug, className = 'btn block discord-btn', children }) {
+  const fallback = `/api/auth/discord?${new URLSearchParams({ mode, ...(invite ? { invite } : {}), ...(slug ? { slug } : {}) })}`;
   const mobile = isMobile();
   const [start, setStart] = useState(null); // { url, hid, code }
   const [waiting, setWaiting] = useState(false);
@@ -25,12 +25,12 @@ export default function DiscordButton({ mode, invite, className = 'btn block dis
   useEffect(() => {
     if (!mobile) return undefined;
     let alive = true;
-    const load = () => api.post('/auth/discord/start', { mode, invite, handoff: isStandalone() })
+    const load = () => api.post('/auth/discord/start', { mode, invite, slug, handoff: isStandalone() })
       .then((r) => alive && setStart(r)).catch(() => alive && setStart(null));
     load();
     const t = setInterval(load, 8 * 60e3);
     return () => { alive = false; clearInterval(t); };
-  }, [mode, invite, mobile]);
+  }, [mode, invite, slug, mobile]);
 
   // La app instalada espera el regreso de Discord
   useEffect(() => {

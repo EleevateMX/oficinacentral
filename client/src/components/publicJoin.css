@@ -1,0 +1,72 @@
+/* ---------- Enlace público para unirse (PublicJoin.jsx): portada Eleevate ---------- */
+.pj {
+  --pj-navy: #222640; --pj-navy-2: #171a2e; --pj-steel: #9CBED9; --pj-ice: #F4F6F9; --pj-blurple: #5865F2;
+  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 16px 24px; box-sizing: border-box; overflow: hidden; color: var(--pj-ice);
+  background: radial-gradient(1200px 700px at 50% -10%, #2e3456 0%, var(--pj-navy) 45%, var(--pj-navy-2) 100%);
+  font-family: var(--font-body, system-ui, -apple-system, sans-serif);
+}
+.pj-ring {
+  position: absolute; width: 820px; height: 820px; left: 50%; top: 46%; transform: translate(-50%, -50%); border-radius: 50%;
+  border: 1px solid rgba(156, 190, 217, .16); pointer-events: none;
+  box-shadow: 0 0 0 100px rgba(156, 190, 217, .03), 0 0 0 200px rgba(156, 190, 217, .018);
+}
+.pj-card {
+  position: relative; width: 100%; max-width: 440px; box-sizing: border-box; text-align: center;
+  padding: 34px 30px 26px; border-radius: 24px; background: rgba(23, 26, 46, .78); backdrop-filter: blur(12px);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(244, 246, 249, .1), 0 0 0 1px rgba(156, 190, 217, .12);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.pj-logo { width: 84px; height: 84px; object-fit: contain; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, .45)); }
+.pj-kicker { margin-top: 6px; font-size: 11px; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; color: var(--pj-steel); }
+.pj-name { margin: 0; font-family: var(--font-display, inherit); font-size: 46px; font-weight: 800; letter-spacing: .02em; line-height: 1; color: var(--pj-ice); }
+.pj-title { margin: 10px 0 0; font-size: 20px; font-weight: 700; color: var(--pj-ice); }
+.pj-sub { margin: 4px 0 6px; color: #b9c4d3; font-size: 15px; line-height: 1.5; max-width: 340px; }
+.pj-discord {
+  margin-top: 10px; width: 100%; height: 60px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 12px;
+  background: var(--pj-blurple); color: #fff !important; font-size: 18px; font-weight: 800; text-decoration: none; letter-spacing: .01em;
+  box-shadow: 0 10px 30px rgba(88, 101, 242, .45), inset 0 1px 0 rgba(255, 255, 255, .25); transition: transform .12s, box-shadow .12s, background .12s;
+}
+.pj-discord:hover { background: #4752e0; transform: translateY(-1px); box-shadow: 0 14px 36px rgba(88, 101, 242, .55), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.pj-discord:focus-visible { outline: 3px solid var(--pj-steel); outline-offset: 3px; }
+.pj-rules { list-style: none; margin: 12px 0 2px; padding: 12px 14px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 7px;
+  background: rgba(156, 190, 217, .07); border: 1px solid rgba(156, 190, 217, .14); border-radius: 14px; text-align: left; font-size: 13px; color: #c3cedb; line-height: 1.4; }
+.pj-rules li { position: relative; padding-left: 18px; }
+.pj-rules li::before { content: ''; position: absolute; left: 2px; top: 7px; width: 7px; height: 7px; border-radius: 2px; background: var(--pj-steel); transform: rotate(45deg); }
+.pj-rules b { color: var(--pj-ice); }
+.pj-error { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 12px; background: rgba(226, 82, 74, .14); border: 1px solid rgba(226, 82, 74, .45); color: #ffd3cf; font-size: 13.5px; line-height: 1.4; }
+.pj-link { margin-top: 8px; color: var(--pj-steel); font-size: 13.5px; text-decoration: none; }
+.pj-link:hover { text-decoration: underline; }
+.pj-foot { position: relative; margin-top: 18px; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: rgba(156, 190, 217, .55); }
+.pj .discord-wait { width: 100%; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #c3cedb; }
+.pj .auth-error { color: #ffb4ad; font-size: 13px; }
+.pj-wait { display: flex; gap: 8px; margin: 14px 0 2px; }
+.pj-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pj-steel); animation: pj-bounce 1.2s infinite ease-in-out; }
+.pj-dot:nth-child(2) { animation-delay: .15s; }
+.pj-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes pj-bounce { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-6px); } }
+@media (max-width: 480px) {
+  .pj-card { padding: 28px 20px 22px; border-radius: 20px; }
+  .pj-name { font-size: 40px; }
+  .pj-ring { width: 560px; height: 560px; }
+}
+
+/* ---------- Preferencias → Registro abierto (PublicJoinAdmin.jsx) ---------- */
+.pja-link { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; }
+.pja-link-main { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px; }
+.pja-url { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); font: 600 13px ui-monospace, monospace; }
+.pja-url code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: none; }
+.pja-qr { width: 132px; height: 132px; border-radius: 12px; background: #fff; padding: 6px; box-sizing: border-box; image-rendering: pixelated; flex-shrink: 0; }
+.pja-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pja-stat { padding: 10px 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); }
+.pja-stat b { display: block; font-size: 22px; line-height: 1.1; }
+.pja-stat span { font-size: 11.5px; color: var(--text-3); }
+.pja-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pja-num { width: 76px; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+.pja-slug { width: 170px; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-family: ui-monospace, monospace; }
+.pja-pending { display: flex; flex-direction: column; gap: 6px; }
+.pja-person { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); }
+.pja-person > div { flex: 1; min-width: 0; }
+.pja-person small { display: block; color: var(--text-3); font-size: 12px; }
+.pja-paused { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: rgba(224, 177, 90, .12); border: 1px solid rgba(224, 177, 90, .45); font-size: 13px; }
+@media (max-width: 560px) { .pja-stats { grid-template-columns: repeat(2, 1fr); } }

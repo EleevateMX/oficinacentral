@@ -34,6 +34,7 @@ import { ipBanGate } from './ipBans.js'; // baneo por IP
 import { registerModActionRoutes } from './modActions.js'; // silenciar voz, sacar de la sala, banear + IP
 import { registerDiscordBotRoutes, isModerator } from './discordBot.js'; // bot de Discord (opcional)
 import { hubEmit } from './hubEvents.js';
+import { registerPublicJoinRoutes, registerPublicJoinAdmin } from './publicJoin.js'; // enlace público /unete (con Discord)
 
 export const api = express.Router();
 api.use(restRateLimit); // tope de peticiones por sesión o IP (server/ratelimit.js)
@@ -302,6 +303,8 @@ registerDiscordRoutes(api, {
   publicUser: (u) => publicUser(u, u),
   broadcastUser: (id) => broadcastUser(id),
 });
+
+registerPublicJoinRoutes(api, { officeName: () => officeConfig().officeName }); // /join/info, /join/status
 
 api.get('/invites/:token', (req, res) => {
   const inv = validInvite(req.params.token);
@@ -896,6 +899,7 @@ mod.registerModerationRoutes(api, admin, {
 });
 registerModActionRoutes(api, admin, { fail, wrap, perUser, isModerator: (id) => isModerator(id) }); // /mod/:id, /admin/ipbans, /admin/ips/:id
 registerDiscordBotRoutes(api, admin, { fail, wrap, broadcastUser }); // /admin/discord…
+registerPublicJoinAdmin(admin, { fail, wrap, broadcastUser }); // /admin/public-join…
 api.use('/admin', admin);
 registerAchievementRoutes(api);
 
