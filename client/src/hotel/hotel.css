@@ -221,3 +221,10 @@
   .ht-chatbar { bottom: 10px; }
 }
 .ht-cats-title { margin: 12px 10px 4px; }
+
+/* ===== Salas oficiales GTAHUB ===== */
+.ht-room-card.official { border-color: rgba(254,51,119,.55); background: linear-gradient(180deg, rgba(254,51,119,.10), rgba(255,204,0,.04) 60%), var(--ht-panel); }
+.ht-room-card.official .ht-room-thumb { background: radial-gradient(120% 90% at 50% 0%, rgba(254,51,119,.35), transparent 60%), linear-gradient(180deg, #24242c, #18181d); }
+.ht-official-badge { position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; background: linear-gradient(90deg, #FE3377, #ff6a3d); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .06em; box-shadow: 0 2px 10px rgba(254,51,119,.45), inset 0 0 0 1px rgba(255,204,0,.55); }
+.ht-official-badge svg { color: #FFCC00; }
+.ht-official-owner { color: #FFCC00; font-weight: 700; }

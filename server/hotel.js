@@ -2,10 +2,11 @@
 // REST bajo /api/hotel (lista de salas, crear/editar/borrar, inventario, tienda, permisos)
 // y tiempo real con Socket.IO (entrar, caminar, chat, colocar/mover/usar furnis, timbre, moderación).
 // No toca la presencia de la oficina: es una capa aparte.
-import { db, now } from './db.js';
+import { db, now, addColumn } from './db.js';
 import { hashPassword, verifyPassword } from './auth.js';
 import { audit } from './security.js';
-import { ROOM_MODELS, ROT_DIR, ACCESS, CHAT_MODES, MAX_ROOMS_PER_USER, MAX_FURNI_PER_ROOM, MAX_INVENTORY, ROOM_CAPACITY, WALK_SPEED } from '../shared/hotel.js';
+import { ROOM_MODELS, ROT_DIR, ACCESS, CHAT_MODES, MAX_ROOMS_PER_USER, MAX_FURNI_PER_ROOM, MAX_INVENTORY, ROOM_CAPACITY, WALK_SPEED, OFFICIAL_CAPACITY, OFFICIAL_MAX_FURNI, PUBLIC_MODELS } from '../shared/hotel.js';
+import { seedOfficialRooms, isSeedItem } from './hotelOfficial.js';
 import { FURNI_BY_ID, STARTER_INVENTORY } from '../shared/hotelCatalog.js';
 import { buildRoom, tileInfo, findPath, canPlace, canPlaceWall, roomAddItem, roomRemoveItem, wallBase, dirOf } from '../shared/hotelRoom.js';
 
@@ -49,6 +50,16 @@ CREATE TABLE IF NOT EXISTS hotel_profiles (
   starter_at INTEGER
 );
 `);
+// Salas oficiales de GTAHUB: official = orden en el navegador (0 = sala normal), official_key = cuál es
+addColumn('hotel_rooms', 'official', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('hotel_rooms', 'official_key', 'TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_rooms_official ON hotel_rooms(official_key) WHERE official_key IS NOT NULL');
+const capOf = (row) => (row?.official ? OFFICIAL_CAPACITY : ROOM_CAPACITY);
+let officialReady = false;
+export function ensureOfficialRooms() {
+  if (officialReady) return;
+  try { officialReady = !!seedOfficialRooms(); } catch (e) { console.error('[hotel] No se pudieron sembrar las salas oficiales:', e); }
+}
 
 let IO = null;
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -72,8 +83,9 @@ function roomOut(r, uid) {
     id: r.id, name: r.name, description: r.description, model: r.model, access: r.access,
     ownerId: r.owner_id, ownerName: owner?.display_name || '¿?', ownerAvatar: parse(owner?.avatar, {}),
     wallColor: r.wall_color, floorColor: r.floor_color,
-    users: L ? L.users.size : 0, capacity: ROOM_CAPACITY, isOwner: r.owner_id === uid,
+    users: L ? L.users.size : 0, capacity: capOf(r), isOwner: r.owner_id === uid,
     hasPassword: !!r.password_hash, updatedAt: r.updated_at,
+    official: !!r.official, officialKey: r.official_key || null,
   };
 }
 const roomRow = (id) => db.prepare('SELECT * FROM hotel_rooms WHERE id = ?').get(Number(id));
@@ -130,7 +142,8 @@ function loadRoom(id) {
 function unloadIfEmpty(R) {
   if (!R.users.size) live.delete(R.id);
 }
-const canEdit = (R, uid) => R.row.owner_id === uid || R.rights.has(uid) || isAdmin(uid);
+// Salas oficiales: solo los admins decoran (nadie tiene "permisos" ahí)
+const canEdit = (R, uid) => (R.row.official ? isAdmin(uid) : R.row.owner_id === uid || R.rights.has(uid) || isAdmin(uid));
 
 // Posición lógica de alguien que camina (la casilla en la que va)
 function logical(U, t = Date.now()) {
@@ -281,7 +294,7 @@ function teleport(R, U, item) {
     }
     const R2 = loadRoom(o.roomId);
     if (!R2) return;
-    if (isBanned(R2.id, U.id) || (R2.users.size >= ROOM_CAPACITY && !isAdmin(U.id) && R2.row.owner_id !== U.id)) {
+    if (isBanned(R2.id, U.id) || (R2.users.size >= capOf(R2.row) && !isAdmin(U.id) && R2.row.owner_id !== U.id)) {
       unloadIfEmpty(R2);
       U.socket.emit('hotel:notice', { text: 'No se pudo: la otra sala está llena o no puedes entrar' });
       return;
@@ -330,7 +343,7 @@ export function initHotel(io, socket, userId) {
     const owner = row.owner_id === userId, admin = isAdmin(userId), rights = R.rights.has(userId);
     const fail = (reason) => { unloadIfEmpty(R); socket.emit('hotel:enter:fail', { roomId, reason }); };
     if (!owner && !admin && isBanned(roomId, userId)) return fail('banned');
-    if (!owner && !admin && R.users.size >= ROOM_CAPACITY) return fail('full');
+    if (!owner && !admin && R.users.size >= capOf(row)) return fail('full');
     if (owner || admin || rights || row.access === 'open') return enterRoom(socket, userId, R);
     if (row.access === 'closed') return fail('closed');
     if (row.access === 'password') {
@@ -355,7 +368,7 @@ export function initHotel(io, socket, userId) {
     pendingBell.delete(guest);
     for (const U of R.users.values()) if (canEdit(R, U.id) && U.id !== userId) U.socket.emit('hotel:bell:done', { userId: guest });
     if (m.allow) {
-      if (R.users.size >= ROOM_CAPACITY) return p.socket.emit('hotel:enter:fail', { roomId: R.id, reason: 'full' });
+      if (R.users.size >= capOf(R.row)) return p.socket.emit('hotel:enter:fail', { roomId: R.id, reason: 'full' });
       enterRoom(p.socket, guest, R);
     } else p.socket.emit('hotel:enter:fail', { roomId: R.id, reason: 'denied' });
   });
@@ -447,7 +460,8 @@ export function initHotel(io, socket, userId) {
     if (!canEdit(R, userId)) return err('No tienes permiso para decorar esta sala');
     const row = db.prepare('SELECT * FROM hotel_items WHERE id = ? AND owner_id = ? AND room_id IS NULL').get(Number(m?.itemId), userId);
     if (!row) return err('Ese furni no está en tu inventario');
-    if (R.items.size >= MAX_FURNI_PER_ROOM) return err(`La sala ya tiene el máximo de ${MAX_FURNI_PER_ROOM} furnis`);
+    const maxFurni = R.row.official ? OFFICIAL_MAX_FURNI : MAX_FURNI_PER_ROOM;
+    if (R.items.size >= maxFurni) return err(`La sala ya tiene el máximo de ${maxFurni} furnis`);
     const it = itemOut(row);
     if (!FURNI_BY_ID[it.type]) return err('Ese furni ya no existe');
     const v = placeCommon(R, it, m);
@@ -511,12 +525,14 @@ export function initHotel(io, socket, userId) {
     const tiles = footTiles(it);
     if (!it.wall) roomRemoveItem(R.grid, it);
     R.items.delete(it.id);
+    IO.to(key(R.id)).emit('hotel:item', { op: 'remove', id: it.id });
+    refreshUsers(R, tiles);
+    // Los furnis sembrados de una sala oficial no van a ningún inventario: se quitan
+    if (isSeedItem(it)) { db.prepare('DELETE FROM hotel_items WHERE id = ?').run(it.id); return; }
     Object.assign(it, { roomId: null, x: null, y: null, z: 0, wall: null, state: 0 });
     persist(it);
-    IO.to(key(R.id)).emit('hotel:item', { op: 'remove', id: it.id });
     // Regresa al inventario de quien es dueño del furni
     IO.to(`user:${it.ownerId}`).emit('hotel:inv', { add: [it] });
-    refreshUsers(R, tiles);
   });
 
   socket.on('hotel:use', (m) => {
@@ -546,7 +562,8 @@ export function initHotel(io, socket, userId) {
       return;
     }
     if (!def.interact || def.states < 2) return;
-    if (!canEdit(R, userId)) return err('Solo quien tiene permisos puede usar esto');
+    // En salas oficiales cualquiera prende/apaga (lámparas, maquinitas, tele…); rejas y lo demás, solo admins
+    if (!canEdit(R, userId) && !(R.row.official && def.interact === 'toggle')) return err('Solo quien tiene permisos puede usar esto');
     if (def.interact === 'gate' && it.state === 1) {
       // No se cierra con alguien encima
       const tiles = footTiles(it);
@@ -588,21 +605,27 @@ function broadcastRoom(R) {
 export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   const roomLimiter = new Map();
   const buyTimes = new Map();
+  setImmediate(ensureOfficialRooms); // al arrancar (después de crear el primer admin)
+  const MINE = 'SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ? AND official = 0';
+  const officialFirst = (a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (a.official && b.official ? a.official - b.official : 0);
 
   api.get('/hotel/rooms', wrap((req, res) => {
     const uid = req.user.id;
     ensureStarter(uid);
+    ensureOfficialRooms();
     const tab = String(req.query.tab || 'popular');
     const q = String(req.query.q || '').trim().slice(0, 40);
     let rows;
-    if (tab === 'mine') rows = db.prepare('SELECT * FROM hotel_rooms WHERE owner_id = ? ORDER BY updated_at DESC').all(uid);
+    if (tab === 'official') rows = db.prepare('SELECT * FROM hotel_rooms WHERE official > 0 ORDER BY official').all();
+    else if (tab === 'mine') rows = db.prepare('SELECT * FROM hotel_rooms WHERE owner_id = ? AND official = 0 ORDER BY updated_at DESC').all(uid);
     else if (tab === 'all' || q) rows = db.prepare("SELECT * FROM hotel_rooms WHERE name LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT 100").all(`%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     else {
       rows = db.prepare('SELECT * FROM hotel_rooms ORDER BY updated_at DESC LIMIT 200').all();
       rows.sort((a, b) => (live.get(b.id)?.users.size || 0) - (live.get(a.id)?.users.size || 0) || b.updated_at - a.updated_at);
       rows = rows.slice(0, 50);
     }
-    res.json({ rooms: rows.map((r) => roomOut(r, uid)), mine: db.prepare('SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ?').get(uid).n, maxRooms: MAX_ROOMS_PER_USER });
+    rows.sort(officialFirst); // las oficiales siempre primero (orden estable para el resto)
+    res.json({ rooms: rows.map((r) => roomOut(r, uid)), mine: db.prepare(MINE).get(uid).n, maxRooms: MAX_ROOMS_PER_USER });
   }));
 
   api.get('/hotel/rooms/:id', wrap((req, res) => {
@@ -621,7 +644,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     }
     if (b.description !== undefined) out.description = cleanText(b.description).slice(0, 200);
     if (!partial) {
-      if (!ROOM_MODELS[b.model]) return { error: 'Elige un modelo de sala' };
+      if (!ROOM_MODELS[b.model] || !PUBLIC_MODELS.includes(b.model)) return { error: 'Elige un modelo de sala' };
       out.model = b.model;
     }
     if (!partial || b.access !== undefined) {
@@ -648,7 +671,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
     const uid = req.user.id;
     const t = Date.now();
     if (t - (roomLimiter.get(uid) || 0) < 1500) return fail(res, 429, 'Espera un momento');
-    const n = db.prepare('SELECT COUNT(*) AS n FROM hotel_rooms WHERE owner_id = ?').get(uid).n;
+    const n = db.prepare(MINE).get(uid).n;
     if (n >= MAX_ROOMS_PER_USER) return fail(res, 400, `Ya tienes ${MAX_ROOMS_PER_USER} salas (el máximo)`);
     const v = validRoom(req.body || {});
     if (v.error) return fail(res, 400, v.error);
@@ -662,9 +685,10 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
   const ownerOrAdmin = (req, res) => {
     const r = roomRow(req.params.id);
     if (!r) { fail(res, 404, 'Esa sala ya no existe'); return null; }
-    if (r.owner_id !== req.user.id && req.user.role !== 'admin') { fail(res, 403, 'Solo quien es dueño de la sala puede hacer esto'); return null; }
+    if (r.official ? req.user.role !== 'admin' : r.owner_id !== req.user.id && req.user.role !== 'admin') { fail(res, 403, r.official ? 'Solo los admins pueden editar las salas oficiales' : 'Solo quien es dueño de la sala puede hacer esto'); return null; }
     return r;
   };
+  const notOfficial = (r, res, msg) => { if (!r?.official) return true; fail(res, 403, msg); return false; };
 
   api.patch('/hotel/rooms/:id', wrap((req, res) => {
     const r = ownerOrAdmin(req, res);
@@ -682,7 +706,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
 
   api.delete('/hotel/rooms/:id', wrap((req, res) => {
     const r = ownerOrAdmin(req, res);
-    if (!r) return;
+    if (!r || !notOfficial(r, res, 'Las salas oficiales no se pueden borrar')) return;
     const R = live.get(r.id);
     if (R) for (const uid of [...R.users.keys()]) leaveRoom(uid, 'deleted');
     live.delete(r.id);
@@ -696,7 +720,7 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
 
   api.post('/hotel/rooms/:id/rights', wrap((req, res) => {
     const r = ownerOrAdmin(req, res);
-    if (!r) return;
+    if (!r || !notOfficial(r, res, 'En las salas oficiales solo los admins decoran')) return;
     const target = Number(req.body?.userId);
     if (!getUser(target) || target === r.owner_id) return fail(res, 400, 'Persona inválida');
     db.prepare('INSERT OR IGNORE INTO hotel_rights (room_id, user_id) VALUES (?, ?)').run(r.id, target);
@@ -763,4 +787,4 @@ export function registerHotelRoutes(api, { fail, wrap, notify = null }) {
 }
 
 // Para pruebas
-export const _hotel = { live, where };
+export const _hotel = { live, where, seedOfficialRooms };

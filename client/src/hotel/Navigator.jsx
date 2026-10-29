@@ -1,6 +1,6 @@
 // Hotel: navegador de salas (Populares / Mis salas / Buscar) y diálogo para crear sala.
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Plus, Search, Users, Lock, Bell, KeyRound, Flame, Home, X, Building2 } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Users, Lock, Bell, KeyRound, Flame, Home, X, Building2, BadgeCheck } from 'lucide-react';
 import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Avatar } from '../components/ui.jsx';
@@ -25,7 +25,7 @@ export function ModelPreview({ model, className = '' }) {
 
 export default function Navigator({ onExit }) {
   const rooms = useHotel((s) => s.rooms);
-  const tab = useHotel((s) => s.navTab || 'popular');
+  const tab = useHotel((s) => s.navTab || 'official');
   const myRooms = useHotel((s) => s.myRooms || 0);
   const maxRooms = useHotel((s) => s.maxRooms || 5);
   const entering = useHotel((s) => s.entering);
@@ -35,7 +35,7 @@ export default function Navigator({ onExit }) {
   const [creating, setCreating] = useState(false);
   const [pw, setPw] = useState('');
 
-  useEffect(() => { hotel.refreshRooms(tab); const t = setInterval(() => hotel.refreshRooms(hotel.state.navTab || 'popular', hotel.state.navQ || ''), 15e3); return () => clearInterval(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { hotel.refreshRooms(tab); const t = setInterval(() => hotel.refreshRooms(hotel.state.navTab || 'official', hotel.state.navQ || ''), 15e3); return () => clearInterval(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (tab !== 'all') return undefined;
     const t = setTimeout(() => { hotel.set({ navQ: q }); hotel.refreshRooms('all', q); }, 250);
@@ -62,7 +62,7 @@ export default function Navigator({ onExit }) {
         <button className="ht-btn primary" onClick={() => setCreating(true)} disabled={myRooms >= maxRooms} title={myRooms >= maxRooms ? `Máximo ${maxRooms} salas` : ''}><Plus size={16} /> Crear sala</button>
       </header>
       <div className="ht-tabs">
-        {[['popular', Flame, 'Populares'], ['mine', Home, 'Mis salas'], ['all', Search, 'Buscar']].map(([id, Icon, label]) => (
+        {[['official', BadgeCheck, 'Oficiales'], ['popular', Flame, 'Populares'], ['mine', Home, 'Mis salas'], ['all', Search, 'Buscar']].map(([id, Icon, label]) => (
           <button key={id} className={`ht-tab ${tab === id ? 'on' : ''}`} onClick={() => hotel.refreshRooms(id, id === 'all' ? q : '')}><Icon size={15} /> {label}</button>
         ))}
         {tab === 'all' && <input className="ht-input ht-search" autoFocus placeholder="Busca una sala por nombre…" value={q} onChange={(e) => setQ(e.target.value)} />}
@@ -79,16 +79,19 @@ export default function Navigator({ onExit }) {
           const owner = users[r.ownerId] || { id: r.ownerId, displayName: r.ownerName, avatar: r.ownerAvatar };
           const full = r.users >= r.capacity;
           return (
-            <button key={r.id} className="ht-room-card" onClick={() => open(r)} disabled={entering?.roomId === r.id && !entering.askPassword}>
+            <button key={r.id} className={`ht-room-card ${r.official ? 'official' : ''}`} onClick={() => open(r)} disabled={entering?.roomId === r.id && !entering.askPassword}>
               <div className="ht-room-thumb" style={{ '--floor': r.floorColor || '#b59a7a' }}>
                 <ModelPreview model={r.model} />
                 <span className={`ht-pill ${r.users ? 'live' : ''} ${full ? 'full' : ''}`}><Users size={12} /> {r.users}/{r.capacity}</span>
                 {r.access !== 'open' && <span className="ht-lock" title={ACCESS_LABEL[r.access]}><AccessIcon access={r.access} /></span>}
+                {r.official && <span className="ht-official-badge" title="Sala oficial de GTAHUB"><BadgeCheck size={12} /> GTAHUB</span>}
               </div>
               <div className="ht-room-info">
                 <b>{r.name}</b>
                 {r.description && <span className="ht-room-desc">{r.description}</span>}
-                <span className="ht-room-owner"><Avatar user={owner} size={18} showStatus={false} /> {r.isOwner ? 'Tuya' : owner.displayName}</span>
+                {r.official
+                  ? <span className="ht-room-owner ht-official-owner"><BadgeCheck size={15} /> Sala oficial</span>
+                  : <span className="ht-room-owner"><Avatar user={owner} size={18} showStatus={false} /> {r.isOwner ? 'Tuya' : owner.displayName}</span>}
               </div>
             </button>
           );
@@ -149,7 +152,7 @@ function CreateRoom({ onClose }) {
           <label className="ht-field"><span>Descripción <i>(opcional)</i></span><input className="ht-input" maxLength={200} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="¿De qué va tu sala?" /></label>
           <div className="ht-field"><span>Modelo</span>
             <div className="ht-models">
-              {Object.entries(ROOM_MODELS).map(([id, m]) => (
+              {Object.entries(ROOM_MODELS).filter(([, m]) => !m.official).map(([id, m]) => (
                 <button type="button" key={id} className={`ht-model ${model === id ? 'on' : ''}`} onClick={() => setModel(id)}>
                   <ModelPreview model={id} />
                   <b>{m.name}</b><span>{m.size}</span>

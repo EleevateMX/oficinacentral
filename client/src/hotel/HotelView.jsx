@@ -19,6 +19,7 @@ export default function HotelView() {
   useEffect(() => {
     hotel.attach();
     hotel.loadInventory();
+    hotel.enterOfficial(); // entrar directo a la Oficina Central (el navegador sigue a un clic)
     return () => {
       if (hotel.state.roomId) hotel.socket?.emit('hotel:leave');
       hotel.clearRoom();
@@ -101,7 +102,7 @@ function RoomView({ onExit }) {
         <button className="ht-btn dark" onClick={() => hotel.leave()} title="Ver otras salas"><Compass size={16} /> <span className="ht-hide-sm">Navegador</span></button>
         <div className="ht-roomname">
           <b>{room.name}</b>
-          <span>de {owner?.displayName || room.ownerName}</span>
+          <span>{room.official ? 'Sala oficial GTAHUB' : `de ${owner?.displayName || room.ownerName}`}</span>
         </div>
       </div>
       <div className="ht-sidebar">

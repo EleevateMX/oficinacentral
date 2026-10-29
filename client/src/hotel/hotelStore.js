@@ -51,7 +51,7 @@ class Hotel {
 
   get me() { return office.state.me?.id; }
   get socket() { return office.socket; }
-  canEdit() { const s = this.state; return !!(s.isOwner || s.admin || s.rights.includes(this.me)); }
+  canEdit() { const s = this.state; if (s.room?.official) return !!s.admin; return !!(s.isOwner || s.admin || s.rights.includes(this.me)); }
 
   // ---------- Socket ----------
   attach() {
@@ -100,7 +100,7 @@ class Hotel {
   bump(k) { this.set((st) => ({ [k]: st[k] + 1 })); }
 
   // ---------- Navegador ----------
-  async refreshRooms(tab = this.state.navTab || 'popular', q = '') {
+  async refreshRooms(tab = this.state.navTab || 'official', q = '') {
     try {
       const r = await api.get(`/hotel/rooms?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
       this.set({ rooms: r.rooms, navTab: tab, myRooms: r.mine, maxRooms: r.maxRooms });
@@ -111,6 +111,15 @@ class Hotel {
     this.password = password ?? null;
     this.set({ entering: { roomId }, waiting: null });
     this.socket?.emit('hotel:enter', { roomId, password });
+  }
+  // Al subir al Hotel: directo a la sala oficial principal (Oficina Central)
+  async enterOfficial() {
+    try {
+      const r = await api.get('/hotel/rooms?tab=official');
+      this.set({ rooms: r.rooms, navTab: 'official', myRooms: r.mine, maxRooms: r.maxRooms });
+      const hq = r.rooms.find((x) => x.officialKey === 'hq') || r.rooms[0];
+      if (hq && !this.state.roomId && !this.state.entering) this.enter(hq.id);
+    } catch { /* se queda en el navegador */ }
   }
   leave() {
     this.socket?.emit('hotel:leave');

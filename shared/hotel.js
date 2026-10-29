@@ -18,6 +18,7 @@ export const TILE_W = 64;
 export const TILE_H = 32;
 export const Z_PX = 32; // px por unidad de altura
 export const WALL_H = 3.5; // altura de las paredes en unidades
+import { OFFICIAL_MODELS } from './hotelOfficialModels.js';
 
 export const toScreen = (x, y, z = 0) => ({ sx: (x - y) * (TILE_W / 2), sy: (x + y) * (TILE_H / 2) - z * Z_PX });
 export const fromScreen = (sx, sy, z = 0) => {
@@ -143,6 +144,29 @@ export const ROOM_MODELS = {
   },
 };
 
+// Salas oficiales (Oficina Central, Sala de juntas…): mapas propios con official: true
+Object.assign(ROOM_MODELS, OFFICIAL_MODELS);
+// Modelos que cualquiera puede elegir al crear su sala (a–f)
+export const PUBLIC_MODELS = Object.keys(ROOM_MODELS).filter((k) => !ROOM_MODELS[k].official);
+export const MAX_MODEL_SIZE = 40; // casillas por lado
+
+// Revisa que un modelo sea válido: tamaño, caracteres, bordes vacíos y la puerta en el borde izquierdo
+// con piso detrás. Devuelve null si está bien o el motivo.
+export function validateModel(m) {
+  if (!m || !Array.isArray(m.map) || !m.map.length) return 'Sin mapa';
+  const rows = m.map, H = rows.length, W = Math.max(...rows.map((r) => r.length));
+  if (W < 3 || H < 3 || W > MAX_MODEL_SIZE + 1 || H > MAX_MODEL_SIZE + 1) return 'Tamaño inválido';
+  if (rows.some((r) => !/^[x0-9]+$/.test(r))) return 'Caracteres inválidos';
+  const d = m.door;
+  if (!d || d.x !== 0 || !Number.isInteger(d.y) || d.y < 1 || d.y >= H) return 'Puerta inválida';
+  if (![0, 2, 4, 6].includes(d.rot)) return 'Rotación de puerta inválida';
+  if (/[0-9]/.test(rows[0])) return 'La fila 0 debe estar vacía';
+  for (let y = 1; y < H; y++) if (y !== d.y && rows[y][0] !== 'x') return 'La columna 0 debe estar vacía (salvo la puerta)';
+  const inner = rows[d.y][1];
+  if (!inner || inner === 'x' || rows[d.y][0] !== inner) return 'La puerta debe estar a la altura del piso de enfrente';
+  return null;
+}
+
 // Lee el mapa de alturas: devuelve { W, H, heights: number[][] (NaN = vacío) }
 export function parseModel(model) {
   const rows = (ROOM_MODELS[model] || ROOM_MODELS.a).map;
@@ -154,8 +178,10 @@ export function parseModel(model) {
 export const ACCESS = ['open', 'bell', 'password', 'closed']; // abierta, con timbre, con contraseña, solo dueño
 export const MAX_ROOMS_PER_USER = 5;
 export const MAX_FURNI_PER_ROOM = 250;
+export const OFFICIAL_MAX_FURNI = 400; // salas oficiales (más grandes)
 export const MAX_INVENTORY = 400;
 export const ROOM_CAPACITY = 25;
+export const OFFICIAL_CAPACITY = 50; // salas oficiales
 export const CHAT_MODES = ['say', 'shout', 'whisper'];
 export const WALK_SPEED = 2.2; // casillas por segundo
 export const MAX_STEP = 1.5; // diferencia de altura máxima para subir/bajar un paso

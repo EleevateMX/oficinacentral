@@ -158,7 +158,7 @@ INSERT OR IGNORE INTO channels (name) VALUES ('general'), ('social');
 `);
 
 // Columnas nuevas en bases de datos ya existentes
-function addColumn(table, col, def) {
+export function addColumn(table, col, def) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
   if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
