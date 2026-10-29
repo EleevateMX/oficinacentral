@@ -8,12 +8,13 @@
 //   opts.pose: 'stand' | 'walk' | 'sit' | 'lay' | 'wave' | 'dance' | 'sign'
 //   opts.frame: cuadro (walk 0–3, wave 0–1) · opts.blink · opts.talk · opts.seatH
 //   opts.hand: objeto en la mano · opts.drink: dando un trago · opts.sign: número del cartel
-//   opts.danceT / opts.danceV: tiempo y rutina del baile (las mismas rutinas que la oficina)
+//   opts.pose 'dance' | 'kiss' | 'laugh' | 'jump' (y 'wave'): opts.actT = ms desde que empezó, opts.actN = baile 1–4
+//   (ver actions.js: respetan la dirección del cuerpo, así se ven en las 8 direcciones)
 //   cv = canvas en píxeles del dibujo; ax, ay, w, h, head, top, hands = en px del mundo (k = 2 px por píxel)
 //   (ax, ay) = píxel de los pies (o, acostado, el centro de la casilla de la almohada sobre el colchón)
 import { hotelFrame, paintHandItem, normalizeSpec, DIRS8, FRAME_W, FRAME_H, WALK_COLS_LEGACY } from '../../../shared/sprite.js';
 import { DIR_VEC } from '../../../shared/hotelWalk.js';
-import { emotePose } from '../lib/emoteFx.js';
+import { actPose } from './actions.js';
 
 export const K = 2; // px del mundo por píxel del dibujo
 const FOOT = 47; // fila debajo de los zapatos (los pies "pisan" aquí)
@@ -30,12 +31,12 @@ export function spritePose(o) {
   switch (o.pose) {
     case 'walk': step = ((o.frame | 0) % 4) + 1; break;
     case 'sit': pose = 'sit'; break;
-    case 'wave': pose = o.frame & 1 ? 'wave2' : 'wave1'; break;
+    case 'wave': pose = o.actT != null ? actPose('wave', 0, o.actT, dir).pose : o.frame & 1 ? 'wave2' : 'wave1'; break;
     case 'sign': pose = 'sign'; break;
-    case 'dance': {
-      const p = emotePose({ kind: 'dance', start: 0, until: 1e12, variant: o.danceV | 0 }, o.danceT || 0, null, null);
+    case 'dance': case 'kiss': case 'laugh': case 'jump': {
+      const p = actPose(o.pose, o.actN ?? 1, o.actT ?? 0, dir);
       pose = p.pose;
-      if (p.dir && p.dir !== 'down') view = p.dir;
+      view = DIRS8[p.dir];
       dx = Math.round(p.dx || 0); dy = Math.round(p.dy || 0);
       head = null;
       break;

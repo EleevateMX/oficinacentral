@@ -12,6 +12,9 @@ import { hotel } from './hotelStore.js';
 import { avatarFrame, avatarBudget } from './avatarIso.js';
 import { drawAvatarBehind, drawAvatarFront, drawTyping, avatarAlpha, avatarOpts } from './avatarFx.js';
 import { frontOf } from '@shared/hotelSeat.js';
+import { clickIntent } from '@shared/hotelWalk.js';
+import { drawSpeaking } from './avatarFx.js';
+import { voiceLevel } from './voice.js';
 import { itemPos, mechTint, drawRoomTint } from './mechanics.js';
 
 export const DEFAULT_FLOOR = '#b59a7a';
@@ -264,19 +267,45 @@ export class HotelEngine {
     if (hit?.kind === 'item') {
       const dbl = this.lastClick.id === hit.item.id && t - this.lastClick.t < 380;
       this.lastClick = { t, id: hit.item.id };
-      if (dbl) { this.cb.onUse?.(hit.item); return; }
       const def = FURNI_BY_ID[hit.item.type];
+      // Doble clic en una silla o cama: caminas hasta ahí y te sientas / acuestas (como en el clásico)
+      if (dbl && def && !hit.item.wall && (def.sit || def.lay)) {
+        const ft = this.seatTile(hit.item, def, this.tileAt(p));
+        this.cb.onTile?.(ft.x, ft.y);
+        return;
+      }
+      if (dbl) { this.cb.onUse?.(hit.item); return; }
       this.cb.onItem?.(hit.item);
-      // Sillas, camas, tapetes y teletransportadores: además caminas hacia ahí
-      if (def && !hit.item.wall && (def.walk || def.sit || def.lay)) {
+      // Tapetes y cosas que se pisan: además caminas hacia ahí
+      if (def && !hit.item.wall && def.walk) {
         const tile = this.tileAt(p);
-        if (tile) this.cb.onTile?.(tile.x, tile.y);
+        if (tile) this.tileClick(tile, p);
       }
       return;
     }
     const tile = this.tileAt(p);
-    if (tile) this.cb.onTile?.(tile.x, tile.y);
+    if (tile) this.tileClick(tile, p);
     else this.cb.onEmpty?.();
+  }
+  // Clic en una casilla: tu casilla o una vecina → solo voltear (como en el clásico); lejos → caminar
+  tileClick(tile, p) {
+    const me = hotel.live.users.get(hotel.me);
+    const it = clickIntent(me && { x: me.x, y: me.y, dir: me.dir, moving: !!me.walk, sit: me.sit, lay: me.lay }, tile);
+    if (it.face != null) { this.cb.onLook?.(tile.x, tile.y); return; }
+    if (it.look) {
+      // Hacia el punto exacto bajo el puntero (el centro de la casilla es x + 0.5)
+      const { wx, wy } = this.toWorld(p.x, p.y);
+      const f = fromScreen(wx, wy, tile.z);
+      if (Math.hypot(f.x - tile.x - 0.5, f.y - tile.y - 0.5) > 0.12) this.cb.onLook?.(f.x - 0.5, f.y - 0.5);
+      return;
+    }
+    this.cb.onTile?.(tile.x, tile.y);
+  }
+  // La casilla del furni donde te sientas: la que está bajo el puntero (o la más cercana a ella)
+  seatTile(item, def, tile) {
+    const { w, l } = footprint(def, item.rot);
+    if (!tile) return { x: item.x, y: item.y };
+    return { x: Math.max(item.x, Math.min(item.x + w - 1, tile.x)), y: Math.max(item.y, Math.min(item.y + l - 1, tile.y)) };
   }
 
   // Casilla bajo el puntero (por altura de piso, de la más alta a la más baja)
@@ -387,13 +416,7 @@ export class HotelEngine {
     } else if (tile && !placing && this.mouse && !(this.hover && this.hover.kind !== 'tile')) {
       this.tileMark(ctx, grid, tile.x, tile.y, 'rgba(255,255,255,.14)', 'rgba(255,255,255,.8)');
     }
-    // Destino de tu caminata (se apaga al llegar)
-    const meU = L.users.get(hotel.me);
-    if (meU?.walk && !placing) {
-      const [dx, dy] = meU.walk.path[meU.walk.path.length - 1];
-      const al = 0.45 + 0.25 * Math.sin(t / 160);
-      this.tileMark(ctx, grid, dx, dy, `rgba(255,204,0,${(al * 0.3).toFixed(3)})`, `rgba(255,204,0,${al.toFixed(3)})`, 0.1);
-    }
+    // Como en el clásico: sin línea ni marca del camino, solo la casilla bajo el puntero
 
     // En la puerta: el personaje va detrás del marco (la pared de enfrente lo tapa, como en un pasillo)
     const doorAvs = avs.filter((a) => a.inDoor);
@@ -496,11 +519,10 @@ export class HotelEngine {
     if (moving && !U.walk.slide) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
     else if (lay) pose = 'lay';
     else if (sit) { pose = 'sit'; const f = floorAt(grid, U.x, U.y); seatH = Number.isNaN(f) ? 0.6 : Math.max(0, U.rz - f); }
-    else if (U.act === 'wave') { pose = 'wave'; frame = Math.floor((t - (U.actT || 0)) / 280) % 2; }
-    else if (U.act === 'dance') { pose = 'dance'; frame = Math.floor((t - (U.actT || 0)) / 230) % 4; }
-    // Voltear la cabeza hacia quien habla (máximo una dirección respecto al cuerpo)
-    let head = U.dir;
-    if (U.look && !moving && !lay) {
+    else if (U.act === 'wave' || U.act === 'dance' || U.act === 'kiss' || U.act === 'laugh' || U.act === 'jump') pose = U.act;
+    // Cabeza y cuerpo por separado: la cabeza voltea hacia quien habla cerca (máximo una dirección) y regresa
+    let head = !moving && U.head != null ? U.head : U.dir;
+    if (U.look && !moving && !lay && (pose === 'stand' || pose === 'sit' || pose === 'sign')) {
       const d = ((U.look.dir - U.dir + 12) % 8) - 4;
       head = (U.dir + Math.max(-1, Math.min(1, d)) + 8) % 8;
     }
@@ -690,7 +712,11 @@ export class HotelEngine {
     }
     // Escribiendo…
     const ty = hotel.live.typing.get(U.id);
-    if (ty && Date.now() - ty < 6000) drawTyping(ctx, s.x, s.y - (hov || sel ? 26 : 6), t, Date.now() - ty);
+    const typing = ty && Date.now() - ty < 6000;
+    if (typing) drawTyping(ctx, s.x, s.y - (hov || sel ? 26 : 6), t, Date.now() - ty);
+    // Voz: ondita mientras habla
+    const lv = voiceLevel(U.id);
+    if (lv > 0 && !typing) drawSpeaking(ctx, s.x, s.y - (hov || sel ? 24 : me && !hotel.live.bubbles.length ? 16 : 4), t, lv);
   }
 
   // Globitos de chat: aparecen sobre la cabeza y suben en filas, como en el hotel clásico

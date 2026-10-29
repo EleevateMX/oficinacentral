@@ -574,8 +574,18 @@ class Office {
     const f = this.state.floor;
     const me = this.myPlayer;
     if (!f || !me || !this.media) return;
-    // En el Hotel no se oye la oficina (al volver se reconecta solo)
-    if (this.state.view === 'hotel') { this.media.setPeers([], []); if (this.state.talkingWith.length) this.set({ talkingWith: [] }); return; }
+    // En el Hotel no se oye la oficina: se oye a quien está cerca en tu sala del Hotel (client/src/hotel/voice.js).
+    // Al volver, la oficina se reconecta sola y cada quien regresa a su volumen.
+    if (this.state.view === 'hotel') {
+      const v = this.hotelVoice?.() || { ids: [], warm: [], vol: {} };
+      this.media.setPeers(v.ids, v.warm);
+      this.hotelVols = this.hotelVols || new Set();
+      for (const id of v.ids) { this.hotelVols.add(id); this.media.setPeerVolume?.(id, this.peerVolume(id) * (v.vol[id] ?? 1)); }
+      const prev = this.state.talkingWith;
+      if (prev.length !== v.ids.length || prev.some((x, i) => x !== v.ids[i])) this.set({ talkingWith: v.ids });
+      return;
+    }
+    if (this.hotelVols) { for (const id of this.hotelVols) this.media.setPeerVolume?.(id, this.peerVolume(id)); this.hotelVols = null; }
     const space = talkSpace(f, me.x, me.y);
     const ids = [];
     for (const [id, p] of Object.entries(this.players)) {

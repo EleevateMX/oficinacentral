@@ -17,7 +17,22 @@ import PersonCard from './social/PersonCard.jsx'; // B: social
 import { RoomSocialBar, EventBanner } from './social/RoomSocial.jsx'; // B: social
 import Catalog from './economy/Catalog.jsx'; // A: tienda con créditos HUB
 import EconomyLayer, { WalletBadge } from './economy/EconomyLayer.jsx'; // A: monedero, intercambios y regalos
+import { ActionsButton, HotelMic } from './ActionsMenu.jsx'; // acciones para todos y voz en la sala
+import { DIR_VEC } from '@shared/hotelWalk.js';
 
+// Flechas (extra moderno): un paso hacia donde apunta la flecha en pantalla (arriba = hacia el fondo)
+const ARROWS = { ArrowUp: 7, ArrowRight: 1, ArrowDown: 3, ArrowLeft: 5 };
+let lastArrow = 0;
+function arrowStep(key) {
+  const t = performance.now();
+  if (t - lastArrow < 180) return;
+  lastArrow = t;
+  const me = hotel.live.users.get(hotel.me);
+  if (!me) return;
+  const end = me.walk ? me.walk.path[me.walk.path.length - 1] : [me.x, me.y];
+  const [dx, dy] = DIR_VEC[ARROWS[key]];
+  hotel.socket?.emit('hotel:walk', { x: end[0] + dx, y: end[1] + dy });
+}
 const isTyping = () => { const a = document.activeElement; return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable); };
 
 export default function HotelView() {
@@ -78,7 +93,8 @@ function RoomView({ onExit }) {
         if (!item.wall) hotel.socket.emit('hotel:look', { x: item.x, y: item.y });
       },
       onUse: (item) => hotel.socket.emit('hotel:use', { itemId: item.id }),
-      onUser: (id) => hotel.set({ selected: { userId: id } }),
+      onUser: (id) => { hotel.set({ selected: { userId: id } }); hotel.lookAtUser(id); },
+      onLook: (x, y) => hotel.look(x, y),
       onEmpty: () => hotel.set({ selected: null }),
       onInvalid: (reason) => office.toast({ title: reason }),
     });
@@ -93,6 +109,7 @@ function RoomView({ onExit }) {
       if (isTyping()) return;
       if (e.key === 'Escape') { if (hotel.state.placing) hotel.set({ placing: null }); else if (hotel.state.selected) hotel.set({ selected: null }); else if (hotel.state.panel) hotel.set({ panel: null }); }
       else if ((e.key === 'r' || e.key === 'R') && hotel.state.placing) hotel.rotatePlacing();
+      else if (ARROWS[e.key]) { e.preventDefault(); arrowStep(e.key); }
       else if (e.key === 'Enter' || (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey)) window.dispatchEvent(new Event('hotel:focus-chat'));
     };
     window.addEventListener('keydown', k);
@@ -189,6 +206,8 @@ function ChatBar() {
   const cycle = () => hotel.set({ chatMode: mode === 'say' ? 'shout' : 'say', whisperTo: null });
   return (
     <form className={`ht-chatbar ${mode}`} onSubmit={send}>
+      <ActionsButton />
+      <HotelMic />
       <button type="button" className="ht-mode" onClick={cycle} title={mode === 'shout' ? 'Gritando (todos lo ven en grande)' : mode === 'whisper' ? 'Susurro' : 'Hablar'}>
         {mode === 'shout' ? <Megaphone size={16} /> : mode === 'whisper' ? <MessageCircle size={16} /> : <MessageSquare size={16} />}
       </button>
@@ -198,7 +217,7 @@ function ChatBar() {
         placeholder={mode === 'shout' ? '¡Grita algo!' : mode === 'whisper' ? 'Susurra algo…' : 'Escribe algo…'}
         onChange={(e) => { setText(e.target.value); setTyping(!!e.target.value); }}
         onBlur={() => setTyping(false)}
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.currentTarget.blur(); setText(''); setTyping(false); } }}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.currentTarget.blur(); setText(''); setTyping(false); } else if (ARROWS[e.key] && !text) { e.preventDefault(); arrowStep(e.key); } }}
       />
       <button className="ht-send" disabled={!text.trim()} aria-label="Enviar"><Send size={16} /></button>
     </form>

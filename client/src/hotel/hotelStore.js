@@ -162,7 +162,7 @@ class Hotel {
   }
   addUser(u) {
     const U = {
-      id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: toDir8(u.dir), sit: u.sit, lay: u.lay, act: u.act || null, hand: u.hand ?? null, bot: u.bot || null,
+      id: u.id, name: u.name, avatar: u.avatar, x: u.x, y: u.y, z: u.z, dir: toDir8(u.dir), head: u.head ?? null, sit: u.sit, lay: u.lay, act: u.act || null, dance: u.dance ?? null, hand: u.hand ?? null, bot: u.bot || null,
       rx: u.x, ry: u.y, rz: u.z, walk: null, moving: false, steps: 0, look: null, actT: performance.now(),
       hand: u.hand ?? null, effect: u.effect ?? null, sign: u.sign ?? null,
     };
@@ -177,7 +177,7 @@ class Hotel {
     const ago = m.now != null && m.t0 != null ? Math.max(0, m.now - m.t0) : 0;
     const from = m.from ? [...m.from] : [U.rx, U.ry, U.rz];
     U.walk = { from, path: m.path.map((p) => [...p]), t0: performance.now() - ago, n0: m.n0 || 0, slide: !!m.slide };
-    U.sit = null; U.lay = null; U.act = null; U.look = null; U.pending = null;
+    U.sit = null; U.lay = null; U.act = null; U.dance = null; U.head = null; U.look = null; U.pending = null;
     this.stepUser(U, performance.now());
   }
   stepUser(U, t) {
@@ -200,9 +200,9 @@ class Hotel {
     }
   }
   applyUser(U, m) {
-    const act = m.act || null;
-    if (act !== U.act) U.actT = performance.now();
-    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), sit: m.sit, lay: m.lay, act, hand: m.hand ?? null, effect: m.effect ?? null, sign: m.sign ?? null });
+    const act = m.act || null, dance = m.dance ?? null;
+    if (act !== U.act || dance !== U.dance) U.actT = performance.now();
+    Object.assign(U, { x: m.x, y: m.y, z: m.z, dir: toDir8(m.dir, U.dir), head: m.head ?? null, sit: m.sit, lay: m.lay, act, dance, hand: m.hand ?? null, effect: m.effect ?? null, sign: m.sign ?? null });
     U.rx = m.x; U.ry = m.y; U.rz = m.z;
   }
   onUser(m) {
@@ -213,6 +213,15 @@ class Hotel {
     // Aún va dando su último paso aquí: se aplica al llegar (sentarse, acostarse…)
     else U.pending = m;
     if (m.tp && m.id === this.me) playSound('power', 0.5);
+  }
+  // Acciones (menú "Acciones"): bailes 1–4, saludar, beso, reír, saltar; lo demás va como comando del chat
+  act(act, n) { this.socket?.emit('hotel:act', { act, n }); }
+  command(text) { this.socket?.emit('hotel:chat', { text }); }
+  // Voltear hacia una casilla o hacia alguien (el servidor decide si gira el cuerpo o solo la cabeza)
+  look(x, y) { this.socket?.emit('hotel:look', { x, y }); }
+  lookAtUser(id) {
+    const U = this.live.users.get(id), me = this.live.users.get(this.me);
+    if (U && me && U !== me && !me.walk) this.look(Math.round(U.rx), Math.round(U.ry));
   }
   // Voltear la cabeza hacia quien habla (solo la cabeza, como en el original)
   lookAt(id) {
@@ -296,8 +305,7 @@ class Hotel {
     if (!t) return;
     const st = this.state;
     if (t === ':sit' || t === ':sentar') return this.socket.emit('hotel:sit');
-    if (t === ':wave' || t === ':saludar' || t === 'o/') { this.socket.emit('hotel:act', { act: 'wave' }); if (t !== 'o/') return; }
-    if (t === ':dance' || t === ':bailar') return this.socket.emit('hotel:act', { act: 'dance' });
+    if (t === 'o/') this.socket.emit('hotel:act', { act: 'wave' }); // :saludar, :bailar 1–4, :beso… los resuelve el servidor
     if (t.startsWith(':shout ') || t.startsWith(':gritar ')) return this.socket.emit('hotel:chat', { text: t.replace(/^:\S+\s/, ''), mode: 'shout' });
     if (st.chatMode === 'whisper' && st.whisperTo && this.live.users.has(st.whisperTo)) return this.socket.emit('hotel:chat', { text: t, mode: 'whisper', to: st.whisperTo });
     this.socket.emit('hotel:chat', { text: t, mode: st.chatMode === 'shout' ? 'shout' : 'say' });

@@ -9,12 +9,12 @@ import { ROOM_MODELS, ROT_DIR, ACCESS, CHAT_MODES, MAX_ROOMS_PER_USER, MAX_FURNI
 import { seedOfficialRooms, isSeedItem } from './hotelOfficial.js';
 import { FURNI_BY_ID, STARTER_INVENTORY } from '../shared/hotelCatalog.js';
 import { buildRoom, tileInfo, findPath, canPlace, canPlaceWall, roomAddItem, roomRemoveItem, wallBase, dirOf } from '../shared/hotelRoom.js';
-import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8 } from '../shared/hotelWalk.js';
+import { STEP_MS, ROT_DIR8, walkAt, walkEnd, rerouteFrom, dirToward, toDir8, planWalk, lookDirs } from '../shared/hotelWalk.js';
 import { layHeadTile } from '../shared/hotelSeat.js';
 import { initHotelSocial, registerHotelSocialRoutes, roomSocialOut, userSocialOut, saveRoomSocial } from './hotelSocial.js'; // B: social
 import { initHotelEconomy, registerEconomyRoutes } from './hotelEconomy.js'; // créditos, tienda, intercambios, regalos (agente A)
 import { initHotelMechanics } from './hotelMechanics.js';
-import { initHotelAvatar } from './hotelAvatar.js';
+import { initHotelAvatar, hotelAct } from './hotelAvatar.js';
 import { registerHotelLanding } from './hotelLanding.js';
 
 db.exec(`
@@ -167,14 +167,14 @@ const destOf = (U) => (U.path ? { x: U.path[U.path.length - 1][0], y: U.path[U.p
 function userOut(U) {
   const t = Date.now();
   const p = logical(U, t);
-  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null };
+  const out = { id: U.id, name: U.name, avatar: U.avatar, x: p.x, y: p.y, z: p.z, dir: U.dir, head: U.head ?? null, sit: U.sit, lay: U.lay, act: U.act || null, dance: U.act === 'dance' ? U.dance || 1 : null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null };
   Object.assign(out, userSocialOut(U.id)); // B: motto, badges, respects
   // Quien llega a media caminata la ve en el mismo paso: desde la casilla del paso en curso y cuándo empezó
   if (U.path && p.moving) Object.assign(out, { path: U.path.slice(p.i), from: [p.x, p.y, p.z], t0: U.t0 + p.i * STEP_MS, n0: (U.n0 || 0) + p.i, now: t });
   else out.path = null;
   return out;
 }
-const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, sit: U.sit, lay: U.lay, act: U.act || null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null });
+const userState = (U) => ({ id: U.id, x: U.x, y: U.y, z: U.z, dir: U.dir, head: U.head ?? null, sit: U.sit, lay: U.lay, act: U.act || null, dance: U.act === 'dance' ? U.dance || 1 : null, hand: U.hand ?? null, effect: U.effect ?? null, sign: U.sign ?? null });
 
 function snapshot(R, uid) {
   const m = ROOM_MODELS[R.row.model] || ROOM_MODELS.a;
@@ -252,32 +252,92 @@ function footTiles(it) {
 
 // Caminar casilla por casilla (STEP_MS por paso). A media caminata se termina el paso en curso
 // y el nuevo camino sale de la casilla a la que ya iba, sin brincos ni cambiar el ritmo.
-function startWalk(R, U, to, { onArrive = null } = {}) {
+// Quién estorba: donde están parados los demás o donde van a quedarse (ahí no se termina ni se pasa).
+// A quien va caminando se le puede cruzar en el camino (si no, dos caminando se trabarían).
+function crowd(R, U) {
+  const occupied = new Set(), blocked = new Set();
+  for (const V of R.users.values()) {
+    if (V === U) continue;
+    const d = destOf(V);
+    occupied.add(`${d.x},${d.y}`); blocked.add(`${d.x},${d.y}`);
+  }
+  for (const k of hookAll('occupied', R)) { occupied.add(k); blocked.add(k); }
+  return { occupied, blocked };
+}
+
+// near: true (clic del jugador) → si la casilla está ocupada se queda al lado, mirándola
+function startWalk(R, U, to, { onArrive = null, near = false } = {}) {
   const t = Date.now();
   const cur = logical(U, t);
-  const occupied = new Set();
-  for (const V of R.users.values()) if (V !== U) { const d = destOf(V); occupied.add(`${d.x},${d.y}`); }
-  for (const k of hookAll('occupied', R)) occupied.add(k);
+  const { occupied, blocked } = crowd(R, U);
   // A una cama se llega a la casilla de la almohada (ahí se acuesta, como en el original)
   to = layHeadTile(R.grid, to, occupied) || to;
   const re = cur.moving ? rerouteFrom(walkOf(U), t) : null;
   const start = re ? { x: re.next[0], y: re.next[1], z: re.next[2] } : { x: cur.x, y: cur.y, z: cur.z };
-  const rest = findPath(R.grid, start, to, { occupied });
-  if (!rest) return false;
+  const plan = planWalk(R.grid, start, to, { occupied, blocked, door: R.grid.door, near });
+  if (!plan) return false;
+  const rest = plan.path;
+  U.faceTo = plan.near ? { x: to.x, y: to.y } : null;
   if (U.timer) clearTimeout(U.timer);
   if (re) {
     U.x = re.from[0]; U.y = re.from[1]; U.z = re.from[2];
     U.path = [re.next, ...rest]; U.t0 = re.t0; U.n0 = re.n0;
   } else {
-    if (!rest.length) { U.path = null; return true; }
+    if (!rest.length) {
+      U.path = null;
+      // Ya estaba al lado de la casilla ocupada: solo voltea hacia ella
+      const d = plan.near && !U.sit && !U.lay ? dirToward(U.x, U.y, to.x, to.y) : null;
+      if (d != null && (d !== U.dir || U.head != null)) { U.dir = d; U.head = null; IO?.to(key(R.id)).emit('hotel:user', userState(U)); }
+      U.faceTo = null;
+      return true;
+    }
     U.x = cur.x; U.y = cur.y; U.z = cur.z;
     U.path = rest; U.t0 = t; U.n0 = 0;
   }
-  U.sit = null; U.lay = null; U.act = null; U.sliding = false;
+  U.sit = null; U.lay = null; U.act = null; U.head = null; U.sliding = false;
   U.onArrive = onArrive;
   IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0, now: t });
   U.timer = setTimeout(() => arrive(R, U), Math.max(0, walkEnd(walkOf(U)) - Date.now()) + 15);
+  watchSteps(R, U);
   return true;
+}
+
+// Antes de cada paso se revisa que la siguiente casilla siga libre (alguien pudo pararse ahí):
+// si ya no, se busca otro camino desde donde va (o se queda al lado si el destino se ocupó).
+function watchSteps(R, U) {
+  clearTimeout(U.stepTimer);
+  const path = U.path;
+  if (!path || U.sliding) return;
+  const i = Math.max(1, Math.ceil((Date.now() - U.t0) / STEP_MS - 1e-6)); // siguiente paso que empieza
+  if (i >= path.length) return;
+  U.stepTimer = setTimeout(() => stepCheck(R, U, path, i), Math.max(0, U.t0 + i * STEP_MS - Date.now() - 8));
+}
+function stepCheck(R, U, path, i) {
+  if (U.path !== path || R.users.get(U.id) !== U) return;
+  const next = path[i];
+  const door = R.grid.door;
+  const { occupied, blocked } = crowd(R, U);
+  const nk = `${next[0]},${next[1]}`;
+  if (!blocked.has(nk) || (next[0] === door.x && next[1] === door.y)) { watchSteps(R, U); return; }
+  const here = path[i - 1], dest = path[path.length - 1];
+  const t0 = U.t0 + i * STEP_MS, n0 = (U.n0 || 0) + i;
+  const plan = planWalk(R.grid, { x: here[0], y: here[1], z: here[2] }, { x: dest[0], y: dest[1] }, { occupied, blocked, door, near: !U.onArrive });
+  clearTimeout(U.timer);
+  if (plan?.path.length) {
+    [U.x, U.y, U.z] = here;
+    U.path = plan.path; U.t0 = t0; U.n0 = n0;
+    if (plan.near) U.faceTo = { x: dest[0], y: dest[1] };
+    IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0, now: Date.now() });
+    U.timer = setTimeout(() => arrive(R, U), Math.max(0, walkEnd(walkOf(U)) - Date.now()) + 15);
+    watchSteps(R, U);
+    return;
+  }
+  // No hay por dónde: se queda en la casilla donde va (los demás lo ven parar ahí)
+  if (plan?.near) U.faceTo = { x: dest[0], y: dest[1] };
+  else U.onArrive = null;
+  U.path = path.slice(0, i);
+  IO?.to(key(R.id)).emit('hotel:path', { id: U.id, from: [U.x, U.y, U.z], path: U.path, t0: U.t0, n0: U.n0 || 0, now: Date.now() });
+  arrive(R, U);
 }
 
 function arrive(R, U) {
@@ -287,7 +347,10 @@ function arrive(R, U) {
   U.sliding = false;
   const last = U.path[U.path.length - 1];
   [U.x, U.y, U.z] = last;
-  U.path = null; U.timer = null;
+  U.path = null; U.timer = null; U.head = null;
+  clearTimeout(U.stepTimer);
+  // Se quedó al lado de una casilla ocupada: mira hacia ella
+  if (U.faceTo) { const d = dirToward(U.x, U.y, U.faceTo.x, U.faceTo.y); if (d != null) U.dir = d; U.faceTo = null; }
   const t = tileInfo(R.grid, U.x, U.y);
   if (t) { U.z = t.z; applySeat(U, t); }
   IO?.to(key(R.id)).emit('hotel:user', userState(U));
@@ -414,7 +477,7 @@ export function initHotel(io, socket, userId) {
     const x = Math.trunc(Number(m?.x)), y = Math.trunc(Number(m?.y));
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     if (hook('walk', R, U, { x, y })) return;
-    if (!startWalk(R, U, { x, y })) socket.emit('hotel:nopath', { x, y });
+    if (!startWalk(R, U, { x, y }, { near: true })) socket.emit('hotel:nopath', { x, y });
   });
 
   // Sentarse en el piso (":sit") / pararse
@@ -432,10 +495,11 @@ export function initHotel(io, socket, userId) {
   socket.on('hotel:look', (m) => {
     const R = mine();
     const U = R?.users.get(userId);
-    if (!U || U.path || U.sit || U.lay) return;
-    const d = dirToward(U.x, U.y, Number(m?.x), Number(m?.y));
-    if (d == null || d === U.dir) return;
-    U.dir = d;
+    if (!U || U.path) return;
+    // Cuerpo y cabeza por separado (sentado solo gira la cabeza; acostado no se voltea)
+    const r = lookDirs(U, dirToward(U.x, U.y, Number(m?.x), Number(m?.y)));
+    if (!r || (r.dir === U.dir && r.head === (U.head ?? null))) return;
+    U.dir = r.dir; U.head = r.head;
     IO.to(key(R.id)).emit('hotel:user', userState(U));
   });
 
@@ -444,13 +508,8 @@ export function initHotel(io, socket, userId) {
     const R = mine();
     const U = R?.users.get(userId);
     if (!U || !walkOk()) return;
-    const act = m?.act === 'wave' || m?.act === 'dance' ? m.act : null;
-    if (act === 'dance' && (U.path || U.sit || U.lay)) return;
-    if (act === U.act) return;
-    U.act = act;
-    IO.to(key(R.id)).emit('hotel:user', userState(U));
-    clearTimeout(U.actTimer);
-    if (act === 'wave') U.actTimer = setTimeout(() => { if (U.act === 'wave' && R.users.get(U.id) === U) { U.act = null; IO?.to(key(R.id)).emit('hotel:user', userState(U)); } }, 2500);
+    const r = hotelAct(R, U, m?.act, m?.n); // ver server/hotelAvatar.js (bailes 1–4, beso, reír, saltar…)
+    if (r?.error) err(r.error);
   });
 
   socket.on('hotel:chat', (m) => {

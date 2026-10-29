@@ -112,13 +112,13 @@ test('servidor: cartel, efectos, sentarse en el piso, dormir (también solo) y d
     s.emit('hotel:chat', { text: ':sign 99' });
     assert.match((await p).text, /0 al 10/);
 
-    // Efectos: se pone, se cambia y se quita; el reflector es del staff
+    // Efectos: se pone, se cambia y se quita; por ahora todos están disponibles (también el reflector)
     p = once(s, 'hotel:user', (m) => mine(m) && m.effect === 'brillos');
     s.emit('hotel:chat', { text: ':efecto brillos' });
     await p;
-    p = once(s, 'hotel:notice');
+    p = once(s, 'hotel:user', (m) => mine(m) && m.effect === 'reflector');
     s.emit('hotel:chat', { text: ':efecto reflector' });
-    assert.match((await p).text, /staff/);
+    await p;
     p = once(s, 'hotel:user', (m) => mine(m) && m.effect === null);
     s.emit('hotel:chat', { text: ':efecto' });
     await p;
