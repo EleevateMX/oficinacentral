@@ -24,6 +24,7 @@ import { notesConfig, stopAllNotes } from './notes.js';
 import { registerStatsRoutes } from './stats.js';
 import { registerAchievementRoutes } from './achievements.js';
 import { registerHotelRoutes } from './hotel.js';
+import { THEME_IDS, officeTheme, userTheme, registerThemeRoutes } from './themes.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -119,13 +120,13 @@ api.get('/health', (req, res) => {
 });
 
 // Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
-const THEMES = ['nuvora', 'gtahub', 'custom'];
+const THEMES = THEME_IDS; // Eleevate (predeterminado), Nuvora, GTAHUB, Personalizado y los de juegos
 
 export function officeConfig() {
   const logoV = getSetting('logo_v');
   return {
     officeName: getSetting('office_name') || process.env.OFFICE_NAME || 'Mi oficina',
-    theme: getSetting('theme') || process.env.OFFICE_THEME || 'nuvora',
+    theme: officeTheme(),
     accent: getSetting('accent') || null,
     logoUrl: getSetting('logo') ? `/api/office/logo?v=${logoV}` : null,
     shifts: parseJSON(getSetting('shifts') || 'null', null) || DEFAULT_SHIFTS,
@@ -252,7 +253,7 @@ api.post('/auth/logout', (req, res) => {
 });
 
 api.get('/auth/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user), prefs: parseJSON(req.user.prefs, {}) });
+  res.json({ user: { ...publicUser(req.user), uiTheme: userTheme(req.user) }, prefs: parseJSON(req.user.prefs, {}) });
 });
 
 // ---------- Invitaciones (públicas) ----------
@@ -1016,6 +1017,7 @@ api.post('/call/:userId/answer', wrap((req, res) => {
 registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push/test
 registerSantaRoutes(api, { fail, notify, requireAdmin, wrap }); // /santa… (amigo secreto)
 registerHotelRoutes(api, { fail, wrap, notify }); // /hotel… (salas isométricas)
+registerThemeRoutes(api, { fail }); // /themes y /me/theme (tema de cada persona)
 
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);

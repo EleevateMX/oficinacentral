@@ -1,9 +1,9 @@
 import React from 'react';
 import { Mascota, OfficeMark, ByNuvora, Logo } from './brand.jsx';
-import { officeLogo } from '../lib/themes.js';
+import { officeLogo, officeThemeId } from '../lib/themes.js';
 
 export default function AuthLayout({ config = {}, title, subtitle, children, host }) {
-  const isNuvora = (config.theme || 'nuvora') === 'nuvora';
+  const isNuvora = officeThemeId(config) === 'nuvora';
   const hasOwnMark = !!officeLogo(config);
   return (
     <div className="auth">
@@ -17,7 +17,7 @@ export default function AuthLayout({ config = {}, title, subtitle, children, hos
           </div>
         </div>
         {children}
-        <div className="auth-by"><ByNuvora variante={config.theme === 'gtahub' ? 'negativo' : 'positivo'} /></div>
+        <div className="auth-by"><ByNuvora variante={isNuvora || config.theme === 'custom' ? 'positivo' : 'negativo'} /></div>
       </main>
       {isNuvora && (
         <aside className="auth-host" aria-hidden="true">

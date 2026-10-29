@@ -503,3 +503,10 @@
   .ht-floor { padding: 4px 8px 4px 4px; }
   .ht-floor-num { width: 34px; height: 34px; }
 }
+
+/* ===== Temas de la interfaz: el Hotel toma los colores del tema elegido (solo variables) ===== */
+:root[data-ui='v2'] .hotel {
+  --ht-pink: var(--accent); --ht-yellow: var(--alt); --ht-bg: var(--bg); --ht-panel: var(--panel); --ht-panel-2: var(--panel-2);
+  --ht-line: var(--border); --ht-text: var(--text); --ht-mute: var(--text-2);
+}
+:root[data-ui='v2'] .hotel .ht-btn.primary { color: var(--on-accent); }

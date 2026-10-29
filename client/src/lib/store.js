@@ -5,7 +5,7 @@ import { MediaManager } from './media.js';
 import { initStageClient } from './stage.js';
 import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable, PROXIMITY_RADIUS } from '@shared/map.js';
 import { playSound } from './sounds.js';
-import { applyBrand } from './themes.js';
+import { applyBrand, setUserTheme, applyColorMode } from './themes.js';
 import { FX, pickFx } from './fx.js';
 import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
 import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes.js';
@@ -107,6 +107,7 @@ class Office {
   // ---------- Arranque ----------
   async start(me, prefs) {
     this.set({ me, prefs: mergePrefs(prefs) });
+    setUserTheme(me.uiTheme || null); // tema propio (si eligió uno)
     applyTheme(this.state.prefs.colorMode);
     const [config, ice, users, floors, chat, notifications] = await Promise.all([
       api.get('/config'), api.get('/ice'), api.get('/users'), api.get('/floors'), api.get('/chat'), api.get('/notifications'),
@@ -317,6 +318,7 @@ class Office {
     s.on('room-msg', (m) => this.onRoomMsg(m));
     s.on('channels', () => this.refreshChat());
     s.on('characters', () => this.loadCharacters());
+    s.on('ui-theme', ({ theme }) => { setUserTheme(theme); this.set((st) => ({ me: { ...st.me, uiTheme: theme } })); });
     s.on('office', (c) => {
       applyBrand(c);
       this.set((st) => ({ config: { ...st.config, ...c } }));
@@ -822,6 +824,13 @@ class Office {
   }
 
   // ---------- Preferencias ----------
+  // Tema de la interfaz de esta persona (null = el de la oficina): se ve al momento y se guarda en su cuenta
+  async setUiTheme(theme) {
+    setUserTheme(theme || null);
+    this.set((st) => ({ me: { ...st.me, uiTheme: theme || null } }));
+    await api.put('/me/theme', { theme: theme || null });
+  }
+
   updatePrefs(patch) {
     const prefs = mergePrefs({ ...this.state.prefs, ...patch });
     this.set({ prefs });
@@ -874,8 +883,7 @@ export function buildFloor(payload) {
 }
 
 export function applyTheme(mode) {
-  const dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  applyColorMode(mode); // los temas oscuros (Eleevate y los de juegos) se quedan en oscuro
 }
 
 export const office = new Office();

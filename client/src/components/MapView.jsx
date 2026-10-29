@@ -95,7 +95,7 @@ function themeColors() {
       if (/^#[0-9a-f]{6}$/i.test(v)) return v;
       return d;
     };
-    themeCache = { t: now, accent: read('--accent', themeCache.accent), ink: read('--ink', themeCache.ink), brand: document.documentElement.dataset.brand };
+    themeCache = { t: now, accent: read('--accent', themeCache.accent), ink: read('--ink', themeCache.ink), onAccent: read('--on-accent', '#ffffff'), brand: document.documentElement.dataset.brand };
   }
   return themeCache;
 }
@@ -822,7 +822,7 @@ export default function MapView({ active }) {
         ctx.beginPath(); ctx.roundRect(sp.x - w / 2, y - 11, w, 22, 6); ctx.fill();
         ctx.fillStyle = p.status === 'busy' ? (themeColors().brand === 'gtahub' ? '#FFCC00' : '#FF8A3D') : p.status === 'away' ? '#adb5bd' : (themeColors().brand === 'gtahub' ? '#3DDC84' : '#2fd36b');
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = isMe ? themeColors().onAccent : '#fff'; // texto legible sobre el acento del tema
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
         // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
         const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414'],

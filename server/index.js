@@ -51,9 +51,11 @@ if (fs.existsSync(dist)) {
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const brand = () => {
     const c = officeConfig();
+    // Eleevate (predeterminado): la app se llama HUB y lleva el símbolo de Eleevate
+    if (c.theme !== 'nuvora' && c.theme !== 'custom' && c.theme !== 'gtahub') return { name: 'HUB', title: 'HUB — by Eleevate', icons: '/themes/eleevate', logo: c.logoUrl, color: '#101120' };
     const gta = c.theme === 'gtahub' || /gtahub/i.test(c.officeName || '');
     const name = c.officeName || 'Nuvora';
-    return { name, title: name === 'Nuvora' ? 'Nuvora — Oficina virtual' : `${name} — Oficina virtual by Nuvora`, icons: gta ? '/themes/gtahub' : null, logo: c.logoUrl };
+    return { name, title: name === 'Nuvora' ? 'Nuvora — Oficina virtual' : `${name} — Oficina virtual by Nuvora`, icons: gta ? '/themes/gtahub' : null, logo: c.logoUrl, color: '#101010' };
   };
   const sendIndex = (req, res) => {
     const b = brand();
@@ -68,7 +70,7 @@ if (fs.existsSync(dist)) {
     if (b.icons) {
       html = html
         .replace(/(<link rel="apple-touch-icon" href=")[^"]*/, `$1${b.icons}/apple-touch-icon.png`)
-        .replace(/(name="theme-color" content=")[^"]*/, '$1#101010');
+        .replace(/(name="theme-color" content=")[^"]*/, `$1${b.color}`);
     }
     res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(html);
@@ -77,8 +79,9 @@ if (fs.existsSync(dist)) {
     const b = brand();
     const m = { ...baseManifest, name: b.title, short_name: b.name };
     if (b.icons) {
-      m.theme_color = '#101010';
-      m.icons = m.icons.map((i) => ({ ...i, src: i.src.replace('/icons/', `${b.icons}/`) }));
+      m.theme_color = b.color;
+      m.background_color = b.color;
+      m.icons = m.icons.filter((i) => !i.src.endsWith('.svg')).map((i) => ({ ...i, src: i.src.replace('/icons/', `${b.icons}/`) }));
     }
     res.setHeader('Cache-Control', 'no-cache');
     res.type('application/manifest+json').send(JSON.stringify(m));
