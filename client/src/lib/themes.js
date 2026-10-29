@@ -1,4 +1,4 @@
-// Temas de la interfaz. Eleevate es la identidad de la oficina (predeterminado); Nuvora, GTAHUB y
+// Temas de la interfaz. Eleevate es la identidad de la oficina (predeterminado); Nuvora, HUB clásico y
 // Personalizado siguen disponibles, y cada persona puede elegir un tema de juego para sí misma.
 // La lista y los colores viven en shared/uiThemes.js (el servidor valida con la misma lista).
 import { UI_THEMES, ALL_THEMES, DEFAULT_THEME, themeById } from '../../../shared/uiThemes.js';
@@ -60,7 +60,7 @@ function paint(id) {
   if (meta) meta.content = t ? t.vars.bg : id === 'gtahub' ? '#101010' : '#0A2B2C';
 }
 
-// Los temas nuevos son oscuros siempre; Nuvora/GTAHUB respetan Claro / Oscuro / Sistema
+// Los temas nuevos son oscuros siempre; Nuvora/HUB clásico respetan Claro / Oscuro / Sistema
 function paintMode() {
   const forced = !!VAR_THEMES.get(document.documentElement.dataset.brand);
   const dark = forced || colorMode === 'dark' || (colorMode === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
@@ -96,12 +96,12 @@ if (typeof document !== 'undefined') {
 // ---------- Logos ----------
 export const GTAHUB_LOGO = '/themes/gtahub/logo.png';
 export const ELEEVATE_LOGO = '/themes/eleevate/logo.png';
-// Marca GTAHUB: con su tema, o con Nuvora/Personalizado si la oficina se llama GTAHUB
+// Marca HUB clásico: con su tema, o con Nuvora/Personalizado si la oficina se llama HUB clásico
 export const isGtahub = (config = {}) => config.theme === 'gtahub' || ((config.theme === 'nuvora' || config.theme === 'custom') && /gtahub/i.test(config.officeName || ''));
 // Eleevate es la identidad con su tema y con cualquiera de los temas nuevos como predeterminado
 export const isEleevate = (config = {}) => !LEGACY.has(officeThemeId(config));
 
-// Logo de la oficina: el subido por el admin, el de Eleevate, el de GTAHUB o el símbolo de Nuvora.
+// Logo de la oficina: el subido por el admin, el de Eleevate, el de HUB clásico o el símbolo de Nuvora.
 export function officeLogo(config = {}) {
   if (config.logoUrl) return config.logoUrl;
   if (isEleevate(config)) return ELEEVATE_LOGO;

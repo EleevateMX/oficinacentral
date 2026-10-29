@@ -120,7 +120,7 @@ api.get('/health', (req, res) => {
 });
 
 // Marca de la oficina: Nuvora es el producto; cada oficina elige nombre, tema, color y logo.
-const THEMES = THEME_IDS; // Eleevate (predeterminado), Nuvora, GTAHUB, Personalizado y los de juegos
+const THEMES = THEME_IDS; // Eleevate (predeterminado), Nuvora, HUB clásico, Personalizado y los de juegos
 
 export function officeConfig() {
   const logoV = getSetting('logo_v');

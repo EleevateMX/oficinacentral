@@ -127,7 +127,7 @@ function General() {
         </Row>
       </Section>
       <Section title="Apariencia">
-        <Row title="Modo de color" desc={themeForcesDark() ? 'Tu tema es oscuro siempre. Claro y Sistema aplican con Nuvora y GTAHUB.' : 'Claro, oscuro o según tu sistema'}>
+        <Row title="Modo de color" desc={themeForcesDark() ? 'Tu tema es oscuro siempre. Claro y Sistema aplican con Nuvora y HUB clásico.' : 'Claro, oscuro o según tu sistema'}>
           <Select value={mode} onChange={(v) => office.updatePrefs({ colorMode: v })} options={[{ value: 'light', label: 'Claro' }, { value: 'dark', label: 'Oscuro' }, { value: 'system', label: 'Sistema' }]} />
         </Row>
       </Section>

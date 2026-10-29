@@ -101,7 +101,7 @@ export function ByNuvora({ variante = 'positivo', size = 13 }) {
 }
 
 export function Boot({ text }) {
-  const mark = bootLogo(); // Eleevate o GTAHUB según el último tema conocido; si no, Nuvora
+  const mark = bootLogo(); // Eleevate o HUB clásico según el último tema conocido; si no, Nuvora
   return (
     <div className="boot">
       {mark ? <img className="boot-mark" src={mark} alt="" width={72} height={72} /> : <Logo variante="negativo" size={30} />}

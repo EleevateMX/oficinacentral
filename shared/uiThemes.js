@@ -3,7 +3,7 @@
 // Cada usuario puede elegir el suyo; si no, se usa el que eligió el admin para la oficina.
 //
 // `vars` son variables CSS (sin el `--`) que se ponen en :root. Todos estos temas son oscuros.
-// Los temas `legacy` (Nuvora, GTAHUB, Personalizado) se pintan con su CSS de siempre.
+// Los temas `legacy` (Nuvora, HUB clásico, Personalizado) se pintan con su CSS de siempre.
 
 const METAL = 'linear-gradient(135deg, #f4f6f9 0%, #b9c6d3 45%, #eef2f6 55%, #9cbed9 100%)';
 
