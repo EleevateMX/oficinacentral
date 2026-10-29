@@ -79,7 +79,8 @@ export function emitAll(event, payload) {
 }
 
 function spawnFor(user) {
-  const saved = user.floor_id && getFloor(user.floor_id) && (user.role === 'admin' || !isFloorAdminOnly(user.floor_id));
+  // El archivo solo se abre a propósito: al entrar, todos (también admins) llegan a un piso visible
+  const saved = user.floor_id && getFloor(user.floor_id) && !isFloorAdminOnly(user.floor_id);
   const floorId = saved ? user.floor_id : defaultFloorId();
   const f = getFloor(floorId).state;
   // Si su lugar guardado está en un piso archivado (solo admins), aparece en la entrada del piso principal
