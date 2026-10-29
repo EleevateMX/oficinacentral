@@ -95,7 +95,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'board' && <Whiteboard objectId={modal.objectId} />}
       {modal?.type === 'notices' && <Notices />}
       {modal?.type === 'birthdays' && <Birthdays />}
-      {modal?.type === 'game' && <GameModal key={modal.objectId} objectId={modal.objectId} game={modal.game} />}
+      {modal?.type === 'game' && <GameModal key={modal.objectId} objectId={modal.objectId} game={modal.game} floorId={modal.floorId} />}
       {modal?.type === 'feedback' && <Feedback />}
       {modal?.type === 'achievements' && <Achievements userId={modal.userId} tab={modal.tab} />}
       {modal?.type === 'badges' && <MyBadges userId={modal.userId} tab={modal.tab} />}

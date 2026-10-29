@@ -1,5 +1,6 @@
 // Billar (bola 8) para 2 (o contra la computadora). El asiento 0 corre la física.
 import { roundRect } from './pong.js';
+import { SnapBuffer, gameLoop, crispCanvas, stamp, Particles } from './netSync.js';
 
 export const meta = {
   w: 900,
@@ -55,14 +56,17 @@ const segDist = (px, py, ax, ay, bx, by) => {
 };
 
 export function create(canvas, ctx) {
-  const g = canvas.getContext('2d');
+  const cc = crispCanvas(canvas, W, H);
+  const g = cc.g;
+  const buf = new SnapBuffer({ delay: 100 });
+  const parts = new Particles(160);
   const { seat, host, players } = ctx;
   const vsCpu = host && !players[1];
   const nameOf = (i) => players[i]?.name || (i === 1 ? 'La computadora' : 'Jugador');
   const prevTouch = canvas.style.touchAction;
   canvas.style.touchAction = 'none';
 
-  let raf = 0, last = performance.now(), sendAcc = 0, aimAcc = 0, acc = 0;
+  let sendAcc = 0, aimAcc = 0, acc = 0;
   const sounds = [];
   const play = (s) => { ctx.sound(s); if (host) sounds.push(s); };
   let lastHitSnd = 0, lastWallSnd = 0;
@@ -120,6 +124,7 @@ export function create(canvas, ctx) {
     b.p = i + 1; b.vx = 0; b.vy = 0; b.sink = performance.now();
     if (shot) shot.pots.push(b.n);
     play('pocket');
+    pocketFx(POCKETS[i]);
   }
 
   function physStep(h) {
@@ -468,16 +473,16 @@ export function create(canvas, ctx) {
   } else {
     ctx.onState((d) => {
       if (!d || !Array.isArray(d.b)) return;
+      if (!buf.push(d)) return;
       if (d.snd) for (const s of d.snd) ctx.sound(s);
       const was = S.phase, prevMsg = S.msgId, prevTurn = S.turn;
       const now = performance.now();
       d.b.forEach(([x, y, p], i) => {
         const b = balls[i];
         if (!b) return;
-        if (p && !b.p) b.sink = now;
+        if (p && !b.p) { b.sink = now + buf.delay; pocketFx(POCKETS[p - 1], buf.delay); }
         if (!p && b.p) { b.x = x; b.y = y; b.sink = 0; }
-        b.p = p; b.tx = x; b.ty = y;
-        if (Math.hypot(b.x - x, b.y - y) > 60) { b.x = x; b.y = y; }
+        b.p = p;
       });
       S = d;
       if (d.msgId !== prevMsg) msgAt = now;
@@ -485,6 +490,12 @@ export function create(canvas, ctx) {
       if (d.turn !== prevTurn) { drag = null; dragPow = 0; }
       if (was !== 'over' && d.phase === 'over') announce();
     });
+  }
+
+  // Destellos al meter una bola (con retraso en el invitado, para que coincida con lo que se ve)
+  function pocketFx(pk, delay = 0) {
+    if (!pk) return;
+    setTimeout(() => parts.burst(pk.x, pk.y, 16, { colors: ['#FFCC00', '#fff', '#FE3377'], speed: [40, 160], life: [0.3, 0.7] }), delay);
   }
 
   function pack() {
@@ -510,7 +521,7 @@ export function create(canvas, ctx) {
   }
 
   // ---------- Dibujo ----------
-  const table = buildTable();
+  const table = buildTable(2);
 
   function drawBall(x, y, n, scale = 1, alpha = 1) {
     const r = R * scale;
@@ -685,7 +696,7 @@ export function create(canvas, ctx) {
 
   function draw() {
     const now = performance.now();
-    g.drawImage(table, 0, 0);
+    g.drawImage(table, 0, 0, W, H);
     const c = cue();
     const placing = S.phase === 'aim' && S.hand && myTurn();
     if (S.phase === 'aim' && S.hand === 'kitchen') {
@@ -703,7 +714,7 @@ export function create(canvas, ctx) {
     // Bolas (las que caen se encogen hacia la tronera)
     for (const b of balls) {
       if (b.p) {
-        const k = (now - b.sink) / 260;
+        const k = Math.max(0, (now - b.sink) / 260); // en el invitado empieza cuando la bola de verdad llega (sink en el futuro)
         if (b.sink && k < 1) {
           const p = POCKETS[b.p - 1];
           drawBall(b.x + (p.x - b.x) * k, b.y + (p.y - b.y) * k, b.n, 1 - k * 0.6, 1 - k);
@@ -764,9 +775,7 @@ export function create(canvas, ctx) {
   }
 
   // ---------- Bucle ----------
-  function loop(t) {
-    const dt = Math.min(0.05, Math.max(0, (t - last) / 1000));
-    last = t;
+  function loop(dt) {
     if (waiting) waiting = Math.max(0, waiting - dt);
     if (!waiting) pendingPlace = null;
     if (seat >= 0) controls(dt);
@@ -782,9 +791,19 @@ export function create(canvas, ctx) {
         else { S.aim = remote.aim; S.pow = remote.pow; }
       }
       sendAcc += dt;
-      if (sendAcc >= (S.phase === 'roll' || S.phase === 'aim' ? 1 / 30 : 1 / 10)) { sendAcc = 0; ctx.sendState(pack()); }
+      if (sendAcc >= (S.phase === 'roll' || S.phase === 'aim' ? 1 / 30 : 1 / 10)) { sendAcc = 0; ctx.sendState(stamp(pack())); }
     } else {
-      for (const b of balls) { b.x += (b.tx - b.x) * 0.6; b.y += (b.ty - b.y) * 0.6; }
+      // bolas interpoladas entre dos estados del anfitrión (sin tirones)
+      const smp = buf.sample();
+      if (smp) {
+        const k = clamp(smp.k, 0, 1.3);
+        balls.forEach((bl, i) => {
+          const A = smp.a.b?.[i], Bq = smp.b.b?.[i];
+          if (!A || !Bq) return;
+          if (Math.hypot(Bq[0] - A[0], Bq[1] - A[1]) > 80) { bl.x = Bq[0]; bl.y = Bq[1]; return; }
+          bl.x = A[0] + (Bq[0] - A[0]) * k; bl.y = A[1] + (Bq[1] - A[1]) * k;
+        });
+      }
       if (seat === 1 && myTurn() && !S.hand) {
         aimAcc += dt;
         if (aimAcc >= 1 / 15) { aimAcc = 0; ctx.sendInput({ aim: Math.round(myAim * 1000) / 1000, pow: Math.round((drag ? dragPow : 0) * 100) / 100 }); }
@@ -792,14 +811,17 @@ export function create(canvas, ctx) {
     }
     const st = statusText();
     if (st !== lastStatus) { lastStatus = st; ctx.status(st); }
+    cc.begin();
     draw();
-    raf = requestAnimationFrame(loop);
+    parts.draw(g, dt);
   }
-  raf = requestAnimationFrame(loop);
+  // la física ya usa subpasos fijos (SUB); el dibujo va con requestAnimationFrame y se pausa con la pestaña oculta
+  const looper = gameLoop({ frame: loop });
 
   return {
     destroy() {
-      cancelAnimationFrame(raf);
+      looper.stop();
+      cc.destroy();
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
       canvas.removeEventListener('pointermove', pm);
@@ -813,10 +835,11 @@ export function create(canvas, ctx) {
 }
 
 // Mesa estática (se dibuja una sola vez)
-function buildTable() {
+function buildTable(k = 1) {
   const c = document.createElement('canvas');
-  c.width = W; c.height = H;
+  c.width = W * k; c.height = H * k;
   const t = c.getContext('2d');
+  t.scale(k, k);
   t.fillStyle = '#12151c';
   t.fillRect(0, 0, W, H);
   // Madera

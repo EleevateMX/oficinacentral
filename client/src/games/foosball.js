@@ -1,5 +1,6 @@
 // Futbolito (vista desde arriba) para 2 o contra la computadora. El asiento 0 corre la física.
 import { roundRect } from './pong.js';
+import { SnapBuffer, gameLoop, crispCanvas, stamp, Shake, drawCountdown } from './netSync.js';
 
 export const meta = { w: 900, h: 560, help: 'W/S o ↑/↓, o mueve el mouse / dedo: mueves todas tus barras · Espacio / clic / toque: patear · Primero en llegar a 5' };
 
@@ -32,19 +33,20 @@ const RODS = [[0, 1], [0, 2], [1, 3], [0, 5], [1, 5], [0, 3], [1, 2], [1, 1]].ma
 const figY = (rod, k, u) => CY + (k - (rod.n - 1) / 2) * rod.sp + u * rod.range;
 
 export function create(canvas, ctx) {
-  const g = canvas.getContext('2d');
+  const cc = crispCanvas(canvas, W, H);
+  const g = cc.g;
+  const buf = new SnapBuffer({ delay: 100 });
+  const shake = new Shake();
   const { seat, host, players } = ctx;
   const vsCpu = host && !players[1];
   const nameOf = (i) => players[i]?.name || (i === 1 ? 'La computadora' : 'Jugador');
-  let raf = 0;
-  let last = performance.now();
   let sendAcc = 0;
   const sounds = [];
   const play = (s) => { ctx.sound(s); if (host) sounds.push(s); };
 
   let st = fresh();
   function fresh() {
-    return { b: { x: CX, y: CY, vx: 0, vy: 0 }, u: [0, 0], k: [-1, -1], s: [0, 0], phase: 'drop', t: 1.4, to: Math.random() < 0.5 ? 0 : 1, winner: -1, scorer: -1 };
+    return { b: { x: CX, y: CY, vx: 0, vy: 0 }, u: [0, 0], k: [-1, -1], s: [0, 0], phase: 'drop', t: 3.2, to: Math.random() < 0.5 ? 0 : 1, winner: -1, scorer: -1 };
   }
 
   // Mis barras: teclado o mouse/dedo (u va de -1 a 1)
@@ -110,18 +112,17 @@ export function create(canvas, ctx) {
     });
   } else {
     ctx.onState((d) => {
+      if (!buf.push(d)) return;
       if (d.snd) for (const s of d.snd) ctx.sound(s);
-      st = d;
-      recvAt = performance.now();
     });
   }
-  let recvAt = performance.now();
 
   // ---------- Avisos (todos los asientos) ----------
   let shownPhase = '';
   const parts = [];
   function phaseChanged() {
     if (st.phase === 'goal') {
+      shake.kick(12, 0.55);
       ctx.status(`¡Gol de ${nameOf(st.scorer)}! · ${st.s[0]}-${st.s[1]}`);
       const gx = st.scorer === 0 ? FX1 + 6 : FX0 - 6;
       for (let i = 0; i < 70; i++) {
@@ -567,9 +568,8 @@ export function create(canvas, ctx) {
   let spin = 0, lastBx = CX, lastBy = CY;
   function ballPos() {
     const b = st.b;
-    if (host || st.phase !== 'play') return { x: b.x, y: b.y };
-    const dt = Math.min(0.06, (performance.now() - recvAt) / 1000);
-    return { x: clamp(b.x + (b.vx || 0) * dt, FX0 - GD, FX1 + GD), y: clamp(b.y + (b.vy || 0) * dt, FY0 + R, FY1 - R) };
+    // en el invitado st.b ya viene interpolado (netSync)
+    return { x: b.x, y: b.y };
   }
 
   function drawBall(dt) {
@@ -656,6 +656,7 @@ export function create(canvas, ctx) {
       g.strokeText(`Primero en llegar a ${WIN}`, CX, CY - 92);
       g.fillStyle = '#fff';
       g.fillText(`Primero en llegar a ${WIN}`, CX, CY - 92);
+      drawCountdown(g, CX, CY + 70, st.t, { size: 76 });
     }
     if (st.phase === 'goal') {
       const age = 1.7 - st.t;
@@ -675,36 +676,44 @@ export function create(canvas, ctx) {
     }
   }
 
-  function loop(t) {
-    const dt = Math.min(0.033, (t - last) / 1000);
-    last = t;
+  // Física con paso fijo; dibujo con requestAnimationFrame (ver netSync.js)
+  function hostStep(dt) {
     if (seat >= 0) moveMine(dt);
-    if (host) {
-      step(dt);
-      sendAcc += dt;
-      if (sendAcc >= 1 / 30) {
-        sendAcc = 0;
-        const b = st.b;
-        ctx.sendState({
-          b: { x: Math.round(b.x * 10) / 10, y: Math.round(b.y * 10) / 10, vx: Math.round(b.vx), vy: Math.round(b.vy) },
-          u: st.u.map((v) => Math.round(v * 1000) / 1000), k: st.k.map((v) => Math.round(v * 1000) / 1000),
-          s: [...st.s], phase: st.phase, t: Math.round(st.t * 100) / 100, to: st.to, winner: st.winner, scorer: st.scorer,
-          snd: sounds.splice(0),
-        });
+    step(dt);
+    sendAcc += dt;
+    if (sendAcc >= 1 / 30) {
+      sendAcc = 0;
+      const b = st.b;
+      ctx.sendState(stamp({
+        b: { x: Math.round(b.x * 10) / 10, y: Math.round(b.y * 10) / 10, vx: Math.round(b.vx), vy: Math.round(b.vy) },
+        u: st.u.map((v) => Math.round(v * 1000) / 1000), k: st.k.map((v) => Math.round(v * 1000) / 1000),
+        s: [...st.s], phase: st.phase, t: Math.round(st.t * 100) / 100, to: st.to, winner: st.winner, scorer: st.scorer,
+        snd: sounds.splice(0),
+      }));
+    }
+  }
+  function frame(dt) {
+    if (!host) {
+      if (seat >= 0) moveMine(dt);
+      const v = buf.state({ keys: ['b', 'u', 't'], jump: 120 });
+      if (v) st = v;
+      if (seat === 1) {
+        sendAcc += dt;
+        if (sendAcc >= 1 / 30) { sendAcc = 0; ctx.sendInput({ u: Math.round(myU * 1000) / 1000 }); }
       }
-    } else if (seat === 1) {
-      sendAcc += dt;
-      if (sendAcc >= 1 / 30) { sendAcc = 0; ctx.sendInput({ u: Math.round(myU * 1000) / 1000 }); }
     }
     if (st.phase !== shownPhase) { const prev = shownPhase; shownPhase = st.phase; if (prev || st.phase === 'drop') phaseChanged(); }
+    cc.begin();
+    const [sx, sy] = shake.offset(dt);
+    g.translate(sx, sy);
     draw(dt);
-    raf = requestAnimationFrame(loop);
   }
-  raf = requestAnimationFrame(loop);
+  const loop = gameLoop({ step: host ? hostStep : null, frame, hz: 120 });
 
   return {
     destroy() {
-      cancelAnimationFrame(raf);
+      loop.stop();
+      cc.destroy();
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
       canvas.removeEventListener('pointermove', pm);

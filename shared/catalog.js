@@ -52,6 +52,7 @@ export const CATALOG = {
   coffee: f('Cafetera', 'comida', 2, 1),
   watercooler: f('Garrafón', 'comida', 1, 1),
   arcade: f('Arcade', 'deco', 1, 1, { colorable: true, color: '#2bb673', interactive: 'game' }),
+  zombieArcade: f('Máquina Zombies', 'deco', 1, 1, { colorable: true, color: '#1f3b24', interactive: 'game', animated: true }), // shooter 3D cooperativo
   jukebox: f('Rocola', 'deco', 2, 1, { colorable: true, color: '#FE3377', interactive: 'jukebox', animated: true }),
   hotelElevator: f('Elevador a MeDed Friends', 'gtahub', 2, 1, { interactive: 'hotel', brand: true, animated: true }), // sube al Hotel (salas isométricas)
   foosball: f('Futbolito', 'deco', 3, 2, { interactive: 'game' }),

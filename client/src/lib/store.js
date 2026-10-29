@@ -67,6 +67,7 @@ class Office {
       config: { officeName: 'Mi oficina', iceServers: [] },
       users: {},
       floors: [],
+      liveGames: [], // partidas de Zombies en curso (para unirse)
       characters: [],
       floor: null, // piso que estoy viendo (compuesto)
       presenceVersion: 0,
@@ -249,6 +250,7 @@ class Office {
       delete this.emotes[m.id]; // al moverse se corta la acción
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
+    s.on('games:live', (list) => this.set({ liveGames: Array.isArray(list) ? list : [] }));
     s.on('call:answer', ({ from, accept }) => {
       if (accept) this.media?.allowPeer?.(from);
       const who = this.state.users[from]?.displayName || 'La persona';
@@ -600,10 +602,19 @@ class Office {
       return;
     }
     if (this.hotelVols) { for (const id of this.hotelVols) this.media.setPeerVolume?.(id, this.peerVolume(id)); this.hotelVols = null; }
+    // Zombies: en una partida solo se oye al equipo; a quien está jugando no se le oye en la sala
+    const gid = me.game?.objectId ?? null;
+    if (gid != null) {
+      const squad = Object.entries(this.players).filter(([id, p]) => Number(id) !== this.state.me.id && p.game?.objectId === gid).map(([id]) => Number(id)).sort((a, b) => a - b);
+      this.media.setPeers(squad, []);
+      const prev = this.state.talkingWith;
+      if (prev.length !== squad.length || prev.some((v, i) => v !== squad[i])) this.set({ talkingWith: squad });
+      return;
+    }
     const space = talkSpace(f, me.x, me.y);
     const ids = [];
     for (const [id, p] of Object.entries(this.players)) {
-      if (Number(id) === this.state.me.id) continue;
+      if (Number(id) === this.state.me.id || p.game) continue;
       if (canTalk(f, me, p)) ids.push(Number(id));
     }
     ids.sort((a, b) => a - b);
@@ -611,7 +622,7 @@ class Office {
     const near = [];
     for (const [id, p] of Object.entries(this.players)) {
       const n = Number(id);
-      if (n === this.state.me.id || ids.includes(n) || p.floorId !== me.floorId || !this.state.users[n]?.online || closedApart(f, me, p)) continue;
+      if (n === this.state.me.id || ids.includes(n) || p.game || p.floorId !== me.floorId || !this.state.users[n]?.online || closedApart(f, me, p)) continue;
       const d = Math.max(Math.abs(p.x - me.x), Math.abs(p.y - me.y));
       if (d <= PROXIMITY_RADIUS + 7) near.push([d, n]);
     }

@@ -15,15 +15,21 @@
 //   onState(fn(data))           lo reciben invitado y espectadores
 //   onEvent(fn(seat, data))
 //   sound(name)                 'hit' | 'wall' | 'score' | 'win' | 'lose' | 'pocket' | 'eat' | 'die'
-//   submitScore(n)              solo arcade: guarda la puntuación
+//   submitScore(n)              arcade y zombies: guarda la puntuación (mejor marca de cada quien)
 //   status(text)                texto corto bajo el juego ("Turno de Ana", "Tira…")
+//   objectId, floorId, room     la máquina, su piso y el cuarto ({ seats, host, watchers })
+//   onRoom(fn(room)), sit(), close(), volume
 //
-// El juego se vuelve a crear cada vez que cambian los jugadores.
+// El juego se vuelve a crear cada vez que cambian los jugadores, salvo los que tienen
+// meta.persistent (Zombies, hasta 4): esos se enteran de quién entra o sale con onRoom
+// y, si se va el anfitrión, el siguiente jugador sigue la partida.
+// Ayudantes de red y bucle para todos: ./netSync.js (interpolación, paso fijo, lienzo nítido).
 export const GAMES = {
   pong: { name: 'Ping pong', emoji: '🏓', load: () => import('./pong.js') },
   pool: { name: 'Billar', emoji: '🎱', load: () => import('./pool.js') },
   foosball: { name: 'Futbolito', emoji: '⚽', load: () => import('./foosball.js') },
   arcade: { name: 'Arcade', emoji: '👾', load: () => import('./pacman.js') },
+  zombies: { name: 'Zombies en la oficina', emoji: '🧟', load: () => import('./zombies/index.js') },
 };
 
-export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade' };
+export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies' };

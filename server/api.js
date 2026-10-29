@@ -16,7 +16,7 @@ import { openShift, shiftReport } from './shifts.js';
 import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
-import { addScore, topScores, SCORE_GAMES } from './games.js';
+import { addScore, topScores, SCORE_GAMES, POINT_GAMES, liveMatches } from './games.js';
 import { activeSeason, SEASON_SETTINGS, validMD } from '../shared/seasons.js';
 import { registerSantaRoutes } from './santa.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
@@ -511,20 +511,24 @@ api.post('/birthdays/:userId/wish', perUser('wish', 10, 60e3), wrap((req, res) =
 }));
 
 // ---------- Juegos: puntuaciones ----------
+api.get('/games/live', (req, res) => res.json({ live: liveMatches() }));
 api.get('/games/:game/top', (req, res) => {
   if (!SCORE_GAMES.includes(req.params.game)) return fail(res, 404, 'No existe');
   res.json({ top: topScores(req.params.game) });
 });
 
 let scoreTimes = new Map();
-api.post('/games/arcade/score', wrap((req, res) => {
+// Puntuación de los juegos de puntos (arcade y Zombies en la oficina)
+api.post('/games/:game/score', wrap((req, res) => {
+  const game = req.params.game;
+  if (!POINT_GAMES.includes(game)) return fail(res, 404, 'No existe');
   const score = Math.trunc(Number(req.body?.score));
   if (!Number.isFinite(score) || score <= 0 || score > 1e6) return fail(res, 400, 'Puntuación inválida');
   const t = Date.now();
   if (t - (scoreTimes.get(req.user.id) || 0) < 5000) return fail(res, 429, 'Espera un momento');
   scoreTimes.set(req.user.id, t);
-  addScore(req.user.id, 'arcade', score);
-  res.json({ ok: true, top: topScores('arcade') });
+  addScore(req.user.id, game, score);
+  res.json({ ok: true, top: topScores(game) });
 }));
 
 // Entrar o salir de turno

@@ -53,6 +53,12 @@ export default function ProfileCard({ userId }) {
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={16} /></button>
       </div>
       {u.statusText && <div className="pc-status">{u.statusText}</div>}
+      {u.online && u.game && (
+        <div className="pc-status pc-game">
+          🧟 Jugando Zombies en la oficina
+          {!isMe && <button className="btn primary small" onClick={() => office.set({ modal: { type: 'game', objectId: u.game.objectId, game: 'zombies', floorId: u.game.floorId }, profileCard: null })}>Unirse</button>}
+        </div>
+      )}
       {u.birthday && (isBirthday(u) ? (
         <button className="pc-bday today" onClick={() => office.set({ modal: { type: 'birthdays' }, profileCard: null })}>🎂 ¡Hoy es su cumpleaños!{!isMe && <b> Felicitar</b>}</button>
       ) : (

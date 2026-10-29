@@ -11,6 +11,7 @@ const T = TILE;
 // Colores de marca de la oficina (los fija el mapa según el tema; ver themes.js → mapBrand)
 let BRAND = { name: 'NUVORA', primary: '#157A6E', secondary: '#FF8A3D', dark: '#0A2B2C', light: '#F3F4EE', walls: null };
 export function setRenderBrand(b) { BRAND = { ...BRAND, ...b }; }
+export const renderBrand = () => BRAND; // Zombies 3D: colores de los muros
 
 const hash = (x, y, s = 0) => {
   let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0;
@@ -1973,6 +1974,35 @@ D.arcade = (ctx, x, y, w, h, o, c) => {
   R(ctx, '#4a4f5c', x + 4, y + 10, w - 8, h - 12);
   R(ctx, OL, x + 9, y + 15, 14, 8); R(ctx, '#2b2f3a', x + 10, y + 16, 12, 6);
   R(ctx, '#e63946', x + 12, y + 17, 2, 4); R(ctx, '#e63946', x + 18, y + 17, 2, 4);
+};
+// Máquina de "Zombies en la oficina": gabinete verde oscuro con una mano de zombi saliendo de la marquesina
+D.zombieArcade = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const on = Math.floor(ANIM_T / 500) % 2 === 0;
+  prr(ctx, SH, x + 2, y + h - 3, w, 5, 2);
+  obox(ctx, col, x + 1, y - 26, w - 2, h + 25, 1);
+  R(ctx, shade(col, 0.2), x + 1, y - 26, 2, h + 25); R(ctx, shade(col, -0.25), x + w - 3, y - 26, 2, h + 25);
+  // marquesina con letrero y la mano
+  R(ctx, '#0f1a10', x + 3, y - 23, w - 6, 8);
+  R(ctx, on ? '#7CFF4F' : '#5fd43a', x + 5, y - 21, w - 10, 4);
+  R(ctx, '#0f1a10', x + 7, y - 20, 3, 2); R(ctx, '#0f1a10', x + 12, y - 20, 4, 2); R(ctx, '#0f1a10', x + 18, y - 20, 2, 2); R(ctx, '#0f1a10', x + 22, y - 20, 3, 2);
+  R(ctx, OL, x + 11, y - 35, 10, 11); R(ctx, '#6fdc4f', x + 12, y - 34, 8, 10);
+  for (const fx of [12, 14, 16, 18]) { R(ctx, OL, x + fx - 0.5, y - 40, 2, 6); R(ctx, '#86e865', x + fx, y - 39, 1, 5); }
+  R(ctx, '#86e865', x + 20, y - 32, 3, 2);
+  R(ctx, '#4a3420', x + 9, y - 26, 14, 3);
+  // pantalla con un zombi chiquito
+  R(ctx, '#0b100b', x + 4, y - 14, w - 8, 15);
+  R(ctx, on ? '#1f5a26' : '#1a4a20', x + 6, y - 12, w - 12, 11);
+  R(ctx, '#7CFF4F', x + 13, y - 10, 5, 5); R(ctx, '#e6ff4a', x + 14, y - 9, 1, 1); R(ctx, '#e6ff4a', x + 16, y - 9, 1, 1);
+  R(ctx, '#bcd4ee', x + 13, y - 5, 5, 4); R(ctx, '#7CFF4F', x + 18, y - 5, 4, 1);
+  R(ctx, '#fff', x + 7, y - 11, 2, 1);
+  // controles
+  R(ctx, '#2b3a2c', x + 3, y + 2, w - 6, 6); R(ctx, '#1b261c', x + 3, y + 7, w - 6, 2);
+  R(ctx, OL, x + 7, y + 2, 2, 3); pell(ctx, '#7CFF4F', x + 8, y + 3, 2, 2);
+  for (const [bx, bc] of [[16, '#e63946'], [21, '#7CFF4F'], [26, '#ffd23f']]) { R(ctx, OL, x + bx - 1, y + 3, 3, 3); R(ctx, bc, x + bx - 1, y + 3, 2, 2); }
+  R(ctx, '#18241a', x + 4, y + 10, w - 8, h - 12);
+  R(ctx, OL, x + 9, y + 15, 14, 8); R(ctx, '#0f1a10', x + 10, y + 16, 12, 6);
+  R(ctx, '#7CFF4F', x + 12, y + 17, 2, 4); R(ctx, '#7CFF4F', x + 18, y + 17, 2, 4);
 };
 D.foosball = (ctx, x, y, w, h) => {
   const wd = '#7a4a2b';

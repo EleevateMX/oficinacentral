@@ -47,7 +47,9 @@ const STEP_MS = 135;
 const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar', jukebox: 'Abrir rocola', hotel: 'Subir a MeDed Friends' };
 // Objetos con brillo o dibujo fino que se pintan nítidos en cada cuadro (además de los de marca)
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
-const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
+const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade', zombieArcade: 'Jugar Zombies en la oficina' };
+// Zombies: si ya hay una partida en esa máquina, la pista invita a unirse
+const zombieLabel = (o) => { const m = o.type === 'zombieArcade' && office.state.liveGames?.find((g) => g.objectId === o.id); return m ? `Unirse a Zombies (${m.players.length}/${m.max})` : null; };
 
 // Tamaño de un objeto (los de temporada traen el suyo)
 const sizeOf = (o) => (o.season ? { w: o.w, h: o.h } : objSize(o));
@@ -60,8 +62,8 @@ function nearInteractive(f, me) {
     const { w, h } = sizeOf(o);
     const dx = Math.max(o.x - me.x, 0, me.x - (o.x + w - 1));
     const dy = Math.max(o.y - me.y, 0, me.y - (o.y + h - 1));
-    const d = Math.max(dx, dy);
-    if (d <= 2 && (!best || d < best.d)) best = { o, kind, d };
+    const d = Math.max(dx, dy), e = dx * dx + dy * dy; // empate: el más derecho enfrente
+    if (d <= 2 && (!best || d < best.d || (d === best.d && e < best.e))) best = { o, kind, d, e };
   }
   return best;
 }
@@ -71,7 +73,7 @@ export function interact(o) {
   const kind = CATALOG[o.type]?.interactive;
   if (kind === 'board') office.set({ modal: { type: 'board', objectId: o.id } });
   else if (kind === 'notices') office.set({ modal: { type: 'notices' } });
-  else if (kind === 'game') office.set({ modal: { type: 'game', objectId: o.id, game: GAME_OF[o.type] } });
+  else if (kind === 'game') office.set({ modal: { type: 'game', objectId: o.id, game: GAME_OF[o.type], floorId: office.state.floor?.id } });
   else if (kind === 'jukebox') office.set({ modal: { type: 'jukebox', objectId: o.id } });
   else if (kind === 'hotel') office.set({ view: 'hotel', hotelFx: 'elevator' }); // elevador: sube al Hotel
   else if (kind === 'screen') {
@@ -600,7 +602,7 @@ export default function MapView({ active }) {
 
       // Avatares
       const players = office.players;
-      const list = Object.entries(players).filter(([, p]) => p.floorId === f.id).sort((a, b) => a[1].ry - b[1].ry);
+      const list = Object.entries(players).filter(([, p]) => p.floorId === f.id && !p.game).sort((a, b) => a[1].ry - b[1].ry);
       // Zombies y perritos de temporada (no en modo ahorro)
       if (hw?.npcs) drawSeasonWalkers(ctx, hw, t, viewRect, f, list.map(([, p]) => p));
       for (const [id, p] of list) {
@@ -804,7 +806,7 @@ export default function MapView({ active }) {
         if (office.pendingInteract === near.o.id) { office.pendingInteract = null; interact(near.o); }
         const { w: ow } = sizeOf(near.o);
         const hp = worldToScreen(near.o.x + ow / 2, near.o.y - 0.6);
-        const txt = near.o.label || GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
+        const txt = near.o.label || zombieLabel(near.o) || GAME_LABELS[near.o.type] || INTERACT_LABELS[near.kind];
         ctx.font = '600 12px "Public Sans", system-ui, sans-serif';
         const tw = ctx.measureText(txt).width + 34;
         ctx.fillStyle = 'rgba(16,16,16,.88)';
@@ -1007,7 +1009,7 @@ export default function MapView({ active }) {
     if (petClick(floor.id, w)) return;
     // Clic en una persona → tarjeta de perfil
     for (const [id, p] of Object.entries(office.players)) {
-      if (p.floorId !== floor.id) continue;
+      if (p.floorId !== floor.id || p.game) continue;
       if (w.x >= p.rx && w.x < p.rx + 1 && w.y >= p.ry - 0.2 && w.y < p.ry + 1) {
         // Si transmite y está en tu sala, abre su pantalla
         if (p.screen && office.state.talkingWith.includes(Number(id))) office.watch(Number(id));

@@ -3,7 +3,7 @@ import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId, setAreaClosed, isAreaClosed, closedAreaIds, floorPayload, floorOfArea, listFloors, isFloorAdminOnly } from './world.js';
 import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../shared/map.js';
-import { initGames } from './games.js';
+import { initGames, gameHooks } from './games.js';
 import { EMOTES, PAIR_RANGE, cleanVariant } from '../shared/emotes.js';
 import { initBoards } from './boards.js';
 import { initNotes, startNotesTimer } from './notes.js';
@@ -31,7 +31,19 @@ export function getIO() {
 export function publicPresence(userId) {
   const p = presence.get(userId);
   if (!p) return { online: false };
-  return { online: true, floorId: p.floorId, x: p.x, y: p.y, dir: p.dir, status: p.status, mic: p.mic, cam: p.cam, screen: p.screen, watching: p.watching, recording: !!p.recording };
+  return { online: true, floorId: p.floorId, x: p.x, y: p.y, dir: p.dir, status: p.status, mic: p.mic, cam: p.cam, screen: p.screen, watching: p.watching, recording: !!p.recording, game: p.game || null };
+}
+
+// Zombies: quien juega sale de la sala (no se ve en el mapa ni se oye) y regresa al mismo lugar al salir.
+// Dos personas solo "se oyen" si están en la misma partida, o si ninguna está jugando.
+export const sameGame = (a, b) => (a?.game?.objectId ?? null) === (b?.game?.objectId ?? null);
+function setGame(userId, game) {
+  const p = presence.get(userId);
+  if (!p || (!p.game && !game)) return;
+  p.game = game;
+  emitPlayer(userId);
+  voiceMoved(userId);
+  if (game) stageCleanup(userId);
 }
 
 // Pisos "solo admins" (archivo): quien no es admin no recibe dónde está nadie ahí,
@@ -39,7 +51,7 @@ export function publicPresence(userId) {
 export function presenceFor(userId, viewerIsAdmin) {
   const p = publicPresence(userId);
   if (!p.online || viewerIsAdmin || !isFloorAdminOnly(p.floorId)) return p;
-  return { online: true, floorId: null, x: null, y: null, dir: 'down', status: p.status, mic: false, cam: false, screen: false, watching: [], recording: false };
+  return { online: true, floorId: null, x: null, y: null, dir: 'down', status: p.status, mic: false, cam: false, screen: false, watching: [], recording: false, game: p.game };
 }
 
 function emitPlayer(userId, from = null) {
@@ -137,6 +149,9 @@ export function initRealtime(httpServer) {
   io = new Server(httpServer, { maxHttpBufferSize: Number(process.env.SOCKET_MAX_BYTES) || 200_000 });
   initStageIO(io, presence);
   initVoiceGate({ presence, emitToUser });
+  gameHooks.seated = (uid, info) => setGame(uid, { type: info.game, objectId: info.objectId, floorId: info.floorId });
+  gameHooks.unseated = (uid) => setGame(uid, null);
+  gameHooks.live = (list) => io?.emit('games:live', list);
 
   io.use((socket, next) => {
     const token = parseCookies(socket.handshake.headers.cookie)[SESSION_COOKIE];
@@ -317,7 +332,7 @@ export function initRealtime(httpServer) {
       const f = getFloor(p.floorId)?.state;
       if (!f) return;
       const to = [userId];
-      for (const [id, q] of presence) if (id !== userId && canTalk(f, { ...p, floorId: p.floorId }, q) && !hasBlocked(id, userId)) to.push(id);
+      for (const [id, q] of presence) if (id !== userId && canTalk(f, { ...p, floorId: p.floorId }, q) && sameGame(p, q) && !hasBlocked(id, userId)) to.push(id);
       const msg = { from: userId, text, at: t, id: `${userId}-${t}`, to: to.length - 1 };
       for (const id of to) io.to(`user:${id}`).emit('room-msg', msg);
     });
