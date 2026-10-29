@@ -100,7 +100,64 @@ function voice(c, out, t, { f0, dur, formants, wobble = 6, depth = 0.06, grit = 
   for (const s of [o, o2, lfo, n]) { s.start(t); s.stop(end); }
 }
 
+// Piezas sueltas para las recetas del arsenal
+function osc(c, out, t, { f = 440, f2 = null, type = 'sine', dur = 0.1, vol = 0.5, a = 0.004 }) {
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + dur);
+  env(g, t, { a, peak: vol, r: dur });
+  o.connect(g).connect(out); o.start(t); o.stop(t + a + dur + 0.05);
+}
+function hiss(c, out, t, { dur = 0.1, vol = 0.5, f = 2000, f2 = null, q = 1, type = 'bandpass', a = 0.003, rate = 1 }) {
+  const n = c.createBufferSource(); n.buffer = noise(c); n.playbackRate.value = rate;
+  const bp = c.createBiquadFilter(); bp.type = type; bp.Q.value = q;
+  bp.frequency.setValueAtTime(f, t);
+  if (f2) bp.frequency.exponentialRampToValueAtTime(Math.max(30, f2), t + dur);
+  const g = c.createGain(); env(g, t, { a, peak: vol, r: dur });
+  n.connect(bp).connect(g).connect(out); n.start(t, Math.random()); n.stop(t + a + dur + 0.05);
+}
+
 const SYN = {
+  // ----- Arsenal: disparos -----
+  toner(c, out, t) { hiss(c, out, t, { dur: 0.06, vol: 1, f: 3200, f2: 1100, q: 0.8 }); osc(c, out, t, { f: 260, f2: 70, type: 'square', dur: 0.07, vol: 0.35 }); osc(c, out, t + 0.01, { f: 1800, f2: 900, type: 'triangle', dur: 0.04, vol: 0.15 }); },
+  laser(c, out, t) {
+    osc(c, out, t, { f: 2400, f2: 180, type: 'sawtooth', dur: 0.32, vol: 0.32 });
+    osc(c, out, t, { f: 1200, f2: 90, type: 'square', dur: 0.25, vol: 0.18 });
+    hiss(c, out, t, { dur: 0.35, vol: 1.1, f: 1500, f2: 150, q: 0.5, type: 'lowpass' });
+    osc(c, out, t, { f: 90, f2: 35, dur: 0.4, vol: 0.9 });
+  },
+  shred(c, out, t) { hiss(c, out, t, { dur: 0.05, vol: 0.9, f: 2200, f2: 700, q: 1.4, rate: 0.7 }); osc(c, out, t, { f: 150, f2: 60, type: 'sawtooth', dur: 0.06, vol: 0.35 }); osc(c, out, t, { f: 55, dur: 0.05, type: 'square', vol: 0.15 }); },
+  thunk(c, out, t) { osc(c, out, t, { f: 180, f2: 60, dur: 0.18, vol: 0.9 }); hiss(c, out, t, { dur: 0.12, vol: 0.6, f: 900, f2: 300, q: 0.8, type: 'lowpass' }); osc(c, out, t + 0.02, { f: 660, f2: 990, type: 'triangle', dur: 0.12, vol: 0.12 }); },
+  boom(c, out, t) { osc(c, out, t, { f: 85, f2: 28, dur: 0.8, vol: 1.2 }); hiss(c, out, t, { dur: 0.7, vol: 1.2, f: 1800, f2: 90, q: 0.5, type: 'lowpass' }); hiss(c, out, t + 0.05, { dur: 0.4, vol: 0.4, f: 5000, f2: 2000, q: 1 }); },
+  // ----- Espadas -----
+  swish(c, out, t) { hiss(c, out, t, { dur: 0.16, vol: 0.9, f: 900, f2: 3800, q: 2.2, a: 0.03 }); hiss(c, out, t + 0.02, { dur: 0.12, vol: 0.4, f: 6000, f2: 2500, q: 3, a: 0.02 }); },
+  heavyswing(c, out, t) { hiss(c, out, t, { dur: 0.3, vol: 1, f: 400, f2: 1800, q: 1.6, a: 0.06 }); osc(c, out, t, { f: 120, f2: 60, dur: 0.3, vol: 0.4, a: 0.05 }); },
+  slashhit(c, out, t) { hiss(c, out, t, { dur: 0.1, vol: 1, f: 1800, f2: 500, q: 1 }); osc(c, out, t, { f: 220, f2: 70, type: 'square', dur: 0.09, vol: 0.35 }); osc(c, out, t, { f: 3200, f2: 2400, type: 'triangle', dur: 0.05, vol: 0.12 }); },
+  bash(c, out, t) { osc(c, out, t, { f: 160, f2: 55, dur: 0.12, vol: 0.9 }); hiss(c, out, t, { dur: 0.08, vol: 0.7, f: 700, q: 0.8, type: 'lowpass' }); },
+  charge(c, out, t) { for (const [f, at] of [[740, 0], [988, 0.06], [1480, 0.12]]) osc(c, out, t + at, { f, dur: 0.14, type: 'triangle', vol: 0.25 }); },
+  techready(c, out, t) { for (const [f, at] of [[1046, 0], [1568, 0.08], [2093, 0.16]]) osc(c, out, t + at, { f, dur: 0.22, type: 'sine', vol: 0.35 }); hiss(c, out, t, { dur: 0.4, vol: 0.15, f: 8000, q: 2 }); },
+  // ----- Técnicas -----
+  tech_agua(c, out, t) {
+    hiss(c, out, t, { dur: 0.9, vol: 1.1, f: 500, f2: 2400, q: 0.9, a: 0.08, rate: 0.6 });
+    hiss(c, out, t + 0.2, { dur: 0.7, vol: 0.7, f: 3000, f2: 700, q: 1.2, a: 0.1 });
+    osc(c, out, t, { f: 196, f2: 392, type: 'triangle', dur: 0.6, vol: 0.3, a: 0.05 });
+    osc(c, out, t + 0.1, { f: 294, f2: 587, type: 'sine', dur: 0.6, vol: 0.25, a: 0.05 });
+  },
+  tech_llama(c, out, t) {
+    hiss(c, out, t, { dur: 0.8, vol: 1.3, f: 300, f2: 1400, q: 0.6, type: 'lowpass', a: 0.04 });
+    for (let k = 0; k < 4; k++) hiss(c, out, t + k * 0.07, { dur: 0.12, vol: 0.6, f: 900 + k * 300, f2: 2600, q: 2, a: 0.02 });
+    osc(c, out, t, { f: 110, f2: 55, type: 'sawtooth', dur: 0.7, vol: 0.4, a: 0.03 });
+  },
+  tech_rayo(c, out, t) {
+    hiss(c, out, t, { dur: 0.08, vol: 1.4, f: 6000, f2: 1500, q: 0.6 });
+    osc(c, out, t, { f: 3000, f2: 120, type: 'sawtooth', dur: 0.2, vol: 0.4 });
+    hiss(c, out, t + 0.06, { dur: 0.9, vol: 1.1, f: 900, f2: 60, q: 0.5, type: 'lowpass' });
+    osc(c, out, t + 0.05, { f: 70, f2: 30, dur: 0.8, vol: 1 });
+  },
+  // ----- Caja misteriosa -----
+  boxspin(c, out, t) { osc(c, out, t, { f: rnd(1100, 1300), dur: 0.04, type: 'square', vol: 0.12 }); },
+  boxwin(c, out, t) { for (const [f, at] of [[523, 0], [659, 0.08], [784, 0.16], [1047, 0.24], [1319, 0.32]]) osc(c, out, t + at, { f, dur: 0.25, type: 'triangle', vol: 0.4 }); hiss(c, out, t + 0.3, { dur: 0.5, vol: 0.2, f: 7000, q: 2 }); },
   groan(c, out, t) {
     const f0 = rnd(70, 125);
     voice(c, out, t, { f0, dur: rnd(0.8, 1.5), formants: [[rnd(420, 560), 6, 1, 330], [rnd(820, 980), 8, 0.6, 700], [2500, 10, 0.15]], wobble: rnd(4, 7), depth: rnd(0.04, 0.09), vol: 0.9, glide: rnd(0.7, 0.9) });

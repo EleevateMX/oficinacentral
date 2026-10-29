@@ -1,5 +1,6 @@
 // Interfaz encima del 3D (canvas 2D): vida, balas, hordas, jefe, equipo, mira, tienda y pantallas.
-import { WEAPONS, CELL } from '@shared/zombies.js';
+import { CELL } from '@shared/zombies.js';
+import { weaponCard, loadoutBar, energyMeter, abilities, dynamicCrosshair, scope, killFeed, damageNumbers, ammoPrompts, weaponWheel, techScreen, slowMoTint } from './weaponHud.js';
 
 const PINK = '#FE3377', YEL = '#FFCC00', GREEN = '#7CFF4F', INK = 'rgba(12,12,18,.78)';
 const fmt = (n) => Math.round(n).toLocaleString('es-MX');
@@ -54,15 +55,23 @@ export class Hud {
     W /= k; H /= k;
     this.vignette(g, W, H, s);
     if (s.view === 'play' || s.view === 'watch') {
+      techScreen(g, W, H, s);
+      slowMoTint(g, W, H, s);
+      scope(g, W, H, s);
       this.crosshair(g, W, H, s);
+      this.miniBottom = 60;
       this.topBar(g, W, H, s);
-      this.team(g, W, H, s);
+      this.teamBottom = this.team(g, W, H, s);
       if (s.showMinimap !== false) this.minimap(g, W, H, s);
       if (s.me) { this.health(g, W, H, s); this.ammo(g, W, H, s); }
+      damageNumbers(g, W, H, s);
+      killFeed(g, W, H, s, this.miniBottom + 12);
       this.popups(g, W, H, s);
       this.feed(g, W, H, s);
       this.prompts(g, W, H, s);
+      ammoPrompts(g, W, H, s);
       if (s.touch && s.view === 'play') this.touch(g, W, H, s);
+      weaponWheel(g, W, H, s);
     }
     // menús, tienda, fin y anuncios: en HTML (menu.js)
     if (s.phase === 'intro') this.intro(g, W, H, s);
@@ -94,15 +103,7 @@ export class Hud {
   }
 
   crosshair(g, W, H, s) {
-    if (s.menu || s.shopOpen || s.phase === 'over' || (s.me && !s.me.alive)) return;
-    const cx = W / 2, cy = H / 2;
-    drawCrosshair(g, cx, cy, { style: s.cross?.style, color: s.cross?.color, gap: 6 + s.spread * 16 });
-    if (s.hitT > 0) {
-      const a = Math.min(1, s.hitT * 6), r = 9 + (1 - a) * 4;
-      g.strokeStyle = s.hitKill ? `rgba(255,60,80,${a})` : s.hitHead ? `rgba(255,204,0,${a})` : `rgba(255,255,255,${a})`;
-      g.lineWidth = s.hitKill ? 3.5 : 2.5;
-      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { g.beginPath(); g.moveTo(cx + dx * r, cy + dy * r); g.lineTo(cx + dx * (r + 7), cy + dy * (r + 7)); g.stroke(); }
-    }
+    dynamicCrosshair(g, W, H, s, drawCrosshair);
   }
 
   topBar(g, W, H, s) {
@@ -125,7 +126,7 @@ export class Hud {
 
   team(g, W, H, s) {
     const list = s.team || [];
-    if (list.length < 2 && !s.watching) return;
+    if (list.length < 2 && !s.watching) return 74;
     let y = 74;
     for (const p of list) {
       plate(g, 12, y, 190, 40, 10);
@@ -136,6 +137,7 @@ export class Hud {
       bar(g, 34, y + 25, 160, 7, p.alive ? p.hp / 100 : p.down ? p.downT / 30 : 0, p.down ? '#ff5050' : p.hp > 40 ? '#4cd964' : '#ffb03b');
       y += 46;
     }
+    return y;
   }
 
   minimap(g, W, H, s) {
@@ -157,6 +159,7 @@ export class Hud {
       }
     }
     plate(g, x0 - 6, y0 - 6, mw + 12, mh + 12, 10, 'rgba(12,12,18,.6)');
+    this.miniBottom = y0 + mh + 6;
     g.drawImage(this.mini, x0, y0);
     for (const z of s.zombies || []) { g.fillStyle = z.boss ? '#ff2a2a' : '#ff6b6b'; const r = z.boss ? 3 : 1.6; g.fillRect(x0 + z.x * c - r, y0 + z.y * c - r, r * 2, r * 2); }
     for (const p of s.team || []) {
@@ -177,38 +180,33 @@ export class Hud {
     if (P.dmgLvl) text(g, '★'.repeat(P.dmgLvl), 270, H - 64, { size: 11, color: YEL, align: 'right' });
   }
 
+  // dashboard de armas (weaponHud.js)
   ammo(g, W, H, s) {
-    const L = s.loadout;
-    if (!L) return;
-    const Wp = WEAPONS[L.cur];
-    plate(g, W - 300, H - 78, 286, 64, 14);
-    text(g, Wp.name, W - 286, H - 52, { size: 14, weight: 800, color: '#e8e8ee' });
-    const res = L.res[L.cur] === Infinity ? '∞' : L.res[L.cur];
-    text(g, L.reloadT > 0 ? 'Recargando…' : `${L.mag[L.cur]}`, W - 286, H - 22, { size: L.reloadT > 0 ? 18 : 30, weight: 900, color: L.mag[L.cur] === 0 ? '#ff6b6b' : '#fff' });
-    if (L.reloadT <= 0) text(g, `/ ${res}`, W - 286 + g.measureText(`${L.mag[L.cur]}`).width + 8, H - 22, { size: 16, weight: 700, color: '#aab' });
-    for (let i = 0; i < 3; i++) {
-      const x = W - 120 + i * 34, y = H - 66;
-      plate(g, x, y, 28, 40, 8, i === L.cur ? PINK : L.owned[i] ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.05)');
-      text(g, String(i + 1), x + 14, y + 26, { size: 15, weight: 900, align: 'center', color: L.owned[i] ? '#fff' : '#666' });
-    }
-    if (L.reloadT > 0) bar(g, W - 286, H - 16, 150, 4, 1 - L.reloadT / Wp.reload, YEL);
+    if (!s.arms) return;
+    abilities(g, W, H, s);
+    energyMeter(g, W, H, s);
+    loadoutBar(g, W, H, s);
+    weaponCard(g, W, H, s);
   }
 
   popups(g, W, H, s) {
-    for (const p of s.popups || []) {
+    const list = s.popups || [];
+    for (const [i, p] of list.entries()) {
       const a = Math.min(1, p.t * 2);
       g.globalAlpha = a;
-      text(g, p.text, W / 2 + 34, H / 2 - 20 - (1 - p.t) * 40, { size: p.big ? 22 : 16, weight: 900, color: p.color || YEL, stroke: 4 });
+      text(g, p.text, W / 2 + 34, H / 2 - 20 - (1 - p.t) * 40 - (list.length - 1 - i) * 24, { size: p.big ? 22 : 16, weight: 900, color: p.color || YEL, stroke: 4 });
     }
     g.globalAlpha = 1;
   }
 
   feed(g, W, H, s) {
-    let y = 230;
+    let y = (this.teamBottom || 74) + 8;
     for (const f of (s.feed || []).slice(-4)) {
       g.globalAlpha = Math.min(1, f.t);
-      plate(g, W - 250, y, 236, 26, 8);
-      text(g, f.text, W - 240, y + 18, { size: 12.5, weight: 700, color: f.color || '#fff' });
+      g.font = '700 12.5px system-ui, sans-serif';
+      const w = Math.max(160, g.measureText(f.text).width + 22);
+      plate(g, 12, y, w, 26, 8);
+      text(g, f.text, 22, y + 18, { size: 12.5, weight: 700, color: f.color || '#fff' });
       y += 30;
     }
     g.globalAlpha = 1;
@@ -241,7 +239,10 @@ export class Hud {
     g.globalAlpha = 0.8;
     plate(g, 115 + (T.sx || 0) * 45 - 28, H - 135 + (T.sy || 0) * 45 - 28, 56, 56, 28, 'rgba(255,255,255,.35)');
     g.globalAlpha = 1;
-    this.button(g, 'fire', '🔫', W - 150, H - 210, 110, 110, { primary: true });
+    this.button(g, 'fire', s.arms?.sword ? '⚔' : '🔫', W - 150, H - 210, 110, 110, { primary: true });
+    this.button(g, 'bash', 'V', W - 300, H - 310, 60, 60, { small: true });
+    if (s.arms?.hasSword) this.button(g, 'tech', 'Q', W - 230, H - 310, 60, 60, { small: true, primary: s.arms.techReady });
+    if (s.arms && !s.arms.sword) this.button(g, 'ads', '◎', W - 150, H - 310, 60, 60, { small: true, primary: s.arms.ads > 0.5 });
     this.button(g, 'reload', 'R', W - 230, H - 150, 60, 60, { small: true });
     this.button(g, 'swap', '⇄', W - 230, H - 230, 60, 60, { small: true });
     this.button(g, 'menu', '☰', W - 66, 64, 50, 40, { small: true });

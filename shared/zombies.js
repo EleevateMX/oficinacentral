@@ -6,6 +6,7 @@
 //   y nombres de las salas), recortado alrededor de la sala de juegos.
 
 import { CATALOG, objSize } from './catalog.js';
+import { ARMS, armIndex, GUNS, SWORDS } from './arsenal.js';
 
 // Metros por casilla del mapa (la simulación trabaja en casillas; el dibujo 3D en metros)
 export const TILE_M = 1.25;
@@ -97,27 +98,41 @@ export function waveRoster(spec, seed = 1) {
 }
 
 // ---------- Armas ----------
-// dmg por bala; every = segundos entre disparos; mag = cargador; reserve = balas extra (Infinity = sin fin)
-export const WEAPONS = [
-  { id: 'grapadora', name: 'Grapadora', short: 'Grapadora', dmg: 24, every: 0.26, mag: 12, reserve: Infinity, reload: 1.0, spread: 0.012, pellets: 1, auto: false, kick: 0.5 },
-  { id: 'cafetera', name: 'Escopeta de café', short: 'Escopeta', dmg: 15, every: 0.85, mag: 6, reserve: 24, reload: 1.6, spread: 0.09, pellets: 8, auto: false, kick: 1.2, cost: 750 },
-  { id: 'clavadora', name: 'Clavadora', short: 'Clavadora', dmg: 13, every: 0.085, mag: 40, reserve: 160, reload: 1.8, spread: 0.035, pellets: 1, auto: true, kick: 0.35, cost: 1200 },
-];
-export const WEAPON_IDS = WEAPONS.map((w) => w.id);
+// Las armas, espadas y técnicas viven en shared/arsenal.js (sirven también para otros modos).
+// WEAPONS = todo el arsenal en orden fijo: 0-6 armas de fuego, 7-9 espadas (el índice viaja por la red).
+export {
+  ARMS, GUNS, SWORDS, TECHNIQUES, TECH_IDS, ENERGY_MAX, BASH, COMBO, HEAVY, COMBO_WINDOW, armIndex, isSword, isGun,
+  spreadAt, spreadLimits, falloff, pelletDirs, inArc, arcHits, pathHits, segDist, techPath, swingOf, energyGain, techDamage,
+  boxPick, boxPool, BOX_WEIGHTS, ownedBits, bitsOwned,
+} from './arsenal.js';
+export const WEAPONS = ARMS;
+export const WEAPON_IDS = ARMS.map((w) => w.id);
 
 // ---------- Tienda (entre hordas) ----------
+// cat: 'supply' | 'gun' | 'sword' | 'upgrade'. Las teclas 1-9 compran en este orden.
+const weaponItem = (w, desc) => ({ id: w.id, name: w.name, desc, cost: w.cost, weapon: armIndex(w.id), cat: w.kind });
+export const BOX_COST = 950;
 export const SHOP = [
-  { id: 'ammo', name: 'Caja de grapas', desc: 'Llena las balas de todas tus armas', cost: 300 },
-  { id: 'heal', name: 'Dona y café', desc: '+60 de vida', cost: 250 },
-  { id: 'armor', name: 'Chaleco reflectante', desc: '+50 de armadura', cost: 400 },
-  { id: 'cafetera', name: 'Escopeta de café', desc: 'Escopeta: 8 granos por tiro', cost: 750, weapon: 1 },
-  { id: 'clavadora', name: 'Clavadora', desc: 'Automática: muchos clavos', cost: 1200, weapon: 2 },
-  { id: 'upgrade', name: 'Grapas de titanio', desc: '+25% de daño (hasta 3)', cost: 1500 },
+  { id: 'ammo', name: 'Caja de grapas', desc: 'Llena las balas de todas tus armas', cost: 300, cat: 'supply' },
+  { id: 'heal', name: 'Dona y café', desc: '+60 de vida', cost: 250, cat: 'supply' },
+  { id: 'armor', name: 'Chaleco reflectante', desc: '+50 de armadura', cost: 400, cat: 'supply' },
+  { id: 'box', name: 'Caja misteriosa', desc: 'Un arma al azar… ¿te toca la buena?', cost: BOX_COST, cat: 'supply' },
+  ...GUNS.filter((w) => w.cost).map((w) => weaponItem(w, {
+    cafetera: 'Escopeta: 8 granos por tiro', clavadora: 'Automática: muchos clavos', toner: 'Rifle de ráfaga de 3',
+    laser: 'Francotirador con mira', trituradora: 'Ametralladora de 90 tiras', lanzatazas: 'Tazas explosivas en área',
+  }[w.id] || w.desc)),
+  ...SWORDS.map((w) => weaponItem(w, { katana: 'Estilo Agua · combo veloz', regla: 'Estilo Rayo · la más rápida', carton: 'Estilo Llama · a dos manos' }[w.id] || w.desc)),
+  { id: 'upgrade', name: 'Grapas de titanio', desc: '+25% daño de armas (hasta 3)', cost: 1500, cat: 'upgrade' },
+  { id: 'swordup', name: 'Filo de acero', desc: '+20% daño de espadas y técnicas (hasta 3)', cost: 1200, cat: 'upgrade' },
+  { id: 'energy', name: 'Respiración profunda', desc: '+25% energía por golpe (hasta 3)', cost: 1000, cat: 'upgrade' },
 ];
 export const upgradeCost = (lvl) => 1500 + lvl * 1000;
+export const swordUpCost = (lvl) => 1200 + lvl * 800;
+export const energyUpCost = (lvl) => 1000 + lvl * 700;
+export const UPGRADE_MAX = 3;
 
-// Botín que sueltan los zombis
-export const DROPS = { ammo: { name: 'Grapas', chance: 0.09 }, health: { name: 'Dona', chance: 0.06 }, points: { name: 'Bono', chance: 0.05 } };
+// Botín que sueltan los zombis (box: una caja misteriosa, muy de vez en cuando)
+export const DROPS = { ammo: { name: 'Munición', chance: 0.09 }, health: { name: 'Dona', chance: 0.06 }, points: { name: 'Bono', chance: 0.05 }, box: { name: 'Caja misteriosa', chance: 0.006 } };
 
 // ---------- Nivel desde el piso de la oficina ----------
 // Celdas del nivel

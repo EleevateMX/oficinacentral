@@ -43,3 +43,24 @@ El juego ya trae sonidos hechos por código. Si quieres usar audios propios (por
 | `gameover` | Fin de la partida |
 
 Consejos: archivos cortos (menos de 2 s, salvo `ambient`), sin silencio al inicio y a volumen parecido entre sí. El volumen general y el de efectos se ajustan en **Opciones** dentro del juego.
+
+### Arsenal (armas nuevas, espadas y técnicas)
+
+| Nombre | Cuándo suena |
+| --- | --- |
+| `toner` | Disparo del rifle de tóner (cada cartucho de la ráfaga) |
+| `laser` | Disparo del láser de presentación (francotirador) |
+| `shred` | Disparo de la trituradora de papel |
+| `thunk` | Disparo del lanzatazas |
+| `boom` | Explota una taza |
+| `swish` | Golpe de katana o de regla |
+| `heavyswing` | Golpe de la espada de cartón o golpe cargado |
+| `slashhit` | Tu espada le pegó a un zombi |
+| `bash` | Golpe rápido (V) con cualquier arma |
+| `charge` | Golpe cargado listo para soltar |
+| `techready` | La barra de técnica se llenó |
+| `tech_agua` | Técnica de estilo agua |
+| `tech_llama` | Técnica de estilo llama |
+| `tech_rayo` | Técnica de estilo rayo |
+| `boxspin` | Tic de la caja misteriosa mientras gira |
+| `boxwin` | La caja misteriosa da su premio |

@@ -16,6 +16,7 @@ export const DEFAULTS = {
   master: 80, // 0–100
   effects: 100, // 0–100: disparos, golpes y zombis
   minimap: true,
+  dmgNums: true, // números de daño sobre los zombis
   cross: 'cruz',
   crossColor: '#ffffff',
 };
@@ -33,6 +34,7 @@ export function loadOpts() {
   o.master = Math.round(clamp(raw.master, 0, 100, DEFAULTS.master));
   o.effects = Math.round(clamp(raw.effects, 0, 100, DEFAULTS.effects));
   o.minimap = raw.minimap !== false;
+  o.dmgNums = raw.dmgNums !== false;
   o.cross = CROSS_STYLES.some((c) => c.id === raw.cross) ? raw.cross : DEFAULTS.cross;
   o.crossColor = CROSS_COLORS.includes(raw.crossColor) ? raw.crossColor : DEFAULTS.crossColor;
   return o;

@@ -371,3 +371,80 @@
 .zm-narrow .zm-bn-name { font-size: 2em; }
 .zm-narrow .zm-ver { display: none; }
 @media (prefers-reduced-motion: reduce) { .zm-root *:not(.zm-bn), .zm-root *::before, .zm-root *::after { animation-duration: .01ms !important; transition: none !important; } }
+
+/* ===== Arsenal: tienda por secciones, espadas, caja misteriosa y técnicas ===== */
+.zm-key.tech, .zm-leg i.tech { background: rgba(79, 216, 255, .26); border-color: #4FD8FF; box-shadow: 0 0 .5em rgba(79, 216, 255, .35); }
+.zm-shop { width: min(66em, calc(100% - 2em)); }
+.zm-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .55em; }
+.zm-shopcat { grid-column: 1 / -1; display: flex; align-items: center; gap: .7em; margin: .5em 0 -.1em; font-family: var(--zm-display); font-weight: 600; font-size: .74em; letter-spacing: .3em; text-transform: uppercase; color: var(--zm-green); }
+.zm-shopcat::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(124, 255, 79, .45), transparent); }
+.zm-shopcat:first-child { margin-top: 0; }
+.zm-card { padding: .65em .75em .6em; }
+.zm-card .zm-cardicon { width: 3.2em; height: 3.2em; }
+.zm-card.sword .zm-cardicon, .zm-card.box .zm-cardicon { background: radial-gradient(circle, color-mix(in srgb, var(--el) 30%, transparent), transparent 70%); }
+.zm-card.sword { border-color: color-mix(in srgb, var(--el) 35%, rgba(255, 255, 255, .12)); }
+.zm-card.sword.can:hover, .zm-card.box.can:hover { border-color: var(--el); box-shadow: 0 .6em 1.6em rgba(0, 0, 0, .4), 0 0 1.2em color-mix(in srgb, var(--el) 45%, transparent); }
+.zm-card.box { background: linear-gradient(160deg, rgba(176, 108, 255, .2), rgba(254, 51, 119, .08)); border-color: rgba(176, 108, 255, .5); }
+.zm-card.box .zm-cardname { color: #e3ccff; }
+.zm-wcard.sword { border-color: color-mix(in srgb, var(--el) 40%, rgba(255, 255, 255, .1)); }
+.zm-wcard.sword .zm-wtop [data-icon] { background: radial-gradient(circle, color-mix(in srgb, var(--el) 30%, transparent), transparent 70%); }
+.zm-wcard.sword .zm-stat b { background: linear-gradient(90deg, var(--el), #fff); box-shadow: 0 0 .5em var(--el); }
+.zm-mode { font-family: var(--zm-display); font-weight: 700; letter-spacing: .1em; color: var(--zm-green); }
+.zm-wcard.sword .zm-mode { color: var(--el); }
+.zm-tech { display: flex; align-items: center; gap: .5em; margin-top: .6em; padding: .4em .5em; background: color-mix(in srgb, var(--el) 12%, transparent); border-left: 2px solid var(--el); font-size: .8em; }
+.zm-tech b { font-family: var(--zm-display); color: #fff; }
+.zm-tech [data-icon] { flex: none; width: 1.8em; height: 1.8em; }
+.zm-tech [data-icon] canvas { width: 100% !important; height: 100% !important; }
+.zm-narrow .zm-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Anuncio de técnica: pincelada del color del estilo con el nombre de la forma */
+.zm-bn-tech { top: 15%; animation-name: zm-bn-tech; }
+@keyframes zm-bn-tech { 0% { opacity: 0; transform: translateX(-2em) skewX(-12deg); } 8% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(1.5em); } }
+.zm-bn-slash { position: absolute; left: 50%; top: 50%; width: 34em; height: 6.2em; transform: translate(-50%, -46%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--el) 55%, #000) 14%, color-mix(in srgb, var(--el) 40%, #05060c) 50%, color-mix(in srgb, var(--el) 55%, #000) 86%, transparent);
+  clip-path: polygon(0 18%, 100% 0, 96% 82%, 3% 100%); opacity: .88; animation: zm-slash-in .45s cubic-bezier(.2, .9, .2, 1) both; }
+.zm-bn-slash::after { content: ''; position: absolute; left: 6%; right: 6%; top: 47%; height: 2px; background: linear-gradient(90deg, transparent, #fff, transparent); box-shadow: 0 0 .8em var(--el); }
+@keyframes zm-slash-in { from { clip-path: polygon(0 18%, 0 0, 0 82%, 0 100%); } }
+.zm-bn-tk { position: relative; font-family: var(--zm-display); font-weight: 600; font-size: .85em; letter-spacing: .5em; text-transform: uppercase; color: #fff; text-shadow: 0 0 .6em var(--el), 0 2px 4px #000; }
+.zm-bn-form { position: relative; margin-top: .15em; font-family: var(--zm-display); font-weight: 400; font-size: 1.2em; letter-spacing: .25em; text-transform: uppercase; color: color-mix(in srgb, var(--el) 60%, #fff); text-shadow: 0 2px 6px #000; }
+.zm-bn-tname { position: relative; font-family: var(--zm-display); font-weight: 700; font-size: 2.9em; line-height: 1.05; letter-spacing: .05em; color: #fff;
+  text-shadow: 0 0 .3em var(--el), 0 0 1em var(--el), .05em .05em 0 #000; animation: zm-tname .5s .08s cubic-bezier(.2, .9, .2, 1) both; }
+@keyframes zm-tname { from { opacity: 0; letter-spacing: .4em; filter: blur(4px); } }
+.zm-narrow .zm-bn-tname { font-size: 1.9em; }
+.zm-narrow .zm-bn-slash { width: 22em; }
+
+/* Caja misteriosa */
+.zm-box { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 5; background: radial-gradient(60% 60% at 50% 50%, rgba(40, 10, 70, .55), rgba(4, 5, 10, .25)); animation: zm-fade .25s ease-out; }
+.zm-box.out { opacity: 0; transition: opacity .45s; }
+.zm-box-card { padding: 1em 1.2em 1.1em; background: var(--zm-navy-2); border: 1px solid rgba(176, 108, 255, .55); border-top: 2px solid #b06cff; box-shadow: 0 1.5em 4em rgba(0, 0, 0, .6), 0 0 3em rgba(176, 108, 255, .25); text-align: center; }
+.zm-box-card .zm-kicker { color: #d4b2ff; }
+.zm-box-win { position: relative; width: 22.5em; height: 8em; overflow: hidden; margin: .4em auto .6em; background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .1);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+.zm-box-reel { display: flex; height: 100%; will-change: transform; }
+.zm-box-cell { flex: none; width: 7.5em; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1em; border-right: 1px solid rgba(255, 255, 255, .06); }
+.zm-box-cell [data-icon] { width: 4.8em; height: 4.8em; }
+.zm-box-cell [data-icon] canvas { width: 100% !important; height: 100% !important; }
+.zm-box-cell b { font-family: var(--zm-display); font-size: .75em; letter-spacing: .1em; text-transform: uppercase; color: #cfd6e2; }
+.zm-box-mark { position: absolute; left: 50%; top: 0; bottom: 0; width: 7.5em; transform: translateX(-50%); border: 2px solid var(--zm-pink); box-shadow: inset 0 0 1.2em rgba(254, 51, 119, .35), 0 0 1em rgba(254, 51, 119, .5); }
+.zm-box-res { display: flex; flex-direction: column; gap: .15em; opacity: 0; transform: translateY(.4em); transition: all .3s; }
+.zm-box.done .zm-box-res { opacity: 1; transform: none; }
+.zm-box.done .zm-box-mark { border-color: var(--zm-green); box-shadow: inset 0 0 1.5em rgba(124, 255, 79, .45), 0 0 1.6em rgba(124, 255, 79, .7); }
+.zm-box-name { font-family: var(--zm-display); font-weight: 700; font-size: 1.6em; letter-spacing: .05em; color: #fff; text-shadow: 0 0 .5em rgba(124, 255, 79, .6); }
+.zm-box-sub { font-size: .85em; color: var(--zm-green); font-weight: 700; }
+
+/* Tienda en dos columnas: armas y espadas a la izquierda; suministros y mejoras en lista a la derecha */
+.zm-cards.split { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 1.1em; align-items: start; }
+.zm-shop-main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5em; }
+.zm-shop-side { display: flex; flex-direction: column; gap: .4em; }
+.zm-cardtext { display: flex; flex-direction: column; gap: .15em; min-width: 0; }
+.zm-shop-main .zm-carddesc { min-height: 0; }
+.zm-card.row { flex-direction: row; align-items: center; gap: .6em; padding: .45em .6em; }
+.zm-card.row .zm-cardicon { width: 2.4em; height: 2.4em; flex: none; }
+.zm-card.row .zm-cardtext { flex: 1; }
+.zm-card.row .zm-cardname { font-size: .88em; margin: 0; }
+.zm-card.row .zm-carddesc { font-size: .7em; min-height: 0; }
+.zm-card.row .zm-cardprice { margin: 0; white-space: nowrap; font-size: .8em; }
+.zm-card.row .zm-cardkey { position: static; flex: none; order: -1; }
+.zm-card.row .zm-lvl { margin-top: .1em; }
+.zm-narrow .zm-cards.split { grid-template-columns: 1fr; }
+.zm-narrow .zm-shop-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }

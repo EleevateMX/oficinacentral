@@ -486,7 +486,7 @@ export function voxelAvatar(av = {}, name = '', color = '#3a86ff') {
   const tag = nameTag(name, color);
   tag.position.y = 2.15;
   root.add(tag);
-  root.userData = { hip, legL, legR, torso, head, armL, armR, flash, walk: 0 };
+  root.userData = { hip, legL, legR, torso, head, armL, armR, flash, gun, walk: 0 };
   return root;
 }
 export function animateAvatar(g, { speed = 0, dt = 0, alive = true, pitch = 0, fire = 0 }) {
