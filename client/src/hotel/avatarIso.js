@@ -15,6 +15,13 @@
 import { hotelFrame, paintHandItem, normalizeSpec, DIRS8, FRAME_W, FRAME_H, WALK_COLS_LEGACY } from '../../../shared/sprite.js';
 import { DIR_VEC } from '../../../shared/hotelWalk.js';
 import { actPose } from './actions.js';
+import { avatarStyle } from '../../../shared/avatarStyle.js';
+import { renderFrameV2, V2_W, V2_H, V2_FOOT, V2_WALK } from '../../../shared/spriteV2.js';
+
+// HUB v2 (shared/spriteV2.js): cuadros de 40×64; cada píxel del dibujo = 1.5 px del mundo del Hotel
+export const K_V2 = 1.5;
+const isV2 = (avatar) => avatarStyle() === 'v2' && !avatar?.sprite;
+const v2Walk = (o) => 1 + (Math.floor((((o.phase ?? (o.frame | 0) / 4) % 1) + 1) % 1 * V2_WALK) % V2_WALK);
 
 export const K = 2; // px del mundo por píxel del dibujo
 const FOOT = 47; // fila debajo de los zapatos (los pies "pisan" aquí)
@@ -50,7 +57,7 @@ export { OFFICE_DIR };
 // ---------- píxeles ----------
 // Acostado: el cuadro de frente visto "desde arriba" sobre la cama: el largo del cuerpo sigue el eje de la cama
 // y el ancho el otro eje (pasos de 2×1 px, como el pixel-art isométrico). Sale en px del mundo (k = 1).
-function layPixels(src, dir) {
+function layPixels(src, dir, FW = FRAME_W, FH = FRAME_H, HC = [16, 21.5]) {
   const [fx, fy] = DIR_VEC[((dir % 8) + 8) % 8];
   // F = de la cabeza a los pies (hacia donde "mira" quien se acuesta); R = su mano derecha (boca arriba)
   const scr = (a, b) => [Math.sign(a - b) * 2, Math.sign(a + b)];
@@ -58,7 +65,7 @@ function layPixels(src, dir) {
   // Direcciones impares (no son de cama): a la diagonal más cercana
   if (!eF[0] || !eF[1]) { eF = [eF[0] || 2, eF[1] || 1]; eR = [-eF[0], eF[1]]; }
   if (!eR[0] || !eR[1]) eR = [-eF[0], eF[1]];
-  const SW = FRAME_H, SH = FRAME_W; // X: 0 = coronilla … 47 = pies · Y: 0 = mano izquierda … 31 = derecha
+  const SW = FH, SH = FW; // X: 0 = coronilla … pies · Y: 0 = mano izquierda … derecha
   const corners = [[0, 0], [SW, 0], [0, SH], [SW, SH]].map(([X, Y]) => [X * eF[0] + Y * eR[0], X * eF[1] + Y * eR[1]]);
   const x0 = Math.floor(Math.min(...corners.map((c) => c[0]))), x1 = Math.ceil(Math.max(...corners.map((c) => c[0])));
   const y0 = Math.floor(Math.min(...corners.map((c) => c[1]))), y1 = Math.ceil(Math.max(...corners.map((c) => c[1])));
@@ -70,12 +77,12 @@ function layPixels(src, dir) {
     const X = Math.floor((px * eR[1] - py * eR[0]) / det), Y = Math.floor((eF[0] * py - eF[1] * px) / det);
     if (X < 0 || Y < 0 || X >= SW || Y >= SH) continue;
     const x = SH - 1 - Y, y = X; // píxel del cuadro de pie
-    const s = (y * FRAME_W + x) * 4;
+    const s = (y * FW + x) * 4;
     if (!src[s + 3]) continue;
     out.set(src.subarray(s, s + 4), (v * W + u) * 4);
   }
   // Centro de la cabeza (de pie: x 16, y 21.5 → X 21.5, Y 16)
-  const hx = 21.5 * eF[0] + 16 * eR[0] - x0, hy = 21.5 * eF[1] + 16 * eR[1] - y0;
+  const hx = HC[1] * eF[0] + HC[0] * eR[0] - x0, hy = HC[1] * eF[1] + HC[0] * eR[1] - y0;
   // La almohada: la cabeza queda un poco hacia la cabecera, y el cuerpo encima del colchón
   const tf = [Math.sign(eF[0]) * 32, Math.sign(eF[1]) * 16];
   const ax = hx + 0.12 * tf[0], ay = hy + 0.12 * tf[1] + 5;
@@ -131,8 +138,37 @@ function customFrame(sheet, p, o) {
   return { data: out, hands, holdArm: o.hand ? 'b' : null };
 }
 
+function buildV2(avatar, o, p) {
+  const lay = o.pose === 'lay';
+  const half = o.pose === 'sitHalf';
+  const walk = o.pose === 'walk' ? v2Walk(o) : 0;
+  const pose = lay ? 'lay' : half ? 'sitHalf' : p.pose;
+  const fr = renderFrameV2(avatar || {}, {
+    dir: lay ? 'down' : p.view, head: lay ? null : p.head, walk, pose,
+    hold: lay ? null : o.hand, drink: !!o.drink, sign: o.pose === 'sign' ? (o.sign ?? 0) : null,
+    blink: !!o.blink || lay, talk: !!o.talk, breathe: o.breathe ? 1 : 0,
+  });
+  const k = K_V2;
+  if (lay) {
+    // El acostado del Hotel pinta 2 px del mundo por píxel; v2 va a 1.5: se reduce el cuadro a 3/4 antes
+    const sw = 30, shh = 48, small = new Uint8ClampedArray(sw * shh * 4);
+    for (let y = 0; y < shh; y++) for (let x = 0; x < sw; x++) {
+      const si = (Math.floor(y * V2_H / shh) * V2_W + Math.floor(x * V2_W / sw)) * 4;
+      small.set(fr.data.subarray(si, si + 4), (y * sw + x) * 4);
+    }
+    const L = layPixels(small, o.dir, sw, shh, [fr.head[0] * 0.75, fr.head[1] * 0.75]);
+    return { data: L.data, w: L.w, h: L.h, ax: L.ax, ay: L.ay, head: [L.head[0] - L.ax, L.head[1] - L.ay], hands: {}, holdArm: null, k: 1, kArt: k };
+  }
+  const f = 2 / k; // dx/dy de las acciones vienen en píxeles del clásico (2 px del mundo)
+  const ax = V2_W / 2 - p.dx * f, ay = (o.pose === 'sit' ? fr.seat : V2_FOOT) - p.dy * f;
+  const rel = {};
+  for (const [kk, v] of Object.entries(fr.hands || {})) rel[kk] = [v[0] - ax, v[1] - ay];
+  return { data: fr.data, w: V2_W, h: V2_H, ax, ay, head: [fr.head[0] - ax, fr.head[1] - ay], hands: rel, holdArm: fr.holdArm, k };
+}
+
 function build(avatar, o) {
   const p = spritePose(o);
+  if (isV2(avatar)) return buildV2(avatar, o, p);
   const custom = avatar?.sprite ? sheetPixels(avatar.sprite) : null;
   if (avatar?.sprite && !custom && typeof Image !== 'undefined') return null; // aún cargando
   let fr;
@@ -145,6 +181,7 @@ function build(avatar, o) {
       blink: !!o.blink, talk: !!o.talk,
     });
   }
+  if (o.pose === 'sitHalf' && !custom) { fr = hotelFrame(avatar || {}, { dir: p.view, pose: 'crouch', blink: !!o.blink }); }
   if (lay) {
     const L = layPixels(fr.data, o.dir);
     return { data: L.data, w: L.w, h: L.h, ax: L.ax, ay: L.ay, head: [L.head[0] - L.ax, L.head[1] - L.ay], hands: {}, holdArm: null, k: 1 };
@@ -194,7 +231,7 @@ export function avatarBudget() {}
 export function frameKey(avatar, o) {
   const p = spritePose(o);
   const lay = o.pose === 'lay';
-  return [specKey(avatar), o.pose || 'stand', lay ? o.dir : p.view, p.head || '', p.step, p.pose || '', p.dx, p.dy,
+  return [isV2(avatar) ? 'v2' : 'c', o.pose === 'walk' && isV2(avatar) ? v2Walk(o) : '', o.breathe ? 1 : 0, specKey(avatar), o.pose || 'stand', lay ? o.dir : p.view, p.head || '', p.step, p.pose || '', p.dx, p.dy,
     o.blink ? 1 : 0, o.talk ? 1 : 0, o.hand || '', o.drink ? 1 : 0, o.pose === 'sign' ? o.sign ?? 0 : ''].join('#');
 }
 
@@ -221,11 +258,12 @@ export function avatarFrame(avatar, o) {
 // Pruebas: los píxeles ya escalados ×K (sin canvas), con el ancla y la coronilla en px del mundo
 export function renderAvatarPixels(avatar, o) {
   const r = build(avatar, o);
-  const w = Math.round(r.w * K), h = Math.round(r.h * K);
+  const KK = r.k || K;
+  const w = Math.round(r.w * KK), h = Math.round(r.h * KK);
   const data = new Uint8ClampedArray(w * h * 4);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const s = ((Math.floor(y / K)) * r.w + Math.floor(x / K)) * 4;
+    const s = ((Math.floor(y / KK)) * r.w + Math.floor(x / KK)) * 4;
     data.set(r.data.subarray(s, s + 4), (y * w + x) * 4);
   }
-  return { data, w, h, ax: Math.round(r.ax * K), ay: Math.round(r.ay * K), top: (r.ay - crownRow(r)) * K, head: [r.head[0] * K, r.head[1] * K], hands: r.hands };
+  return { data, w, h, ax: Math.round(r.ax * KK), ay: Math.round(r.ay * KK), top: (r.ay - crownRow(r)) * KK, head: [r.head[0] * KK, r.head[1] * KK], hands: r.hands, k: KK };
 }

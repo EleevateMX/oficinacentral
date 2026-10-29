@@ -4,6 +4,7 @@ import { office, useOffice } from '../lib/store.js';
 import { api } from '../lib/api.js';
 import { Modal, AvatarCanvas, initials, Select } from './ui.jsx';
 import { SPRITE_OPTIONS, STYLE_NAMES, PARTS, PACKS, PRESETS, normalizeSpec, randomSpec } from '@shared/sprite.js';
+import { V2_PARTS, V2_NAMES, normalizeSpecV2 } from '@shared/spriteV2.js';
 import { Shuffle, Plus } from 'lucide-react';
 import { timezones, tzOffsetLabel } from '../lib/time.js';
 import { BirthdayPicker } from './Birthdays.jsx';
@@ -176,7 +177,10 @@ export function AvatarEditor({ avatar, onChange: rawChange, initialTab }) {
   const theme = useOffice((s) => s.config.theme);
   const [tab, setTab] = useState(initialTab || (avatar.sprite || avatar.preset ? 'chars' : 'face'));
   const [pack, setPack] = useState(theme === 'gtahub' ? 'gtahub' : 'all');
-  const spec = normalizeSpec(avatar.sprite ? {} : avatar);
+  // HUB v2 agrega piezas (vestido, polo, boina, collar); en clásico no se ofrecen
+  const v2 = useOffice((s) => s.config.avatarStyle) !== 'classic';
+  const parts = v2 ? V2_PARTS : PARTS, names = v2 ? V2_NAMES : STYLE_NAMES;
+  const spec = (v2 ? normalizeSpecV2 : normalizeSpec)(avatar.sprite ? {} : avatar);
   const set = (k) => (v) => onChange({ ...spec, preset: undefined, sprite: undefined, id: undefined, name: undefined, pack: undefined, [k]: v });
   const pickPreset = (p) => {
     const { id, name, pack: _pack, ...rest } = p;
@@ -188,7 +192,7 @@ export function AvatarEditor({ avatar, onChange: rawChange, initialTab }) {
       <div className="ae-label">{label}</div>
       {kind === 'color'
         ? <Swatches label={label} options={SPRITE_OPTIONS[k]} value={spec[k]} onChange={set(k)} />
-        : <Chips options={PARTS[k]} names={STYLE_NAMES[k]} value={spec[k]} onChange={set(k)} />}
+        : <Chips options={parts[k]} names={names[k]} value={spec[k]} onChange={set(k)} />}
     </>
   );
 

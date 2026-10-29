@@ -1,3 +1,5 @@
+import { setAvatarStyle } from './avatarV2.js';
+import { trackRemoteMove } from './motion.js';
 import { useSyncExternalStore, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { api } from './api.js';
@@ -117,6 +119,7 @@ class Office {
     ]);
     const byId = Object.fromEntries(users.users.map((u) => [u.id, u]));
     applyBrand(config);
+    setAvatarStyle(config.avatarStyle);
     this.set({ config: { ...config, iceServers: ice.iceServers }, users: byId, floors: floors.floors, chat, notifications: notifications.notifications });
     this.loadCharacters();
     this.connect();
@@ -242,6 +245,7 @@ class Office {
       const floorChanged = p.floorId !== m.floorId;
       Object.assign(p, { x: m.x, y: m.y, dir: m.dir, floorId: m.floorId });
       if (m.tp || floorChanged) { p.rx = m.x; p.ry = m.y; }
+      trackRemoteMove(p, m.tp || floorChanged);
       delete this.emotes[m.id]; // al moverse se corta la acción
       if (floorChanged) this.set((st) => ({ presenceVersion: st.presenceVersion + 1 }));
     });
@@ -327,6 +331,7 @@ class Office {
     s.on('ui-theme', ({ theme }) => { setUserTheme(theme); this.set((st) => ({ me: { ...st.me, uiTheme: theme } })); });
     s.on('office', (c) => {
       applyBrand(c);
+      if (c.avatarStyle) setAvatarStyle(c.avatarStyle);
       this.set((st) => ({ config: { ...st.config, ...c } }));
     });
     s.on('events', () => this.loadEvents());

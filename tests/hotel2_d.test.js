@@ -7,6 +7,7 @@ import { io } from 'socket.io-client';
 import { startServer, adminClient, createMember } from './helpers/server.js';
 import { PRESETS, hotelFrame, renderDiagSheet, renderFullSheet, randomSpec, DIAG_DIRS, DIRS8, HAND_ITEMS, FRAME_W, FRAME_H } from '../shared/sprite.js';
 import { renderAvatarPixels } from '../client/src/hotel/avatarIso.js';
+import { setAvatarStyle } from '../shared/avatarStyle.js';
 
 const count = (d) => { let n = 0; for (let k = 3; k < d.length; k += 4) if (d[k]) n++; return n; };
 const hash = (d) => createHash('sha256').update(Buffer.from(d)).digest('hex');
@@ -51,7 +52,10 @@ test('sprite: objetos en la mano, en la mano cercana de cada vista', () => {
   assert.equal(hotelFrame(PRESETS[0], { dir: 'downLeft', hold: 'cafe' }).holdArm, 'b');
 });
 
-test('Hotel: el personaje es el sprite de la oficina (2 px por píxel), pies en el ancla, acostado sobre la cama', () => {
+test('Hotel: el personaje es el sprite de la oficina (2 px por píxel), pies en el ancla, acostado sobre la cama', (t) => {
+  // Estilo clásico (HUB v2 tiene su propia prueba en tests/spriteV2.test.js)
+  setAvatarStyle('classic');
+  t.after(() => setAvatarStyle('v2'));
   for (let dir = 0; dir < 8; dir++) {
     const r = renderAvatarPixels(PRESETS[5], { dir, pose: 'stand' });
     assert.equal(r.w, FRAME_W * 2); assert.equal(r.h, FRAME_H * 2);

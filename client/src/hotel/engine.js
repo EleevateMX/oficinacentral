@@ -11,6 +11,7 @@ import { drawFurni, furniBounds, drawWallItem, wallBounds } from './furniArt.js'
 import { drawAvatarFace } from '../lib/render.js';
 import { hotel } from './hotelStore.js';
 import { avatarFrame, avatarBudget } from './avatarIso.js';
+import { turnVisual, sitTransition, breathing } from './motionFx.js';
 import { drawAvatarBehind, drawAvatarFront, drawTyping, avatarAlpha, avatarOpts } from './avatarFx.js';
 import { frontOf } from '@shared/hotelSeat.js';
 import { clickIntent } from '@shared/hotelWalk.js';
@@ -517,7 +518,7 @@ export class HotelEngine {
     let pose = 'stand', frame = 0, seatH = 0;
     const ti = sit || lay ? tileInfo(grid, U.x, U.y) : null;
     const seat = ti && (ti.kind === 'sit' || ti.kind === 'lay') ? ti.item : null;
-    if (moving && !U.walk.slide) { pose = 'walk'; frame = Math.floor(U.steps * 2) % 4; }
+    if (moving && !U.walk.slide) { pose = 'walk'; frame = Math.floor((U.walkPhase || 0) * 4) % 4; }
     else if (lay) pose = 'lay';
     else if (sit) { pose = 'sit'; const f = floorAt(grid, U.x, U.y); seatH = Number.isNaN(f) ? 0.6 : Math.max(0, U.rz - f); }
     else if (U.act === 'wave' || U.act === 'dance' || U.act === 'kiss' || U.act === 'laugh' || U.act === 'jump') pose = U.act;
@@ -530,7 +531,11 @@ export class HotelEngine {
     const blink = !moving && (t + U.id * 1337) % 4200 < 140;
     const talk = !!(U.talkUntil && t < U.talkUntil && Math.floor(t / 130) % 2 === 0);
     if (pose === 'stand' && U.sign != null) pose = 'sign';
-    let fr = avatarFrame(U.avatar, { dir: U.dir, head, pose, frame, blink, talk, seatH, ...avatarOpts(U, t, moving) }, { force: !U._fr });
+    // Giros suaves (cuerpo y cabeza pasan por las direcciones intermedias) y sentarse/pararse en 2 cuadros
+    const tv = turnVisual(U, head, t, moving);
+    const half = sitTransition(U, pose, t);
+    if (half) pose = 'sitHalf';
+    let fr = avatarFrame(U.avatar, { dir: tv.dir, head: tv.head, pose, frame, phase: U.walkPhase || 0, blink, talk, seatH, breathe: pose === 'stand' && breathing(t, U.id), ...avatarOpts(U, t, moving) }, { force: !U._fr });
     if (fr) U._fr = fr; else fr = U._fr;
     // En la columna de la puerta el personaje se ve en el hueco (pegado a la pared), no detrás de ella
     const door = grid.door;
@@ -538,7 +543,7 @@ export class HotelEngine {
     const vy = U.ry + 0.5;
     const doorCol = U.rx < door.x + 1 - 1e-6 && Math.round(U.ry) === door.y;
     if (doorCol) vx = door.x + 1 + (U.rx - door.x) * 0.5;
-    const [fx, fy] = P(vx, vy, U.rz);
+    const [fx, fy] = P(vx, vy, pose === 'sitHalf' ? (Number.isNaN(floorAt(grid, U.x, U.y)) ? U.rz : Math.min(U.rz, floorAt(grid, U.x, U.y))) : U.rz);
     const a = { avatar: true, U, fr, fx, fy, pose, seat, shadow: pose !== 'sit' && pose !== 'lay', inDoor: doorCol && vx < door.x + 1.3 };
     let x1 = vx - 0.2, x2 = vx + 0.2, y1 = vy - 0.2, y2 = vy + 0.2, z2 = U.rz + 2.2;
     a.vol = [x1, y1, x2, y2];
@@ -676,11 +681,13 @@ export class HotelEngine {
     if (!fr) return;
     // Pixel-art nítido: cada píxel del dibujo = un número entero de píxeles del dispositivo, sin suavizar
     const raw = this.cam.zoom * this.dpr * fr.k;
-    const ks = raw >= 1.5 ? Math.round(raw) : raw;
+    const kr = Math.round(raw);
+    // entero si queda a menos de 15 % del tamaño real; si no, el tamaño exacto (sin suavizar)
+    const ks = kr >= 1 && Math.abs(kr - raw) / raw <= 0.15 ? kr : raw;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (a.clipY != null) { ctx.beginPath(); ctx.rect(0, 0, this.canvas.width, Math.round((a.clipY * this.cam.zoom + this.cam.y) * this.dpr)); ctx.clip(); }
-    ctx.imageSmoothingEnabled = raw < 1.5;
+    ctx.imageSmoothingEnabled = ks < 0.95;
     ctx.globalAlpha = avatarAlpha(a.U, t);
     const X = Math.round((fx * this.cam.zoom + this.cam.x) * this.dpr - fr.sax * ks);
     const Y = Math.round((fy * this.cam.zoom + this.cam.y) * this.dpr - fr.say * ks);
