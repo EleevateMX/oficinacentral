@@ -5,7 +5,8 @@ import { startServer, adminClient, createMember } from './helpers/server.js';
 import { composeFloor, inRect } from '../shared/map.js';
 import { CATALOG, objSize, CHAIR_TYPES } from '../shared/catalog.js';
 
-const FLOOR = 1;
+// Departamentos y líderes se prueban en un piso con la plantilla HQ (la oficina principal es la recreativa)
+let FLOOR;
 const DECOR = 'floorPlant'; // decoración 1×1
 const FURNITURE = 'plant'; // mueble sólido 1×1
 
@@ -15,6 +16,7 @@ let admin;
 before(async () => {
   srv = await startServer();
   admin = await adminClient(srv.url);
+  FLOOR = (await admin.post('/floors', { name: 'HQ', template: 'hq' })).data.floor.id;
 });
 
 after(async () => {

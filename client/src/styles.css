@@ -1447,3 +1447,10 @@ body.pet-aiming canvas { cursor: crosshair !important; }
 .anniv-modal .modal-foot { flex-wrap: wrap; align-items: center; gap: 8px; }
 .anniv-year { width: 84px; }
 .anniv-settings { flex-wrap: wrap; }
+
+/* ===== Mapa recreativo: pisos archivados (solo admins) ===== */
+.pop-item .floor-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.floor-lock { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: #141414; background: #FFCC00; }
+.floor-lock-ico { color: #FFCC00; vertical-align: -1px; }
+.floor-admin-only { align-items: center; gap: 8px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.floor-admin-only .small { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }

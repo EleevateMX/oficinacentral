@@ -509,6 +509,283 @@ function templateHQ() {
   return { W, H, spawn: { x: 42, y: 53 }, floor: b.floor, walls: b.walls, objects: b.objects, areas: b.areas, decals: b.decals };
 }
 
+// ---------------- Plantilla Recreativa (coworking, café, juegos y auditorio) ----------------
+// Oficina para pasar el rato y también trabajar: sin departamentos ni áreas de staff.
+// Recepción, elevador al Hotel, escenario y rocola vienen incluidos (no necesitan migración).
+function templateRecreativo() {
+  const W = 100, H = 68;
+  const b = makeBuilder(W, H);
+  const X0 = 5, X1 = 94, Y0 = 10, Y1 = 57, C = 3;
+
+  // Edificio con esquinas recortadas (mismo contorno que HQ)
+  const inside = (x, y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1 &&
+    (x - X0) + (y - Y0) >= C && (X1 - x) + (y - Y0) >= C && (x - X0) + (Y1 - y) >= C && (X1 - x) + (Y1 - y) >= C;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (inside(x, y)) b.floor[y][x] = 'wood';
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (inside(x, y)) continue;
+    let near = false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inside(x + dx, y + dy)) near = true;
+    if (near) { b.wall(x, y); if (inside(x, y + 1) && !inside(x, y - 1)) b.wall(x, y - 1); }
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (b.walls[y][x] || inside(x, y)) continue;
+    let d = 9;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (b.walls[y + dy]?.[x + dx] === true) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
+    if (d <= 1) b.floor[y][x] = 'path';
+  }
+  const room = (x, y, w, h, t) => b.fill(x, y, w, h, t);
+  const PINK = '#FE3377', YEL = '#FFCC00', DARK = '#101010';
+
+  // ===== Fila superior (y 10..19), frente de cristal en y 20 =====
+  for (const x of [25, 48, 61, 80]) b.vWall(x, Y0, 11);
+  b.glass(X0, 20, X1 - X0 + 1, 1);
+
+  // Cafetería con barra
+  room(X0, Y0, 20, 10, 'wood2');
+  for (let x = 12; x <= 17; x++) b.door(x, 20, 'wood2');
+  b.o('fridge', 8, Y0); b.o('counter', 9, Y0, { w: 5 }); b.o('coffee', 14, Y0);
+  b.o('vending', 16, Y0); b.o('vending', 17, Y0, { color: YEL }); b.o('watercooler', 18, Y0);
+  b.o('plantShelf', 20, Y0); b.o('tallPlant', 23, Y0);
+  b.o('counter', 7, 14, { w: 6, color: DARK });
+  for (let i = 7; i < 13; i++) b.o('stool', i, 15, { color: i % 2 ? PINK : YEL });
+  for (const [tx, ty] of [[17, 13], [17, 17], [21, 15]]) {
+    b.o('roundTable', tx, ty, { color: '#ffffff' });
+    b.chair(tx - 1, ty, 1, '#c99c72'); b.chair(tx + 2, ty, 3, '#c99c72');
+  }
+  b.o('plant', X0, 18); b.o('tallPlant', 23, 18);
+  b.o('window', 8, 9); b.o('window', 18, 9);
+  b.area('cafe', 'Cafetería', X0, Y0, 20, 10, { color: 'none' });
+
+  // Jardín interior con estanque y terraza
+  room(26, Y0, 22, 10, 'grass2');
+  for (let x = 26; x <= 47; x++) b.door(x, 20, 'grass2');
+  for (let x = 26; x <= 47; x++) if (x < 35 || x > 38) b.o('hedge', x, 19);
+  b.blob(36.5, 13.8, 6.4, 4.2, 'path', { only: ['grass2'], under: 'grass2' });
+  b.blob(36.5, 13.6, 4, 2.3, 'water', { under: 'path' });
+  b.lane(36, 17, 2, 3, 'path');
+  b.o('willowTree', 26, Y0); b.o('tree2', 46, Y0);
+  b.o('bench', 29, 14, { rot: 1 }); b.o('bench', 44, 14, { rot: 1 });
+  for (const [x, y] of [[30, 11], [43, 11], [29, 17], [44, 17], [33, 18], [40, 18]]) b.o('flowers', x, y);
+  b.o('bush', 27, 16); b.o('bush', 46, 16); b.o('fern', 32, 10); b.o('fern', 41, 10);
+  b.area('jardin', 'Jardín y terraza', 26, Y0, 22, 10, { shape: 'round' });
+
+  // Biblioteca / rincón de lectura
+  room(49, Y0, 12, 10, 'wood2');
+  for (const x of [54, 55]) b.door(x, 20, 'wood2');
+  b.o('bookshelf', 49, Y0); b.o('bookshelf', 52, Y0); b.o('bookshelf', 56, Y0); b.o('tallPlant', 59, Y0);
+  b.o('armchair', 50, 13, { rot: 1, color: '#7a4a2b' }); b.o('roundTable', 51, 13, { color: '#c88a55' }); b.o('armchair', 53, 13, { rot: 3, color: '#7a4a2b' });
+  b.o('armchair', 56, 13, { rot: 1, color: '#2b6f5a' }); b.o('roundTable', 57, 13, { color: '#c88a55' }); b.o('armchair', 59, 13, { rot: 3, color: '#2b6f5a' });
+  b.o('sofaSmall', 51, 17, { color: '#7a4a2b' }); b.o('plant', 49, 18); b.o('plant', 59, 18);
+  b.o('arcLamp', 55, 16.5); b.o('books', 51.25, 13.1, { color: '#3a86ff' }); b.o('books', 57.25, 13.1, { color: '#e63946' });
+  b.area('biblioteca', 'Biblioteca', 49, Y0, 12, 10, { color: 'redRug' });
+
+  // Sala de juntas grande
+  room(62, Y0, 18, 10, 'blue');
+  for (const x of [70, 71]) b.door(x, 20, 'wood');
+  b.o('bigScreen', 68, Y0);
+  b.o('confTable', 65, 14, { w: 12 });
+  for (let i = 65; i < 77; i += 2) { b.chair(i, 13, 2, DARK); b.chair(i + 1, 16, 0, DARK); }
+  b.chair(64, 14, 1, DARK); b.chair(77, 14, 3, DARK);
+  b.o('plant', 62, Y0); b.o('cabinet', 79, Y0); b.o('tallPlant', 62, 18); b.o('tallPlant', 79, 18);
+  b.o('window', 73, 9);
+  b.area('juntas', 'Sala de juntas', 62, Y0, 18, 10, { private: true });
+
+  // Zona zen (meditar, acuario, bambú)
+  room(81, Y0, 14, 10, 'tile');
+  for (const x of [86, 87, 88]) b.door(x, 20, 'tile');
+  b.o('aquarium', 83, Y0); b.o('plantShelf', 86, Y0); b.o('bamboo', 90, Y0); b.o('bamboo', 91, Y0);
+  b.o('gong', 92, 13);
+  for (const [x, y, c] of [[84, 14, '#06d6a0'], [86, 15, '#8ecae6'], [88, 14, '#9b5de5'], [86, 13, '#f15bb5']]) b.o('beanBag', x, y, { color: c });
+  b.o('roundRug', 85.5, 13.5, { color: '#a3e1c8' });
+  b.o('bamboo', 81, 17); b.o('bamboo', 81, 18); b.o('fern', 93, 18); b.o('fern', 92, 17);
+  b.o('sofaSmall', 89, 18, { color: '#e9edf2' });
+  b.area('zen', 'Zona zen', 81, Y0, 14, 10, { color: 'green', shape: 'round' });
+
+  // ===== Centro izquierdo: coworking y zona de enfoque =====
+  b.area('coworking', 'Coworking', 6, 23, 28, 13, { color: 'sand' });
+  const rows = [[25, 'glassDesk', ['#FE3377', '#8B7BFF']], [29, 'woodDesk', ['#FFCC00', '#06a77d']], [33, 'standingDesk', ['#3a86ff', '#FE3377']]];
+  for (const [y, type, cols] of rows) {
+    b.deskRow([7, 10, 13], y, { type, chairType: 'officeChair', chairColor: cols });
+    b.o('planter', 16, y, { color: DARK });
+    b.deskRow([19, 22, 25], y, { type, chairType: 'officeChair', chairColor: cols });
+  }
+  b.o('whiteboard', 29, 23); b.o('tallPlant', 32, 23);
+  b.o('roundTable', 30, 27, { w: 3, color: '#ffffff' });
+  b.chair(30, 26, 2, PINK); b.chair(31, 26, 2, YEL); b.chair(30, 28, 0, YEL); b.chair(31, 28, 0, PINK);
+  b.o('coffee', 30, 31); b.o('watercooler', 32, 31);
+  b.o('tallPlant', 29, 34); b.o('tallPlant', 32, 34);
+
+  // Zona de enfoque: cabinas telefónicas (privadas) y cubículos silenciosos
+  b.glass(X0, 37, 16, 1); b.glass(X0, 41, 16, 1);
+  for (const x of [8, 12, 16, 20]) b.glass(x, 37, 1, 5);
+  for (let k = 0; k < 4; k++) {
+    const x0 = X0 + k * 4;
+    room(x0, 38, 3, 3, 'lavender');
+    b.door(x0 + 1, 41, 'lavender');
+    b.o('armchair', x0 + 1, 39, { color: [PINK, YEL, '#3a86ff', '#06d6a0'][k] });
+    b.o('floorLamp', x0 + 0.25, 38.5, { color: '#f4a261' }); b.o('plant', x0 + 2, 38); b.o('laptop', x0 + 2.1, 39.6);
+    b.area(`cabina${k + 1}`, `Cabina ${k + 1}`, x0, 38, 3, 3, { private: true });
+  }
+  b.area('enfoque', 'Zona de enfoque', X0, 37, 29, 8, { color: 'mint' });
+  for (const y of [38, 42]) for (const x of [22, 27]) { b.o('cubicle', x, y); b.chair(x + 2, y + 1, 0); }
+  b.o('bookshelf', 31, 38 - 1 + 1, {}); b.o('tallPlant', 32, 42);
+
+  // ===== Centro: auditorio con escenario =====
+  b.area('auditorio', 'Auditorio', 36, 23, 22, 22, { color: 'diamond' });
+  b.o('bigScreen', 44, 23);
+  for (const [type, x, y, extra] of RECREATIVO_STAGE) b.o(type, x, y, extra);
+  b.o('wallBanner', 41.5, 23); b.o('wallBanner', 51.5, 23);
+  b.o('tallSpeaker', 42.25, 25); b.o('tallSpeaker', 50.25, 25);
+  b.o('carpetRunner', 46, 29, { h: 13, color: PINK });
+  for (const y of [30, 32, 34, 36]) for (let x = 38; x < 56; x++) if (x < 45 || x > 48) b.o('confChair', x, y, { color: x < 45 ? PINK : YEL });
+  b.o('sofa', 38, 39, { rot: 2, color: DARK }); b.o('sofa', 51, 39, { rot: 2, color: DARK });
+  for (const [x, c] of [[38, PINK], [40, YEL], [42, '#3a86ff'], [51, '#3a86ff'], [53, YEL], [55, PINK]]) b.o('beanBag', x, 42, { color: c });
+  for (const y of [23, 28, 33, 38, 43]) { b.o('tallPlant', 36, y); b.o('tallPlant', 57, y); }
+
+  // ===== Centro derecho: sala de juegos y lounge =====
+  b.area('juegos', 'Sala de juegos', 60, 23, 34, 11, { color: 'purple' });
+  for (const [x, c] of [[61, PINK], [62, YEL], [63, '#3a86ff'], [64, '#2bb673']]) b.o('arcade', x, 23, { color: c });
+  b.o('bigScreen', 67, 23); b.o('rug', 66, 25, { w: 7, h: 2, color: '#2b2f3a' });
+  b.o('sofaSmall', 68, 28, { rot: 2, color: PINK });
+  for (const [x, c] of [[67, PINK], [69, YEL], [71, '#3a86ff']]) b.o('beanBag', x, 26, { color: c });
+  b.o('controller', 68.25, 25.6, { color: PINK }); b.o('controller', 70.25, 25.6, { color: '#3a86ff' });
+  b.o('trophyCase', 74, 23); b.o('vending', 91, 23, { color: PINK }); b.o('drum', 92, 23);
+  b.o('poolTable', 77, 26); b.o('pingPong', 86, 26);
+  b.o('foosball', 64, 30); b.o('roundTable', 70, 30, { w: 3, color: '#ffffff' });
+  b.o('sofaSmall', 78, 31, { rot: 2, color: DARK }); b.o('sofaSmall', 87, 31, { rot: 2, color: DARK });
+  for (const [x, y] of [[70, 29], [72, 29], [70, 31], [72, 31]]) b.o('stool', x, y, { color: YEL });
+  b.o('tallPlant', 60, 32); b.o('tallPlant', 92, 32); b.o('tallPlant', 83, 32); b.o('tallPlant', 75, 32);
+
+  b.area('lounge', 'Lounge', 60, 35, 34, 10, { color: 'rug', shape: 'soft' });
+  b.o('jukebox', 61, 35); // rocola: música compartida en el lounge
+  b.o('tv', 76, 35); b.o('bookshelf', 67, 35); b.o('aquarium', 80, 35);
+  b.o('rug', 62, 38, { w: 7, h: 3, color: '#5a7fd6' }); b.o('roundRug', 88.5, 39.25, { color: '#c592d3' }); b.o('plant', 71, 35); b.o('plant', 84, 35); b.o('fairyLights', 86.5, 35);
+  b.o('sofa', 63, 37, { color: PINK }); b.o('roundTable', 64, 39, { w: 3 }); b.o('sofa', 63, 41, { rot: 2, color: DARK });
+  b.o('sofa', 75, 40, { rot: 2, color: '#3a86ff' }); b.o('armchair', 73, 38, { rot: 1, color: YEL }); b.o('armchair', 81, 38, { rot: 3, color: YEL });
+  b.o('lSofa', 86, 38, { color: '#9b5de5' }); b.o('roundTable', 89, 39, { color: '#ffffff' }); b.o('armchair', 91, 39, { rot: 3, color: '#9b5de5' });
+  b.o('tallPlant', 60, 43); b.o('tallPlant', 92, 43); b.o('floorLamp', 70.25, 40); b.o('floorPlant', 83, 42); b.o('floorPlant', 69, 42.5);
+
+  // ===== Fila inferior (y 47..57), frente de cristal en y 46 =====
+  b.glass(X0, 46, X1 - X0 + 1, 1);
+  for (const x of [15, 26, 34, 51, 64, 80]) b.vWall(x, 46, 12);
+
+  // Salas privadas para reuniones
+  room(X0, 47, 10, 11, 'blue');
+  for (const x of [9, 10]) b.door(x, 46, 'wood');
+  b.o('whiteboard', 6, 47); b.o('easel', 11, 47); b.o('plant', 13, 47);
+  b.o('table', 8, 50, { w: 4, color: '#e8e8ee' });
+  for (let i = 8; i < 12; i += 2) { b.chair(i, 49, 2, PINK); b.chair(i + 1, 52, 0, PINK); }
+  b.o('beanBag', 7, 55, { color: YEL }); b.o('beanBag', 11, 55, { color: PINK }); b.o('tallPlant', 13, 55);
+  b.area('creativa', 'Sala creativa', X0, 47, 10, 11, { private: true });
+
+  room(16, 47, 10, 11, 'blue');
+  for (const x of [22, 23]) b.door(x, 46, 'wood');
+  b.o('tv', 18, 47); b.o('plant', 16, 47); b.o('plant', 24, 47);
+  b.o('meetingTable', 18, 50, { w: 6 });
+  for (let i = 18; i < 24; i += 2) { b.chair(i, 49, 2, '#3a86ff'); b.chair(i + 1, 53, 0, '#3a86ff'); }
+  b.chair(17, 51, 1, '#3a86ff'); b.chair(24, 51, 3, '#3a86ff');
+  b.o('tallPlant', 16, 56); b.o('tallPlant', 24, 56);
+  b.area('ideas', 'Sala de ideas', 16, 47, 10, 11, { private: true });
+
+  room(27, 47, 7, 11, 'rose');
+  b.door(30, 46, 'rose');
+  b.o('roundTable', 29, 51, { color: '#ffffff' });
+  b.o('armchair', 28, 51, { rot: 1, color: PINK }); b.o('armchair', 31, 51, { rot: 3, color: PINK });
+  b.o('plant', 27, 47); b.o('plant', 33, 47); b.o('tallPlant', 27, 56); b.o('tallPlant', 33, 56);
+  b.o('plantShelf', 31, 47); b.o('floorLamp', 32.25, 50);
+  b.area('uno', 'Sala 1:1', 27, 47, 7, 11, { private: true });
+
+  // Recepción y entrada (mismo lugar que en HQ: letrero, mostrador y elevador al Hotel)
+  room(35, 46, 16, 12, 'hex');
+  for (let x = 35; x <= 50; x++) b.door(x, 46, 'hex');
+  for (const x of [41, 42, 43, 44]) b.door(x, 58, 'path');
+  b.o('reception', 40.5, 49);
+  b.o('officeChair', 42.5, 48, { rot: 2 });
+  b.o('cubeLogo', 42.75, 49.1); b.o('hexLamp', 40.7, 48.9); b.o('monitor', 44, 48.9);
+  b.o('hotelElevator', HOTEL_ELEVATOR_SPOT.x, HOTEL_ELEVATOR_SPOT.y); // elevador al Hotel
+  b.o('sofaSmall', 36, 51, { rot: 1, color: PINK }); b.o('sofaSmall', 49, 51, { rot: 3, color: PINK });
+  b.o('tallPlant', 35, 47); b.o('tallPlant', 50, 47); b.o('plant', 36, 56); b.o('plant', 49, 56);
+  b.area('recepcion', 'Recepción', 35, 47, 16, 11, { color: 'none' });
+
+  // Estudio de stream
+  room(52, 47, 12, 11, 'slate');
+  for (const x of [57, 58]) b.door(x, 46, 'slate');
+  b.o('table', 54, 49, { w: 4, color: '#26262e' });
+  b.o('gamingChair', 55, 51, { color: PINK }); b.o('gamingChair', 56, 51, { color: '#3a86ff' });
+  b.o('gamingPC', 54.25, 48.9, { color: PINK }); b.o('curvedMonitor', 55.25, 49); b.o('mic', 57.25, 49.25); b.o('ringLight', 52.25, 49.1);
+  b.o('neonSign', 55.5, 47.3, { color: PINK }); b.o('shelf', 59, 47); b.o('figure', 59.5, 47.1, { color: PINK }); b.o('carModel', 60.5, 47.2);
+  b.o('rug', 54, 54, { w: 4, color: '#8B7BFF' });
+  b.o('sofaSmall', 54, 55, { color: DARK }); b.o('tallSpeaker', 52.25, 55.75); b.o('tallSpeaker', 62.25, 55.75);
+  b.o('plant', 62, 47); b.o('camera', 60.25, 51.25); b.o('beanBag', 59, 55, { color: PINK });
+  b.area('stream', 'Estudio de stream', 52, 47, 12, 11, { private: true });
+
+  // Cine
+  room(65, 47, 15, 11, 'redRug');
+  for (const x of [76, 77, 78]) b.door(x, 46, 'redRug');
+  b.o('bigScreen', 70, 47);
+  for (const y of [51, 54]) { b.o('sofa', 66, y, { rot: 2, color: '#d62828' }); b.o('sofa', 74, y, { rot: 2, color: '#d62828' }); }
+  b.o('vending', 65, 56, { color: YEL }); b.o('tallPlant', 79, 56); b.o('tallSpeaker', 67.25, 47.25); b.o('tallSpeaker', 76.25, 47.25);
+  b.area('cine', 'Cine', 65, 47, 15, 11, { private: true });
+
+  // Karaoke y música
+  room(81, 47, 14, 11, 'pattern');
+  for (const x of [85, 86, 87]) b.door(x, 46, 'pattern');
+  b.o('stage', 87, 47, { w: 5, h: 3, color: '#9b5de5' }); b.o('mic', 89.25, 48.25, { color: DARK });
+  b.o('drum', 83, 48); b.o('guitar', 84.25, 47.5, { color: '#b5651d' }); b.o('guitar', 85.25, 47.5, { color: PINK });
+  b.o('tallSpeaker', 86.25, 47.25); b.o('tallSpeaker', 92.25, 47.25);
+  b.o('sofa', 83, 53, { rot: 2, color: '#9b5de5' });
+  for (const [x, y, c] of [[89, 54, PINK], [91, 53, YEL], [90, 51, '#06d6a0']]) b.o('beanBag', x, y, { color: c });
+  b.o('tallPlant', 81, 55);
+  b.area('karaoke', 'Karaoke y música', 81, 47, 14, 11, { color: 'purple', shape: 'soft' });
+
+  // Pasillos con plantas
+  for (const x of [8, 21, 30, 44, 52, 66, 76, 90]) b.o('plant', x, 21);
+
+  // ===== Marca =====
+  for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 20.75);
+  for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 45.25);
+  b.o('neonLogo', 13.5, 9.15); b.o('neonLogo', 67, 9.15); b.o('poster', 63.5, 10.1); b.o('poster', 77.5, 10.1);
+  b.o('fairyLights', 30.25, 10); b.o('fairyLights', 39.5, 10);
+  b.o('floorLogo', 41.5, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
+  for (const [type, x, y, extra] of RECEPTION_EXTRAS) b.o(type, x, y, extra);
+  b.o('wavingFlag', 39, 59); b.o('wavingFlag', 46, 59);
+  b.o('wallBanner', 82.2, 47.1);
+
+  // ===== Exterior =====
+  b.blob(42.5, 64, 5, 3.6, 'path');
+  b.lane(41, 59, 4, 3, 'path');
+  b.o('fountain', 42, 63);
+  b.o('bench', 36, 63, { rot: 1 }); b.o('bench', 48, 63, { rot: 1 });
+  for (const [x, y] of [[38, 61], [47, 61], [38, 66], [47, 66]]) b.o('flowers', x, y);
+  b.blob(16, 63.5, 9, 3.2, 'grass2', { only: ['grass'] });
+  b.blob(72, 63.5, 12, 3.2, 'grass2', { only: ['grass'] });
+  b.blob(50, 3.6, 22, 2.8, 'grass2', { only: ['grass'] });
+  for (const x of [10, 16, 22, 62, 68, 74, 80]) b.o('flowers', x, 63);
+  const free = (x, y) => b.floor[y]?.[x] && !b.walls[y][x] && (b.floor[y][x] === 'grass' || b.floor[y][x] === 'grass2');
+  const used = new Set();
+  let n = 0;
+  for (let k = 0; k < 400 && n < 70; k++) {
+    const x = 1 + Math.floor(seeded(k * 2 + 1) * (W - 2));
+    const y = 1 + Math.floor(seeded(k * 2 + 2) * (H - 2));
+    const edge = x < X0 - 1 || x > X1 + 1 || y < Y0 - 3 || y > Y1 + 1;
+    if (!edge || !free(x, y) || (y > 58 && x > 33 && x < 52)) continue;
+    let ok = true;
+    for (const u of used) { const [ux, uy] = u.split(',').map(Number); if (Math.abs(ux - x) < 3 && Math.abs(uy - y) < 3) ok = false; }
+    if (!ok) continue;
+    used.add(`${x},${y}`);
+    b.o(seeded(k + 999) > 0.35 ? 'tree' : 'bush', x, y);
+    n++;
+  }
+
+  return { W, H, spawn: { x: 42, y: 53 }, floor: b.floor, walls: b.walls, objects: b.objects, areas: b.areas, decals: b.decals };
+}
+
+// Escenario y micrófono del auditorio de la plantilla recreativa
+export const RECREATIVO_STAGE = [
+  ['stage', 44, 24, {}],
+  ['stageMic', 46, 30, {}],
+];
+
 // ---------------- Plantilla de piso nuevo (planta abierta) ----------------
 function templateOpen() {
   const W = 64, H = 44;
@@ -542,6 +819,7 @@ function templateOpen() {
 }
 
 export const TEMPLATES = {
+  recreativo: { name: 'Oficina recreativa (coworking, café y juegos)', build: templateRecreativo },
   hq: { name: 'Oficina HQ (todas las salas)', build: templateHQ },
   main: { name: 'Oficina clásica', build: templateMain },
   open: { name: 'Planta abierta', build: templateOpen },
