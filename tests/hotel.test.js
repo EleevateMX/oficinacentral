@@ -230,10 +230,11 @@ test('hotel: caminar, sentarse, colocar/apilar, recoger y permisos', async () =>
     const sat = await once(sx, 'hotel:user', (u) => u.id === owner.user.id && u.sit, 6000);
     assert.equal(sat.dir, 6); // rot 2 → mira hacia −x
     assert.ok(Math.abs(sat.z - FURNI_BY_ID.chair_basic.sit) < 1e-9);
-    // El otro no puede terminar en la casilla ocupada
-    const np = once(sx, 'hotel:nopath');
+    // El otro no puede terminar en la casilla ocupada: se queda al lado (como en el hotel clásico)
+    const np = once(sx, 'hotel:path', (m) => m.id === other.user.id);
     sx.emit('hotel:walk', { x: 3, y: 6 });
-    await np;
+    const npe = (await np).path.at(-1);
+    assert.equal(Math.max(Math.abs(npe[0] - 3), Math.abs(npe[1] - 6)), 1);
     // Casilla bloqueada por la mesa
     const np2 = once(sx, 'hotel:nopath');
     sx.emit('hotel:walk', { x: 4, y: 4 });

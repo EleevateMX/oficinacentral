@@ -8,7 +8,7 @@ import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
 import { seatPose, STAND_EMOTES } from '../lib/seating.js';
-import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
+import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, setRenderAreas, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
 import { buildSeason, seasonObjects, interactSeason, drawSeasonGround, drawSeasonDecor, drawSeasonWalkers, drawSeasonSky, drawSeasonScreen } from '../lib/seasonal.js';
@@ -41,7 +41,7 @@ import { SeasonPill } from './SeasonExtras.jsx';
 
 const T = TILE;
 const STEP_MS = 135;
-const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar', jukebox: 'Abrir rocola', hotel: 'Subir al Hotel' };
+const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', screen: 'Ver pantalla', game: 'Jugar', jukebox: 'Abrir rocola', hotel: 'Subir a MeDed Friends' };
 // Objetos con brillo o dibujo fino que se pintan nítidos en cada cuadro (además de los de marca)
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
 const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade' };
@@ -95,7 +95,7 @@ function themeColors() {
       if (/^#[0-9a-f]{6}$/i.test(v)) return v;
       return d;
     };
-    themeCache = { t: now, accent: read('--accent', themeCache.accent), ink: read('--ink', themeCache.ink), brand: document.documentElement.dataset.brand };
+    themeCache = { t: now, accent: read('--accent', themeCache.accent), ink: read('--ink', themeCache.ink), onAccent: read('--on-accent', '#ffffff'), brand: document.documentElement.dataset.brand };
   }
   return themeCache;
 }
@@ -167,6 +167,7 @@ export default function MapView({ active }) {
   useEffect(() => {
     if (!floor) return;
     setRenderBrand(mapBrand(config));
+    setRenderAreas(floor.areas); // letreros con el nombre de la sala
     const layer = () => {
       const c = document.createElement('canvas');
       c.width = floor.W * T;
@@ -183,7 +184,7 @@ export default function MapView({ active }) {
     const live = { under: [], top: [] };
     for (const o of sortObjects(floor.objects)) {
       const cat = CATALOG[o.type];
-      const isLive = cat?.animated || cat?.brand || CRISP.has(o.type);
+      const isLive = cat?.animated || cat?.brand || cat?.crisp || CRISP.has(o.type);
       if (isLive) live[cat.under ? 'under' : 'top'].push(o);
       else drawObject(cat?.under ? base.ctx : top.ctx, o);
     }
@@ -821,7 +822,7 @@ export default function MapView({ active }) {
         ctx.beginPath(); ctx.roundRect(sp.x - w / 2, y - 11, w, 22, 6); ctx.fill();
         ctx.fillStyle = p.status === 'busy' ? (themeColors().brand === 'gtahub' ? '#FFCC00' : '#FF8A3D') : p.status === 'away' ? '#adb5bd' : (themeColors().brand === 'gtahub' ? '#3DDC84' : '#2fd36b');
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = isMe ? themeColors().onAccent : '#fff'; // texto legible sobre el acento del tema
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
         // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
         const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414'],

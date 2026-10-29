@@ -3,7 +3,7 @@
 //   · Puerta de un sentido: se cruza solo entrando por el frente.
 //   · Máquinas expendedoras → objeto en la mano (U.hand, 3 min o :tirar; se pasa con :dar o desde la tarjeta).
 //   · Rueda de la fortuna, medidor de amor, marcador, trofeo con dedicatoria y regulador de luz.
-//   · Bots en las salas oficiales (recepción en la Oficina Central y barra en Comedor / Sala de juegos).
+//   · Bots en las salas oficiales (Rita en la recepción de Charla General y Beto en la taberna de Roleplay / la barra de Música y Karaoke).
 // Se engancha a server/hotel.js por hotelCtx (ganchos chicos); el wired vive en server/hotelWired.js.
 // No importa la base de datos directamente (la recibe en ctx), así las pruebas pueden importar lo puro.
 import { MAX_STEP } from '../shared/hotel.js';
@@ -179,9 +179,9 @@ const hasWord = (text, words) => words.some((w) => new RegExp(`(^|[^a-z0-9ñ])${
 const RECEPTION_AVATAR = { preset: 'gh-presentadora', hair: '#1b1720', shirt: '#FE3377', accent: '#141414', audio: 'headset', mouth: 'smile' };
 const BAR_AVATAR = { preset: 'cafe', hairStyle: 'short', top: 'shirt', shirt: '#f4f4f6', accent: '#141414', pants: '#151519', shoes: '#1d1d22', facialHair: 'mustache', mouth: 'smile', extra: 'none' };
 export const BOT_SPECS = {
-  hq: [{ role: 'reception', name: 'Rita · Recepción', avatar: RECEPTION_AVATAR, home: [7, 20], area: [7, 18, 8, 22], dir: 6 }],
-  comedor: [{ role: 'bartender', name: 'Beto · Barra', avatar: BAR_AVATAR, home: [6, 2], area: [4, 2, 9, 2], dir: 4 }],
-  juegos: [{ role: 'bartender', name: 'Beto · Barra', avatar: BAR_AVATAR, home: [15, 10], area: [14, 10, 16, 10], dir: 4 }],
+  charla: [{ role: 'reception', name: 'Rita · Recepción', avatar: RECEPTION_AVATAR, home: [7, 20], area: [7, 18, 8, 22], dir: 6 }],
+  roleplay: [{ role: 'bartender', name: 'Beto · Taberna', avatar: BAR_AVATAR, home: [9, 2], area: [7, 2, 12, 2], dir: 4 }],
+  musica: [{ role: 'bartender', name: 'Beto · Barra', avatar: BAR_AVATAR, home: [15, 10], area: [14, 10, 16, 10], dir: 4 }],
 };
 const DRINKS = [
   [['cafe', 'cafecito', 'expreso', 'capuchino'], 'cafe'],
@@ -199,13 +199,15 @@ export function drinkRequest(text) {
 }
 export function receptionReply(text) {
   const t = norm(text);
-  if (hasWord(t, ['ayuda', 'help', 'ayudame', 'ayudenme'])) return 'Con gusto 😊 Haz clic en el piso para caminar y doble clic en un furni para usarlo. Escribe :sentar, :bailar o :saludar. Pregúntame por: hotel, juegos o salas.';
-  if (hasWord(t, ['hotel'])) return 'Este es el Hotel GTAHUB 🏨 Crea tu propia sala en el Navegador, decórala con la Tienda e invita a tu equipo.';
-  if (hasWord(t, ['juegos', 'juego', 'jugar'])) return 'En la Sala de juegos hay maquinitas, dados, pista de baile y DJ 🎮 Y con la línea Mecánica puedes armar rodillos, la rueda de la fortuna y wired.';
+  if (hasWord(t, ['ayuda', 'help', 'ayudame', 'ayudenme'])) return 'Con gusto 😊 Haz clic en el piso para caminar y doble clic en un furni para usarlo. Escribe :sentar, :bailar o :saludar. Pregúntame por: hotel, juegos, roleplay o salas.';
+  if (hasWord(t, ['hotel'])) return 'Esto es MeDed Friends 🏨 Platica aquí en Charla General, sube por el elevador a las salas temáticas o crea tu propia sala en el Navegador y decórala con la Tienda.';
+  if (hasWord(t, ['juegos', 'juego', 'jugar', 'lol', 'league', 'valorant', 'fps', 'minecraft'])) return 'Para gamers: League of Legends (arena con PCs y pantalla gigante), Valorant y FPS (bootcamp y galería de tiro) y Minecraft (jardín de bloques) 🎮 Aquí en Charla General también hay maquinitas y dados.';
+  if (hasWord(t, ['roleplay', 'rol', 'taberna', 'rp'])) return 'En Roleplay hay una taberna con chimenea y una plaza con mercado y el trono del alcalde 🏰 Beto atiende la barra.';
+  if (hasWord(t, ['musica', 'karaoke', 'cine', 'anime', 'dj'])) return 'En Música y Karaoke hay DJ, pista de baile y karaoke 🎤 y en Cine y Anime, pantalla gigante, palomitas y tatamis 🍿';
   if (hasWord(t, ['salas', 'sala'])) return `Salas oficiales: ${OFFICIAL_ROOMS.map((r) => r.name).join(', ')}. Las encuentras en el Navegador → Oficiales.`;
   return null;
 }
-export const greeting = (name) => `¡Bienvenido a la Oficina Central, ${name}!`;
+export const greeting = (name) => `¡Bienvenido a Charla General, ${name}! Aquí se platica de todo 💬`;
 
 // ---------- Servidor ----------
 let ctx = null;

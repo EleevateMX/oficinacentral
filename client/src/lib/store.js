@@ -5,7 +5,7 @@ import { MediaManager } from './media.js';
 import { initStageClient } from './stage.js';
 import { composeFloor, canTalk, talkSpace, areaAt, deskAt, nearestWalkable, PROXIMITY_RADIUS } from '@shared/map.js';
 import { playSound } from './sounds.js';
-import { applyBrand } from './themes.js';
+import { applyBrand, setUserTheme, applyColorMode } from './themes.js';
 import { FX, pickFx } from './fx.js';
 import { CHAIR_TYPES, objSize } from '@shared/catalog.js';
 import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes.js';
@@ -107,6 +107,7 @@ class Office {
   // ---------- Arranque ----------
   async start(me, prefs) {
     this.set({ me, prefs: mergePrefs(prefs) });
+    setUserTheme(me.uiTheme || null); // tema propio (si eligió uno)
     applyTheme(this.state.prefs.colorMode);
     const [config, ice, users, floors, chat, notifications] = await Promise.all([
       api.get('/config'), api.get('/ice'), api.get('/users'), api.get('/floors'), api.get('/chat'), api.get('/notifications'),
@@ -317,6 +318,7 @@ class Office {
     s.on('room-msg', (m) => this.onRoomMsg(m));
     s.on('channels', () => this.refreshChat());
     s.on('characters', () => this.loadCharacters());
+    s.on('ui-theme', ({ theme }) => { setUserTheme(theme); this.set((st) => ({ me: { ...st.me, uiTheme: theme } })); });
     s.on('office', (c) => {
       applyBrand(c);
       this.set((st) => ({ config: { ...st.config, ...c } }));
@@ -572,8 +574,18 @@ class Office {
     const f = this.state.floor;
     const me = this.myPlayer;
     if (!f || !me || !this.media) return;
-    // En el Hotel no se oye la oficina (al volver se reconecta solo)
-    if (this.state.view === 'hotel') { this.media.setPeers([], []); if (this.state.talkingWith.length) this.set({ talkingWith: [] }); return; }
+    // En el Hotel no se oye la oficina: se oye a quien está cerca en tu sala del Hotel (client/src/hotel/voice.js).
+    // Al volver, la oficina se reconecta sola y cada quien regresa a su volumen.
+    if (this.state.view === 'hotel') {
+      const v = this.hotelVoice?.() || { ids: [], warm: [], vol: {} };
+      this.media.setPeers(v.ids, v.warm);
+      this.hotelVols = this.hotelVols || new Set();
+      for (const id of v.ids) { this.hotelVols.add(id); this.media.setPeerVolume?.(id, this.peerVolume(id) * (v.vol[id] ?? 1)); }
+      const prev = this.state.talkingWith;
+      if (prev.length !== v.ids.length || prev.some((x, i) => x !== v.ids[i])) this.set({ talkingWith: v.ids });
+      return;
+    }
+    if (this.hotelVols) { for (const id of this.hotelVols) this.media.setPeerVolume?.(id, this.peerVolume(id)); this.hotelVols = null; }
     const space = talkSpace(f, me.x, me.y);
     const ids = [];
     for (const [id, p] of Object.entries(this.players)) {
@@ -822,6 +834,13 @@ class Office {
   }
 
   // ---------- Preferencias ----------
+  // Tema de la interfaz de esta persona (null = el de la oficina): se ve al momento y se guarda en su cuenta
+  async setUiTheme(theme) {
+    setUserTheme(theme || null);
+    this.set((st) => ({ me: { ...st.me, uiTheme: theme || null } }));
+    await api.put('/me/theme', { theme: theme || null });
+  }
+
   updatePrefs(patch) {
     const prefs = mergePrefs({ ...this.state.prefs, ...patch });
     this.set({ prefs });
@@ -874,8 +893,7 @@ export function buildFloor(payload) {
 }
 
 export function applyTheme(mode) {
-  const dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  applyColorMode(mode); // los temas oscuros (Eleevate y los de juegos) se quedan en oscuro
 }
 
 export const office = new Office();

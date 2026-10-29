@@ -3,7 +3,7 @@
 //   wall:  { id: (ctx, { c, st, def, now }) => void }
 //   period: { id: (st) => ms de animación o 0 }
 //   defaultColor: { id: '#hex' }
-// Rarezas de la marca: oro, terciopelo rosa, negro GTAHUB y un brillo sutil.
+// Rarezas de la marca: oro, terciopelo rosa, negro de la casa y un brillo sutil.
 import { PINK, YELLOW, DARK, shade, mix, rgba, outlineOf } from '../iso.js';
 import { drawWord, wordWidth, neonWord, neonStroke, hexLogo, hexPath, hexPts, rr } from '../glyphs.js';
 
@@ -75,7 +75,7 @@ function crown(ctx, x, y, sz, on = true) {
   for (const [a, b] of [[-1.12, -1.25], [0, -1.5], [1.12, -1.25]]) dotc(ctx, x + a * sz, y + b * sz, sz * 0.15, on ? '#fff6d0' : GOLD_L);
 }
 
-// ---------- Trono dorado del logo ----------
+// ---------- Trono dorado HUB ----------
 function hub_throne(s) {
   s.shadowRect(-0.02, -0.02, 1.02, 1.02, 0.3);
   s.under((ctx) => floorGlow(ctx, s, 0.5, 0.5, 1.1, GOLD, 0.2));
@@ -192,8 +192,8 @@ function hub_arch(s, { st, t }) {
       const w = 33, h = 11;
       g.fillStyle = 'rgba(16,10,20,0.88)'; rr(g, 0, 0, w, h, 2); g.fill();
       g.strokeStyle = GOLD; g.lineWidth = 0.8; g.stroke();
-      const hh = 5.4, ww = wordWidth('GTAHUB', hh);
-      neonWord(g, 'GTAHUB', (w - ww) / 2, (h - hh) / 2, hh, PINK, on);
+      const hh = 6.4, ww = wordWidth('HUB', hh);
+      neonWord(g, 'HUB', (w - ww) / 2, (h - hh) / 2, hh, PINK, on);
     });
   });
 }
@@ -219,7 +219,7 @@ function hub_holo(s, { st, t }) {
     const g = ctx.createLinearGradient(0, y0, 0, y1);
     g.addColorStop(0, rgba(PINK, 0.42)); g.addColorStop(0.6, rgba('#ff9ec0', 0.14)); g.addColorStop(1, rgba(PINK, 0));
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - 8, y0); ctx.lineTo(x - 18, y1); ctx.lineTo(x + 18, y1); ctx.lineTo(x + 8, y0); ctx.closePath(); ctx.fill();
-    // logo girando
+    // emblema girando
     const a = (t / 1000) * 2.6, k = Math.cos(a), yc = s.P(0.5, 0.5, 1.42)[1] + Math.sin(t / 420) * 1.5;
     ctx.save(); ctx.translate(x, yc); ctx.scale(Math.max(0.08, Math.abs(k)), 1); ctx.globalAlpha = 0.85;
     glow(ctx, 0, 0, 20, PINK, 0.35);
@@ -277,8 +277,8 @@ function hub_trophy(s, { t }) {
   s.box(0.18, 0.18, 0, 0.82, 0.82, 0.12, DARK, { decal: { front: goldBand, right: goldBand, left: goldBand, back: goldBand, top: (x, w, h) => sheen(x, w, h, 0.2) } });
   const plaque = (x, w, h) => {
     fr(x, 3, h * 0.3, w - 6, h * 0.42, GOLD); fr(x, 3.6, h * 0.3 + 0.6, w - 7.2, h * 0.42 - 1.2, '#e0a800');
-    const hh = Math.min(3.6, h * 0.24), ww = wordWidth('GTAHUB', hh);
-    drawWord(x, 'GTAHUB', (w - ww) / 2, h * 0.51 - hh / 2, hh, GOLD_DD, 0.7);
+    const hh = Math.min(3.6, h * 0.24), ww = wordWidth('HUB', hh);
+    drawWord(x, 'HUB', (w - ww) / 2, h * 0.51 - hh / 2, hh, GOLD_DD, 0.7);
     sheen(x, w, h, 0.18);
   };
   s.box(0.26, 0.26, 0.12, 0.74, 0.74, 0.42, ONYX, { decal: { front: plaque, right: (x, w, h) => sheen(x, w, h, 0.18), left: plaque, back: (x, w, h) => sheen(x, w, h, 0.18) } });

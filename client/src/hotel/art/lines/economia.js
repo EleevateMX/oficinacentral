@@ -30,7 +30,7 @@ function twinkle(s, pts, t, r = 3) {
     });
   });
 }
-// Moneda acostada: canto dorado y cara con el logo
+// Moneda acostada: canto dorado y cara con el emblema
 function coin(s, u, v, z, r, th = 0.06) {
   s.cyl('z', u, v, r, r, z, z + th, GOLD, { seg: 22, outline: GOLD_DD, faces: { top: GOLD_L, side: GOLD_D } });
   s.custom([u - r, v - r, z + th, u + r, v + r, z + th + 0.001], (ctx) => {

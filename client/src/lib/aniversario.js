@@ -9,7 +9,7 @@ const COLS = ['#FE3377', '#FFCC00', '#3DDC84', '#4cc9f0', '#ff9f1c', '#b46bff', 
 export function anniversaryInfo(config = {}) {
   const a = config.anniversary || {};
   const years = anniversaryYears(a.year, a.date);
-  const name = (config.officeName || 'GTAHUB').toUpperCase();
+  const name = (config.officeName || 'HUB').toUpperCase();
   return { years, name, title: `¡Feliz aniversario ${name}!`, sub: years ? `${years} ${years === 1 ? 'año' : 'años'} juntos` : 'Gracias por ser parte' };
 }
 

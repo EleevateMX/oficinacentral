@@ -23,7 +23,7 @@ services:
       - key: TRUST_PROXY
         value: "1"
       - key: OFFICE_NAME
-        value: GTAHUB
+        value: HUB
       - key: OFFICE_THEME
         value: gtahub
       - key: ADMIN_USERNAME

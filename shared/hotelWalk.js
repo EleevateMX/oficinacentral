@@ -9,6 +9,8 @@
 // Direcciones (8, como en el original): número 0–7 según la casilla vecina a la que se mira
 //   0 −y (arriba-derecha) · 1 +x−y (derecha) · 2 +x (abajo-derecha) · 3 +x+y (abajo, hacia ti)
 //   4 +y (abajo-izquierda) · 5 −x+y (izquierda) · 6 −x (arriba-izquierda) · 7 −x−y (arriba, de espaldas)
+import { findPath, tileInfo } from './hotelRoom.js';
+
 export const STEP_MS = 500;
 export const DIR_VEC = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
 // Rotación de un furni (hacia dónde mira su frente) → dirección de quien se sienta / acuesta
@@ -64,4 +66,73 @@ export function rerouteFrom(w, t) {
   const p = walkAt(w, t);
   if (p.done) return null;
   return { from: p.from, next: p.to, t0: w.t0 + p.i * STEP_MS, n0: (w.n0 || 0) + p.i };
+}
+
+// ---------- Como en el hotel clásico: girar, cabeza aparte, no atravesar a nadie ----------
+// La cabeza gira como mucho `max` direcciones respecto al cuerpo
+export function headWithin(body, d, max = 1) {
+  const diff = ((d - body + 12) % 8) - 4;
+  return (body + Math.max(-max, Math.min(max, diff)) + 8) % 8;
+}
+
+// Qué hace un clic en una casilla (lo decide el cliente; el servidor valida cada cosa):
+//   me = { x, y, dir, moving, sit, lay } · tile = { x, y }
+//   → { walk: true } caminar (si ya camina: cambia de rumbo desde la siguiente casilla)
+//   → { face: d } solo voltear hacia esa casilla vecina (un 2.º clic, ya mirándola, da el paso)
+//   → { look: true } clic en tu propia casilla: voltear hacia donde apuntas
+export function clickIntent(me, tile) {
+  if (!me || me.moving) return { walk: true };
+  const dx = tile.x - me.x, dy = tile.y - me.y;
+  if (!dx && !dy) return { look: true };
+  if (me.sit || me.lay) return { walk: true }; // sentado o acostado: se levanta y camina
+  if (Math.max(Math.abs(dx), Math.abs(dy)) === 1) {
+    const d = dir8(dx, dy);
+    return d === me.dir ? { walk: true } : { face: d };
+  }
+  return { walk: true };
+}
+
+// Voltear hacia d según la postura → { dir (cuerpo), head (null = igual al cuerpo) } | null (no se puede)
+//   de pie: gira todo · en una silla/sofá: el cuerpo no se mueve y la cabeza gira ±1
+//   sentado en el piso: el cuerpo solo en las 4 direcciones rectas (pares), la cabeza ±1 · acostado: nada
+export function lookDirs(st, d) {
+  if (d == null || st.lay) return null;
+  if (st.sit && !st.sit.floor) { const h = headWithin(st.dir, d); return { dir: st.dir, head: h === st.dir ? null : h }; }
+  if (st.sit) {
+    let body = d;
+    if (d % 2) {
+      const a = (d + 7) % 8, b = (d + 1) % 8;
+      const far = (x) => Math.abs(((x - st.dir + 12) % 8) - 4);
+      body = far(a) <= far(b) ? a : b;
+    }
+    return { dir: body, head: body === d ? null : d };
+  }
+  return { dir: d, head: null };
+}
+
+// Camino para un clic: no se atraviesa a nadie (salvo en la puerta) y, si la casilla está ocupada,
+// se queda en la vecina libre más cercana. occupied = destinos de otros · blocked = donde están parados.
+//   near: false → si el destino está ocupado no hay camino (para máquinas, rejas, etc.)
+//   → { path, near } (near = se quedó al lado) | null
+export function planWalk(grid, start, to, { occupied = new Set(), blocked = new Set(), door = null, near = true } = {}) {
+  const k = (x, y) => `${x},${y}`;
+  const dk = door ? k(door.x, door.y) : null;
+  const bl = new Set([...blocked].filter((s) => s !== dk && s !== k(start.x, start.y)));
+  const taken = (x, y) => k(x, y) !== dk && (occupied.has(k(x, y)) || bl.has(k(x, y)));
+  if (start.x === to.x && start.y === to.y) return { path: [], near: false };
+  if (!taken(to.x, to.y)) {
+    const p = findPath(grid, start, to, { blocked: bl });
+    return p ? { path: p, near: false } : null;
+  }
+  if (!near) return null;
+  if (Math.max(Math.abs(start.x - to.x), Math.abs(start.y - to.y)) === 1) return { path: [], near: true };
+  let best = null;
+  for (const [dx, dy] of DIR_VEC) {
+    const x = to.x + dx, y = to.y + dy;
+    const t = tileInfo(grid, x, y);
+    if (!t || (t.kind !== 'floor' && t.kind !== 'walk') || taken(x, y)) continue;
+    const p = findPath(grid, start, { x, y }, { blocked: bl });
+    if (p && (!best || p.length < best.length)) best = p;
+  }
+  return best ? { path: best, near: true } : null;
 }

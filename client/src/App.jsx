@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from './lib/api.js';
 import { office } from './lib/store.js';
-import { applyBrand } from './lib/themes.js';
+import { applyBrand, setUserTheme } from './lib/themes.js';
 import Login from './components/Login.jsx';
 import InviteAccept from './components/InviteAccept.jsx';
 import Shell from './components/Shell.jsx';
@@ -32,11 +32,12 @@ export default function App() {
   useEffect(() => {
     api.get('/config').then((c) => { applyBrand(c); setConfig(c); }).catch(() => setConfig({}));
     if (invite) return;
-    api.get('/auth/me').then((r) => setSession(r)).catch(() => setSession(null));
+    api.get('/auth/me').then((r) => { setUserTheme(r.user?.uiTheme || null); setSession(r); }).catch(() => { setUserTheme(null); setSession(null); });
   }, [invite]);
 
   const onLogin = async () => {
     const r = await api.get('/auth/me');
+    setUserTheme(r.user?.uiTheme || null);
     if (invite) window.history.replaceState(null, '', '/');
     setSession(r);
   };
@@ -45,6 +46,7 @@ export default function App() {
     await unsubscribePush().catch(() => {}); // este dispositivo deja de recibir avisos de esta cuenta
     await api.post('/auth/logout').catch(() => {});
     office.stop();
+    setUserTheme(null); // el login vuelve al tema de la oficina
     setSession(null);
   };
 

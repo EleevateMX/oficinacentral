@@ -1,0 +1,159 @@
+/* ===================================================================
+   Temas de la interfaz: Eleevate (predeterminado) y temas de juegos.
+   Las variables de cada tema vienen de shared/uiThemes.js y se ponen en
+   :root (lib/themes.js). Aquí solo van las reglas que las usan.
+   =================================================================== */
+
+/* ---------- Selector de temas (todas las marcas) ---------- */
+.tp-intro { margin: 18px 0 0; color: var(--text-2); font-size: 13.5px; line-height: 1.5; max-width: 560px; }
+.tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; }
+.tp-sub { margin-top: 6px; }
+.tp-note { margin: 0; }
+.tp-card {
+  position: relative; display: flex; flex-direction: column; gap: 10px; padding: 9px 9px 11px; text-align: left;
+  border-radius: 14px; background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.tp-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0, 0, 0, .28); }
+.tp-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 26px var(--glow, rgba(0, 0, 0, .2)); }
+.tp-prev { height: 92px; display: flex; gap: 6px; padding: 7px; border-radius: 10px; background: var(--auth-bg, var(--bg)); overflow: hidden; }
+.tp-rail { width: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 2px; }
+.tp-rail i { width: 12px; height: 12px; border-radius: 50%; background: var(--btn-primary, var(--accent)); }
+.tp-rail s { width: 10px; height: 3px; border-radius: 2px; background: var(--text-3); opacity: .55; }
+.tp-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 9px; background: var(--panel); border: 1px solid var(--border); border-radius: min(var(--radius, 12px), 10px); }
+.tp-title {
+  align-self: flex-start; font-family: var(--font-display); font-weight: var(--display-weight, 700); text-transform: var(--display-case, none);
+  font-size: 17px; line-height: 1; letter-spacing: var(--display-spacing, -0.02em);
+  background: var(--heading, var(--text)); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.tp-line { height: 4px; width: 82%; border-radius: 3px; background: var(--text-3); opacity: .45; }
+.tp-line.short { width: 52%; }
+.tp-btns { margin-top: auto; display: flex; align-items: center; gap: 6px; }
+.tp-btn { font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: min(var(--radius-sm, 8px), 8px); background: var(--btn-primary, var(--accent)); color: var(--on-accent, #fff); letter-spacing: .02em; }
+.tp-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--alt, var(--accent)); }
+.tp-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 3px; }
+.tp-name { min-width: 0; font-weight: 700; font-size: 13.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-name small { display: block; font-weight: 600; font-size: 11px; color: var(--text-3); }
+.tp-swatches { display: flex; flex-shrink: 0; }
+.tp-swatches i { width: 12px; height: 12px; border-radius: 50%; margin-left: -3px; box-shadow: 0 0 0 1.5px var(--panel); }
+.tp-check { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent, #fff); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+@media (max-width: 680px) { .tp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- Base de los temas nuevos ---------- */
+:root[data-ui='v2'] {
+  color-scheme: dark;
+  /* Los nombres de la paleta de Nuvora apuntan al tema (arranque, login, logo, etiquetas…) */
+  --profundo: var(--ink); --crema: var(--text); --linea: var(--border); --gris: var(--text-2);
+  --mandarina: var(--orange); --t-mandarina: var(--accent-soft); --t-verde: var(--accent-soft); --t-uva: var(--accent-soft);
+  --gray-dot: var(--text-3); --line: var(--border); --muted: var(--text-3);
+}
+:root[data-ui='v2'] body { background: var(--bg); }
+:root[data-ui='v2'] ::selection { background: var(--accent); color: var(--on-accent); }
+
+/* Titulares: fuente del tema; los grandes con su degradado (metal en Eleevate) */
+:root[data-ui='v2'] :is(h1, h2, h3, .panel-head h2, .pc-name, .chat-title, .cal-month, .dec-head h3, .empty-title, .area-form-title, .pop-title, .logo-word) {
+  font-family: var(--font-display); letter-spacing: var(--display-spacing); font-weight: var(--display-weight);
+}
+:root[data-ui='v2'] :is(.panel-head h2, .prefs-head h2, .modal-head h2) { text-transform: var(--display-case); }
+:root[data-ui='v2'] :is(.panel-head h2, .prefs-head h2, .auth-brand h1) {
+  background: var(--heading); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+:root[data-ui='v2'] .panel-head h2 { font-size: 22px; }
+
+/* Etiquetas de grupo: pequeñas, espaciadas y con el acento */
+:root[data-ui='v2'] :is(.group-head, .prefs-group, .pref-section-title, .ae-label) {
+  font-family: var(--font-body); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; font-size: 11px;
+}
+:root[data-ui='v2'] .group-head { color: var(--accent); }
+:root[data-ui='v2'] .pref-section-title { color: var(--text-2); }
+
+/* Estructura */
+:root[data-ui='v2'] :is(.sidebar, .main) { box-shadow: 0 0 0 1px var(--border), 0 18px 50px rgba(0, 0, 0, .28); }
+:root[data-ui='v2'] .rail-btn:hover { background: var(--hover); color: var(--text); }
+:root[data-ui='v2'] .rail-btn.on { background: var(--panel); color: var(--accent); box-shadow: 0 0 0 1px var(--border), 0 4px 14px rgba(0, 0, 0, .3); }
+:root[data-ui='v2'] .rail-logo { background: var(--ink-2); box-shadow: 0 0 0 1px var(--chrome-border); }
+:root[data-ui='v2'] .rail-logo:has(> img[data-mark='eleevate']) { background: transparent; box-shadow: none; }
+.rail-logo > img[data-mark='eleevate'] { width: 44px !important; height: 44px !important; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .35)); }
+:root[data-ui='v2'] .search input { background: var(--panel-2); }
+:root[data-ui='v2'] :is(.person, .pop-item, .palette-list button) { border-radius: var(--radius-sm); }
+
+/* Botones: primario (metal / color del tema), secundario y fantasma con borde */
+:root[data-ui='v2'] .btn { border-radius: var(--radius-sm); background: transparent; border-color: var(--border); font-weight: 600; }
+:root[data-ui='v2'] .btn:hover:not(:disabled) { background: var(--hover); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+:root[data-ui='v2'] :is(.btn.primary, .send-btn) {
+  background: var(--btn-primary); border-color: transparent; color: var(--on-accent); font-weight: 700;
+  border-radius: var(--radius-sm); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 4px 16px var(--glow);
+}
+:root[data-ui='v2'] :is(.btn.primary, .send-btn):hover:not(:disabled) { background: var(--btn-primary-hover); }
+:root[data-ui='v2'] .send-btn:disabled { background: var(--panel-2); color: var(--text-3); box-shadow: none; opacity: 1; }
+:root[data-ui='v2'] .btn.cta { background: var(--btn-secondary); border-color: transparent; color: var(--on-secondary); font-weight: 700; }
+:root[data-ui='v2'] .btn.cta:hover:not(:disabled) { filter: brightness(1.08); background: var(--btn-secondary); }
+:root[data-ui='v2'] :is(.icon-btn.active, .chip-btn.on, .dec-cats button.on, .jb-vote.on, .stage-switch button.on, .ab-icon) {
+  background: var(--accent); color: var(--on-accent); border-color: transparent;
+}
+:root[data-ui='v2'] .prefs-nav button { border-radius: var(--radius-sm); }
+:root[data-ui='v2'] .prefs-nav button.on { background: var(--accent-soft); color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); font-weight: 700; }
+:root[data-ui='v2'] .badge { background: var(--accent); color: var(--on-accent); }
+:root[data-ui='v2'] :is(.tag, .mention.me) { background: var(--accent-soft); color: var(--accent); }
+:root[data-ui='v2'] .nuvi-tip { background: var(--accent-soft); color: var(--text); }
+:root[data-ui='v2'] :is(input, textarea, select):focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+:root[data-ui='v2'] .toggle.on { background: var(--accent); }
+:root[data-ui='v2'] .toggle.on span { background: var(--on-accent); }
+:root[data-ui='v2'] .sw.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+:root[data-ui='v2'] .pill.pending { background: color-mix(in srgb, var(--orange) 18%, transparent); color: var(--orange); }
+:root[data-ui='v2'] .pill.used { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+
+/* Paneles flotantes: modales, ventanas, menús y avisos */
+:root[data-ui='v2'] .modal-backdrop { background: rgba(4, 5, 12, .62); backdrop-filter: blur(4px); }
+:root[data-ui='v2'] :is(.modal, .prefs, .palette) { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 30px 80px rgba(0, 0, 0, .55); }
+:root[data-ui='v2'] .prefs-nav { background: var(--panel-2); border-right: 1px solid var(--border); }
+:root[data-ui='v2'] .popover { border-radius: var(--radius); }
+:root[data-ui='v2'] .toast { background: var(--chrome); color: var(--text); border: 1px solid var(--chrome-border); border-radius: var(--radius); backdrop-filter: blur(12px); box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }
+:root[data-ui='v2'] .toast.error { background: color-mix(in srgb, var(--red) 22%, var(--panel)); border-color: color-mix(in srgb, var(--red) 55%, transparent); }
+
+/* Barra de control y herramientas del mapa */
+:root[data-ui='v2'] :is(.control-bar, .map-tools) {
+  background: var(--chrome); border: 1px solid var(--chrome-border); backdrop-filter: blur(12px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+:root[data-ui='v2'] .control-bar { border-radius: var(--radius); }
+:root[data-ui='v2'] .control-bar.compact { background: var(--ink); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+:root[data-ui='v2'] .map-tools { border-radius: var(--radius-sm); }
+:root[data-ui='v2'] :is(.cb-btn, .cb-caret):hover { background: var(--hover); }
+:root[data-ui='v2'] .cb-sep, :root[data-ui='v2'] .map-tools .sep { background: var(--chrome-border); }
+:root[data-ui='v2'] .cb-btn.off { color: var(--red); }
+:root[data-ui='v2'] .zoom-pct { color: var(--text-3); }
+
+/* Pantalla de carga */
+:root[data-ui='v2'] .boot { background: var(--auth-bg); color: var(--text-2); }
+.boot-mark { width: 72px; height: 72px; object-fit: contain; animation: boot-glow 1.6s ease-in-out infinite; }
+@keyframes boot-glow { 50% { opacity: .55; transform: scale(.95); } }
+
+/* Inicio de sesión */
+:root[data-ui='v2'] .auth { position: relative; overflow: hidden; background: var(--auth-bg); color: var(--text); }
+:root[data-ui='v2'] .auth-card {
+  position: relative; max-width: 460px; padding: 38px 36px 30px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent); border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-lg); box-shadow: 0 30px 90px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .06); backdrop-filter: blur(14px);
+}
+:root[data-ui='v2'] .auth-brand { flex-direction: row; align-items: center; gap: 18px; }
+:root[data-ui='v2'] .auth-brand img { width: 60px !important; height: 60px !important; flex-shrink: 0; filter: drop-shadow(0 6px 16px rgba(0, 0, 0, .45)); }
+:root[data-ui='v2'] .auth-kicker { display: block; font-family: var(--font-body); color: var(--accent); letter-spacing: .26em; font-size: 10.5px; }
+:root[data-ui='v2'] .auth-brand h1 { font-family: var(--font-display); font-weight: var(--display-weight); text-transform: var(--display-case); font-size: 32px; letter-spacing: var(--display-spacing); line-height: 1; }
+:root[data-ui='v2'] .auth-brand p { color: var(--text-2); margin-top: 7px; font-size: 14.5px; }
+:root[data-ui='v2'] .auth-form label { color: var(--text-2); font-weight: 600; font-size: 13.5px; }
+:root[data-ui='v2'] .auth-form input { background: var(--bg); border-color: var(--border); color: var(--text); border-radius: var(--radius-sm); }
+:root[data-ui='v2'] .auth-form .btn.primary { height: 50px; border-radius: var(--radius-sm); letter-spacing: .06em; text-transform: uppercase; font-size: 14px; font-weight: 800; }
+:root[data-ui='v2'] .auth-error { color: var(--red); }
+:root[data-ui='v2'] :is(.auth-foot, .auth-by) { color: var(--text-3); }
+:root[data-ui='v2'] .pw button { color: var(--text-3); }
+:root[data-ui='v2'] .auth-host { display: none; }
+
+/* Eleevate: la "e" doble y el anillo de acero detrás del login */
+:root[data-brand='eleevate'] .auth::before {
+  content: ''; position: absolute; width: 760px; height: 760px; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 1px solid rgba(156, 190, 217, .14); pointer-events: none;
+  box-shadow: 0 0 0 90px rgba(156, 190, 217, .025), 0 0 0 180px rgba(156, 190, 217, .015);
+}
+:root[data-brand='eleevate'] .auth-card { box-shadow: 0 30px 90px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(244, 246, 249, .12), 0 0 0 1px rgba(156, 190, 217, .06); }
+:root[data-brand='eleevate'] .group-head { color: var(--accent); }

@@ -7,20 +7,20 @@ export const EFFECTS = {
   brillos: { label: 'Brillos', emoji: '✨' },
   fuego: { label: 'Aura de fuego', emoji: '🔥' },
   fantasma: { label: 'Fantasma', emoji: '👻' },
-  neon: { label: 'Neón GTAHUB', emoji: '💗' },
-  reflector: { label: 'Reflector', emoji: '🔦', admin: true },
+  neon: { label: 'Neón HUB', emoji: '💗' },
+  reflector: { label: 'Reflector', emoji: '🔦' },
 };
 
 // Opciones extra del cuadro del personaje (se mezclan con las del motor)
 export function avatarOpts(U, t, moving) {
-  const o = { danceT: t - (U.actT || 0), danceV: Math.abs(U.id | 0) };
+  const o = { actT: t - (U.actT || 0), actN: U.dance || 1 };
   if (U.hand && HAND_ITEMS.includes(U.hand)) {
     o.hand = U.hand;
     // De vez en cuando le da un trago / una mordida
     o.drink = !moving && !U.lay && (t + Math.abs(U.id | 0) * 977) % 9000 < 1300;
   }
   if (U.sign != null) o.sign = U.sign;
-  if (U.act === 'sleep') o.blink = true;
+  if (U.act === 'sleep' || (U.act === 'laugh' && !moving)) o.blink = true;
   return o;
 }
 
@@ -115,6 +115,8 @@ export function drawAvatarFront(ctx, a, t) {
     ctx.globalAlpha = 1;
   }
   if (U.sign != null && a.pose === 'sign') drawSign(ctx, a, U.sign, t);
+  if (U.act === 'kiss') drawKiss(ctx, a, t - (U.actT || 0));
+  if (U.act === 'laugh') drawLaugh(ctx, a, t - (U.actT || 0));
   if (U.act === 'sleep') {
     const hx = fx + fr.head[0], hy = fy + fr.head[1];
     ctx.font = '800 12px system-ui, sans-serif';
@@ -185,6 +187,72 @@ export function drawTyping(ctx, x, y, t, age = 0) {
     const lift = Math.max(0, ph) * 3.5;
     ctx.fillStyle = ph > 0.3 ? '#FE3377' : '#8d8a96';
     ctx.beginPath(); ctx.arc(x - 9 + i * 9, by + h / 2 - lift + 0.5, 2.6, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---------- Acciones: beso (corazones) y risa ("jaja") ----------
+// Corazón de pixel-art (7×6), en px del mundo (2 px por píxel)
+const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
+function heart(ctx, x, y, s, fill, alpha) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(40,10,30,.55)';
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) if (HEART[r][c] === '1') ctx.fillRect(Math.round(x + (c - 3.5) * s) + 1, Math.round(y + (r - 3) * s) + 1, s, s);
+  ctx.fillStyle = fill;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) if (HEART[r][c] === '1') ctx.fillRect(Math.round(x + (c - 3.5) * s), Math.round(y + (r - 3) * s), s, s);
+  ctx.fillStyle = '#ffd1e1';
+  ctx.fillRect(Math.round(x - 2.5 * s), Math.round(y - 2 * s), s, s);
+}
+function drawKiss(ctx, a, e) {
+  if (e < 450) return; // primero la mano a la boca
+  const fr = a.fr;
+  const hx = a.fx + fr.head[0], hy = a.fy + fr.head[1];
+  // Salen hacia donde mira (a la derecha o izquierda de la pantalla) y suben
+  const side = [1, 1, 1, 0, -1, -1, -1, 0][a.U.dir] || (a.U.id % 2 ? 1 : -1);
+  for (let i = 0; i < 3; i++) {
+    const k = (e - 450 - i * 220) / 1300;
+    if (k <= 0 || k >= 1) continue;
+    const x = hx + side * (8 + k * 30) + Math.sin(k * 9 + i) * 4;
+    const y = hy - 4 - k * 34 - i * 4;
+    heart(ctx, x, y, k < 0.15 ? 1 : 2, i === 1 ? '#FE3377' : '#ff5c93', Math.min(1, (1 - k) * 2.2));
+  }
+  ctx.globalAlpha = 1;
+}
+function drawLaugh(ctx, a, e) {
+  const fr = a.fr;
+  const hx = a.fx + fr.head[0], hy = a.fy + fr.head[1];
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < 3; i++) {
+    const k = ((e / 1100) + i / 3) % 1;
+    if (e < i * 360) continue;
+    const side = i % 2 ? -1 : 1;
+    const x = hx + side * (14 + k * 10), y = hy - 10 - k * 26;
+    const txt = i === 1 ? 'ja' : 'jaja';
+    ctx.globalAlpha = Math.sin(k * Math.PI);
+    ctx.font = `900 ${9 + Math.round(k * 3)}px system-ui, sans-serif`;
+    const w = ctx.measureText(txt).width + 8, h = 13;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = 'rgba(20,20,20,.55)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect?.(x - w / 2, y - h / 2, w, h, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#FE3377';
+    ctx.fillText(txt, x, y + 0.5);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Voz: ondita sobre quien está hablando (coordenadas de pantalla) ----------
+export function drawSpeaking(ctx, x, y, t, level = 1) {
+  ctx.save();
+  const bars = 4, gap = 4;
+  const w = bars * gap + 10, h = 14;
+  const bx = Math.round(x - w / 2), by = Math.round(y - h);
+  ctx.fillStyle = 'rgba(20,20,20,.82)';
+  ctx.beginPath(); ctx.roundRect?.(bx, by, w, h, 7); ctx.fill();
+  ctx.fillStyle = '#2fd18b';
+  for (let i = 0; i < bars; i++) {
+    const v = 0.35 + 0.65 * Math.abs(Math.sin(t / 110 + i * 1.3)) * Math.min(1, 0.5 + level);
+    const bh = Math.max(2, Math.round(v * 9));
+    ctx.fillRect(bx + 6 + i * gap, Math.round(by + h / 2 - bh / 2), 2, bh);
   }
   ctx.restore();
 }

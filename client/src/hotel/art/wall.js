@@ -1,7 +1,7 @@
 // Furnis de pared, dibujados en PLANO: x a lo largo de la pared (32 px por casilla), y negativa hacia arriba.
 //   (0, 0) = esquina inferior izquierda del furni. El motor los inclina sobre la pared.
 import { PINK, YELLOW, DARK, shade, mix, rgba } from './iso.js';
-import { drawWord, wordWidth, neonWord, neonStroke, hexLogo, hexPath, hexPts, rr } from './glyphs.js';
+import { drawWord, wordWidth, neonWord, neonStroke, hexLogo, rr } from './glyphs.js';
 
 const TAU = Math.PI * 2;
 const fr = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
@@ -14,19 +14,27 @@ const glow = (ctx, x, y, r, color, a) => {
 };
 
 function poster_gtahub(ctx) {
+  // Póster HUB: cartel retro genérico (sol de franjas, montañas y la palabra HUB); sin logos
   const x = 3, y = -52, w = 26, h = 42;
   dropShadow(ctx, x, y, w, h, 0.5);
   fr(ctx, x, y, w, h, DARK);
-  // rayos de fondo
-  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-  ctx.fillStyle = rgba(PINK, 0.16);
-  for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU; ctx.beginPath(); ctx.moveTo(x + w / 2, y + 17); ctx.lineTo(x + w / 2 + Math.cos(a) * 40, y + 17 + Math.sin(a) * 40); ctx.lineTo(x + w / 2 + Math.cos(a + 0.3) * 40, y + 17 + Math.sin(a + 0.3) * 40); ctx.fill(); }
+  ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 4); ctx.clip();
+  const sky = ctx.createLinearGradient(0, y, 0, y + 26);
+  sky.addColorStop(0, '#2a1640'); sky.addColorStop(1, '#7a2a5c');
+  ctx.fillStyle = sky; ctx.fillRect(x, y, w, 26);
+  // sol con franjas
+  const sx = x + w / 2, sy = y + 20;
+  const sun = ctx.createLinearGradient(0, sy - 9, 0, sy + 2);
+  sun.addColorStop(0, YELLOW); sun.addColorStop(1, PINK);
+  ctx.fillStyle = sun; ctx.beginPath(); ctx.arc(sx, sy, 9, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#2a1640'; for (let i = 0; i < 3; i++) ctx.fillRect(sx - 10, sy - 2.2 - i * 2.6, 20, 0.7 + i * 0.15);
+  // montañas
+  ctx.fillStyle = '#1d1030'; ctx.beginPath(); ctx.moveTo(x, y + 26); ctx.lineTo(x + 7, y + 17); ctx.lineTo(x + 12, y + 22); ctx.lineTo(x + 19, y + 15); ctx.lineTo(x + w, y + 24); ctx.lineTo(x + w, y + 26); ctx.closePath(); ctx.fill();
   ctx.restore();
   ctx.strokeStyle = PINK; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
-  hexLogo(ctx, x + w / 2, y + 16, 8, { ring: YELLOW });
-  const hh = 4.2, ww = wordWidth('GTAHUB', hh);
-  drawWord(ctx, 'GTAHUB', x + (w - ww) / 2, y + 29, hh, '#ffffff', 1);
-  fr(ctx, x + 6, y + 36, w - 12, 1, PINK); fr(ctx, x + 9, y + 38.5, w - 18, 0.8, rgba('#ffffff', 0.5));
+  const hh = 6, ww = wordWidth('HUB', hh);
+  drawWord(ctx, 'HUB', x + (w - ww) / 2, y + 29, hh, '#ffffff', 1.3);
+  fr(ctx, x + 6, y + 37.5, w - 12, 0.9, PINK);
   // cinta
   ctx.fillStyle = rgba('#f3ead2', 0.85);
   ctx.save(); ctx.translate(x + 2, y + 1); ctx.rotate(-0.6); ctx.fillRect(-4, -1.5, 8, 3); ctx.restore();
@@ -121,7 +129,7 @@ function shelf_wall(ctx) {
   // maceta con planta
   ctx.fillStyle = '#d26a3c'; ctx.beginPath(); ctx.moveTo(26, y - 8); ctx.lineTo(34, y - 8); ctx.lineTo(33, y); ctx.lineTo(27, y); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#6b2e14'; ctx.lineWidth = 0.6; ctx.stroke();
   for (const [dx, dy, r, c] of [[30, -12, 3.2, '#38a35a'], [27.5, -14, 2.6, '#2e8b4a'], [32.5, -15, 2.6, '#4bbf6b'], [30, -17, 2.4, '#38a35a']]) { dotc(ctx, dx, y + dy, r + 0.6, '#1f5a2c'); dotc(ctx, dx, y + dy, r, c); }
-  // cubo GTAHUB
+  // adorno hexagonal
   hexLogo(ctx, 42, y - 6, 5.5, { outline: 'rgba(20,20,20,0.5)' });
   // trofeo
   fr(ctx, 50, y - 3, 8, 3, '#3b2a20');
@@ -143,13 +151,14 @@ function neon_sign(ctx, { st }) {
   ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 0.8; ctx.stroke();
   for (const [a, b] of [[x + 3, y + 3], [x + w - 3, y + 3], [x + 3, y + h - 3], [x + w - 3, y + h - 3]]) dotc(ctx, a, b, 0.9, '#9aa0aa');
   const cx = x + 10, cy = y + h / 2, r = 6;
-  const p = hexPts(cx, cy, r);
-  hexPath(ctx, cx, cy, r);
-  ctx.moveTo(cx, cy); ctx.lineTo(p[5][0], p[5][1]); ctx.moveTo(cx, cy); ctx.lineTo(p[1][0], p[1][1]); ctx.moveTo(cx, cy); ctx.lineTo(p[3][0], p[3][1]);
+  // Letrero genérico: estrella de neón amarilla + HUB rosa
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k * Math.PI) / 5, rr2 = k % 2 ? r * 0.45 : r; const X = cx + Math.cos(a) * rr2, Y = cy + Math.sin(a) * rr2; if (k) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); }
+  ctx.closePath();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   neonStroke(ctx, YELLOW, on, 1.3, '#fffbe6');
-  const hh = 7, ww = wordWidth('GTAHUB', hh);
-  neonWord(ctx, 'GTAHUB', x + 19 + (w - 23 - ww) / 2, cy - hh / 2, hh, PINK, on);
+  const hh = 11, ww = wordWidth('HUB', hh);
+  neonWord(ctx, 'HUB', x + 19 + (w - 23 - ww) / 2, cy - hh / 2, hh, PINK, on);
 }
 
 function frame_photo(ctx, { c }) {

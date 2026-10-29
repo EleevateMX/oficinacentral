@@ -14,7 +14,7 @@ import { APP_VERSION } from './version.js';
 import { trackConnect, trackArea, trackDisconnect, bumpCounter } from './stats.js';
 import { checkAchievements } from './achievements.js';
 import { initStage, initStageIO, stageCleanup } from './stage.js';
-import { initHotel } from './hotel.js';
+import { initHotel, hotelCtx } from './hotel.js';
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -341,8 +341,11 @@ export function initRealtime(httpServer) {
       const to = Number(msg?.to);
       if (!presence.has(to) || to === userId) return;
       // Nadie fuera de un piso archivado se conecta con quien está dentro (salvo entre admins)
+      // Hotel: quienes están en la misma sala del Hotel sí se oyen (ahí se ven, sin importar su piso)
       const q = presence.get(to);
-      if ((isFloorAdminOnly(q.floorId) && !p.admin) || (isFloorAdminOnly(p.floorId) && !q.admin)) return;
+      const hm = hotelCtx.where.get(userId), ht = hotelCtx.where.get(to);
+      const sameHotelRoom = !!hm && !!ht && hm.roomId === ht.roomId;
+      if (!sameHotelRoom && ((isFloorAdminOnly(q.floorId) && !p.admin) || (isFloorAdminOnly(p.floorId) && !q.admin))) return;
       emitToUser(to, 'rtc', { from: userId, data: msg.data });
     });
 

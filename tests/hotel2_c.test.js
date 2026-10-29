@@ -126,9 +126,11 @@ test('máquinas: casillas de al lado y textos de bots', () => {
   assert.equal(drinkRequest('UN REFRESCO!'), 'refresco');
   assert.equal(drinkRequest('hola'), null);
   assert.match(receptionReply('necesito ayuda'), /caminar/);
-  assert.match(receptionReply('¿qué salas hay?'), /Oficina Central/);
+  assert.match(receptionReply('¿qué salas hay?'), /Charla General.*Roleplay.*League of Legends/);
   assert.equal(receptionReply('buenas tardes'), null);
-  assert.equal(greeting('Ana'), '¡Bienvenido a la Oficina Central, Ana!');
+  assert.equal(greeting('Ana'), '¡Bienvenido a Charla General, Ana! Aquí se platica de todo 💬');
+  assert.match(receptionReply('¿hay algo de lol?'), /League of Legends/);
+  assert.match(receptionReply('quiero hacer roleplay'), /taberna/);
   assert.ok(matchKeyword('Prende la LÚZ', 'luz'));
   assert.ok(!matchKeyword('hola', ''));
   const R = { items: new Map([[3, {}], [4, {}]]) };
@@ -449,12 +451,12 @@ test('bots: la recepción saluda por nombre, contesta y no cuenta como persona; 
   const admin = await adminClient(srv.url);
   const ana = await createMember(srv.url, admin, 'Visitante');
   const official = (await ana.get('/hotel/rooms?tab=official')).data.rooms;
-  const hq = official.find((r) => r.officialKey === 'hq');
-  const comedor = official.find((r) => r.officialKey === 'comedor');
+  const hq = official.find((r) => r.officialKey === 'charla');
+  const comedor = official.find((r) => r.officialKey === 'roleplay');
   const s = await connect(ana);
   try {
     const join = once(s, 'hotel:user:join', (u) => u.bot === 'reception');
-    const hello = once(s, 'hotel:chat', (m) => m.bot && m.text === '¡Bienvenido a la Oficina Central, Visitante!', 6000);
+    const hello = once(s, 'hotel:chat', (m) => m.bot && m.text === '¡Bienvenido a Charla General, Visitante! Aquí se platica de todo 💬', 6000);
     const snap = await enter(s, hq.id);
     const bot = snap.users.find((u) => u.bot) || await join;
     assert.ok(bot.id < 0);
@@ -469,8 +471,8 @@ test('bots: la recepción saluda por nombre, contesta y no cuenta como persona; 
     const reply = once(s, 'hotel:chat', (m) => m.bot && /Navegador/.test(m.text), 6000);
     await wait(2600);
     s.emit('hotel:chat', { text: '¿qué salas hay?' });
-    assert.match((await reply).text, /Sala de juegos/);
-    // Barra del comedor: "un café" → café en la mano
+    assert.match((await reply).text, /Música y Karaoke/);
+    // Taberna de Roleplay: "un café" → café en la mano
     const me = (await enter(s, comedor.id)).users.find((u) => !u.bot).id;
     await wait(300);
     const served = once(s, 'hotel:chat', (m) => m.bot && /café/.test(m.text), 6000);

@@ -1,4 +1,4 @@
-// Hotel (agente D): ilustración de la llegada — la torre del Hotel GTAHUB al atardecer.
+// Hotel (agente D): ilustración de la llegada — la torre de MeDed Friends al atardecer.
 // Todo procedural en un lienzo chiquito (pixel-art) que se escala sin suavizar: cielo con bandas,
 // sol retro, estrellas, tres capas de ciudad con paralaje, la torre con ventanas encendidas,
 // letreros de neón rosa/amarillo, el elevador de vidrio subiendo y bajando, calle con reflejos.
@@ -9,19 +9,27 @@ function rng(seed) {
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-// Letras de 3×5 para los letreros
+// Letras de pixel (5 de alto, ancho variable) para los letreros
 const GLYPH = {
-  G: ['111', '100', '101', '101', '111'], T: ['111', '010', '010', '010', '010'], A: ['010', '101', '111', '101', '101'],
-  H: ['101', '101', '111', '101', '101'], U: ['101', '101', '101', '101', '111'], B: ['110', '101', '110', '101', '110'],
-  O: ['111', '101', '101', '101', '111'], E: ['111', '100', '110', '100', '111'], L: ['100', '100', '100', '100', '111'],
+  M: ['10001', '11011', '10101', '10001', '10001'], D: ['1110', '1001', '1001', '1001', '1110'],
+  e: ['0000', '0110', '1111', '1000', '0111'], d: ['0001', '0001', '0111', '1001', '0111'],
+  F: ['1111', '1000', '1110', '1000', '1000'], R: ['1110', '1001', '1110', '1010', '1001'], I: ['111', '010', '010', '010', '111'],
+  E: ['1111', '1000', '1110', '1000', '1111'], N: ['1001', '1101', '1011', '1001', '1001'], S: ['0111', '1000', '0110', '0001', '1110'],
 };
+const glyphW = (ch) => (GLYPH[ch] ? GLYPH[ch][0].length : 3);
+// Ancho de una palabra horizontal (en px, con k px por punto)
+const wordW = (s, k) => [...s].reduce((n, ch) => n + (glyphW(ch) + 1) * k, -k);
 function text(g, s, x, y, c, k = 1, vertical = false) {
   g.fillStyle = c;
+  let ox = x;
   [...s].forEach((ch, i) => {
     const gl = GLYPH[ch];
-    if (!gl) return;
-    const ox = vertical ? x : x + i * 4 * k, oy = vertical ? y + i * 6 * k : y;
-    for (let r = 0; r < 5; r++) for (let q = 0; q < 3; q++) if (gl[r][q] === '1') g.fillRect(ox + q * k, oy + r * k, k, k);
+    const w = glyphW(ch);
+    if (gl) {
+      const px = vertical ? x + Math.floor((5 - w) / 2) * k : ox, py = vertical ? y + i * 6 * k : y;
+      for (let r = 0; r < 5; r++) for (let q = 0; q < w; q++) if (gl[r][q] === '1') g.fillRect(px + q * k, py + r * k, k, k);
+    }
+    ox += (w + 1) * k;
   });
 }
 function neon(g, s, x, y, c, k, vertical, on) {
@@ -170,11 +178,11 @@ export class HotelScene {
     g.globalAlpha = 0.25; g.fillStyle = YELLOW; g.fillRect(ex - 1, cy - 1, 8, 8); g.globalAlpha = 1;
     // letreros de neón
     const k = tw >= 70 ? 2 : 1;
-    const word = 'GTAHUB';
-    const ww = word.length * 4 * k - k;
+    const word = 'MeDed';
+    const ww = wordW(word, k);
     const flick = !(Math.floor(t / 90) % 47 === 0);
     neon(g, word, Math.round(x0 + tw / 2 - ww / 2), top - 2 - 5 * k - 3, YELLOW, k, false, flick);
-    neon(g, 'HOTEL', x0 - 3 * k - 4, top + 26, PINK, k, true, true);
+    neon(g, 'FRIENDS', x0 - 5 * k - 4, top + 26, PINK, k, true, true);
     // marco de neón en la corona
     g.fillStyle = PINK; g.globalAlpha = 0.9;
     g.fillRect(x0 + 10, top, tw - 20, 1); g.fillRect(x0 + 4, top + 6, tw - 8, 1); g.fillRect(x0, top + 14, tw, 1);

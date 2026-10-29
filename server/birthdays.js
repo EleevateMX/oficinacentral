@@ -24,7 +24,7 @@ export async function announceBirthdays(now = new Date()) {
   if (!people.length) return false;
   const names = people.map((p) => `**${p.name}**`);
   const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
-  const office = process.env.OFFICE_NAME || 'la oficina';
+  const office = getSetting('office_name') || process.env.OFFICE_NAME || 'la oficina';
   const link = process.env.PUBLIC_URL ? `\n${process.env.PUBLIC_URL.replace(/\/$/, '')}/?view=birthdays` : '';
   const text = `🎂 ¡Hoy ${people.length === 1 ? 'cumple años' : 'cumplen años'} ${who}! Entra a ${office} y mándale tu felicitación 🎉${link}`;
   const body = /discord(app)?\.com\/api\/webhooks/.test(url) ? { username: 'Cumpleaños', content: text } : { text: text.replace(/\*\*/g, '*') };

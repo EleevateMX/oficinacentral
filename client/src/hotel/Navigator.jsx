@@ -66,7 +66,7 @@ export default function Navigator({ onExit }) {
         <div className="ht-nav-title">
           <div className="ht-logo"><Building2 size={26} /></div>
           <div>
-            <h1>Hotel <span>GTAHUB</span></h1>
+            <h1>MeDed <span>Friends</span></h1>
             <p>Tu cuarto, tus furnis, tu gente. Decora, invita y platica.</p>
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function Navigator({ onExit }) {
                 <ModelPreview model={r.model} />
                 <span className={`ht-pill ${r.users ? 'live' : ''} ${full ? 'full' : ''}`}><Users size={12} /> {r.users}/{r.capacity}</span>
                 {r.access !== 'open' && <span className="ht-lock" title={ACCESS_LABEL[r.access]}><AccessIcon access={r.access} /></span>}
-                {r.official && <span className="ht-official-badge" title="Sala oficial de GTAHUB"><BadgeCheck size={12} /> GTAHUB</span>}
+                {r.official && <span className="ht-official-badge" title="Sala oficial de MeDed Friends"><BadgeCheck size={12} /> Oficial</span>}
                 <span role="button" tabIndex={0} className={`ht-card-star ${r.fav ? 'on' : ''}`} title={r.fav ? 'Quitar de favoritas' : 'Guardar en favoritas'} onClick={(e) => fav(e, r)} onKeyDown={(e) => { if (e.key === 'Enter') fav(e, r); }}><Star size={14} fill={r.fav ? 'currentColor' : 'none'} /></span>
                 {ev && <span className="ht-ev-ribbon"><PartyPopper size={12} /> EVENTO</span>}
               </div>

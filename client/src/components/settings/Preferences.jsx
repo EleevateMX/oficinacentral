@@ -14,7 +14,8 @@ import { recordingSupported, clipMime } from '../../lib/recorder.js';
 import { playSound } from '../../lib/sounds.js';
 import { Toggle, Select, Row, Radio, Avatar, Empty, AvatarCanvas } from '../ui.jsx';
 import { fmtDate } from '../../lib/time.js';
-import { THEMES } from '../../lib/themes.js';
+import { ThemePrefs, OfficeThemeGrid } from './ThemePicker.jsx';
+import { themeForcesDark } from '../../lib/themes.js';
 import { OfficeMark, ByNuvora } from '../brand.jsx';
 import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
 import { AnniversarySettings } from '../SeasonExtras.jsx';
@@ -24,6 +25,7 @@ import { Coins } from 'lucide-react';
 const SECTIONS = [
   { group: 'Preferencias' },
   { id: 'general', label: 'General', icon: Settings },
+  { id: 'theme', label: 'Tema', icon: Palette },
   { id: 'calendar', label: 'Calendario', icon: Calendar },
   { id: 'audio', label: 'Audio', icon: Mic },
   { id: 'video', label: 'Pantalla y video', icon: Video },
@@ -75,6 +77,7 @@ export default function Preferences({ section = 'general' }) {
           </div>
           <div className="prefs-body">
             {cur === 'general' && <General />}
+            {cur === 'theme' && <ThemePrefs />}
             {cur === 'calendar' && <CalendarPrefs />}
             {cur === 'audio' && <AudioPrefs />}
             {cur === 'video' && <VideoPrefs />}
@@ -124,7 +127,7 @@ function General() {
         </Row>
       </Section>
       <Section title="Apariencia">
-        <Row title="Modo de color" desc="Claro, oscuro o según tu sistema">
+        <Row title="Modo de color" desc={themeForcesDark() ? 'Tu tema es oscuro siempre. Claro y Sistema aplican con Nuvora y HUB clásico.' : 'Claro, oscuro o según tu sistema'}>
           <Select value={mode} onChange={(v) => office.updatePrefs({ colorMode: v })} options={[{ value: 'light', label: 'Claro' }, { value: 'dark', label: 'Oscuro' }, { value: 'system', label: 'Sistema' }]} />
         </Row>
       </Section>
@@ -904,7 +907,7 @@ function BulkInvites({ reload }) {
       ) : (
         <>
           <p className="muted small">Una persona por línea: <code>Nombre, correo, admin</code>. El correo y el rol son opcionales. También puedes subir un CSV exportado de Excel o Google Sheets.</p>
-          <textarea rows={6} placeholder={'Kevingare, kevin@gtahub.gg\nWodiw\nYamii, yamii@gtahub.gg, admin'} value={text} onChange={(e) => setText(e.target.value)} />
+          <textarea rows={6} placeholder={'Kevingare, kevin@hub.gg\nWodiw\nYamii, yamii@hub.gg, admin'} value={text} onChange={(e) => setText(e.target.value)} />
           <div className="row gap8">
             <button className="btn" type="button" onClick={() => fileRef.current.click()}><Upload size={15} /> Subir CSV</button>
             <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" hidden onChange={loadFile} />
@@ -1071,17 +1074,7 @@ function BrandAdmin() {
         </Row>
       </Section>
       <Section title="Tema">
-        <div className="theme-grid">
-          {THEMES.map((t) => (
-            <button key={t.id} className={`theme-card ${config.theme === t.id ? 'on' : ''}`} onClick={() => save({ theme: t.id })} aria-pressed={config.theme === t.id}>
-              <div className="theme-swatches">
-                {(t.id === 'custom' ? [config.accent || '#157A6E', '#ffffff', '#F3F4EE', '#0A2B2C'] : t.swatches).map((c, i) => <span key={i} style={{ background: c }} />)}
-              </div>
-              <b>{t.name}</b>
-              <span className="muted small">{t.desc}</span>
-            </button>
-          ))}
-        </div>
+        <OfficeThemeGrid config={config} onPick={(id) => save({ theme: id })} />
         {config.theme === 'custom' && (
           <Row title="Color principal" desc="Botones, selección y acentos">
             <input type="color" value={config.accent || '#157A6E'} onChange={(e) => save({ accent: e.target.value })} aria-label="Color principal" />

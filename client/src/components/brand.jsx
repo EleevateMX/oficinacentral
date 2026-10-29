@@ -1,4 +1,4 @@
-import { officeLogo } from '../lib/themes.js';
+import { officeLogo, bootLogo, ELEEVATE_LOGO } from '../lib/themes.js';
 // Identidad de Nuvora (Manual de marca v2): logo, símbolo y mascotas.
 // Formas planas, sin sombras ni degradados. Colores de la paleta oficial.
 import React from 'react';
@@ -87,7 +87,7 @@ export function Mascota({ nombre = 'nuvi', face = 'smile', pose = 'idle', size =
 // Marca de la oficina (logo propio) o, si no hay, el símbolo de Nuvora.
 export function OfficeMark({ config, size = 28, variante = 'negativo' }) {
   const src = officeLogo(config || {});
-  if (src) return <img src={src} alt={config.officeName || ''} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />;
+  if (src) return <img src={src} alt={config.officeName || ''} data-mark={src === ELEEVATE_LOGO ? 'eleevate' : undefined} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />;
   return <Simbolo variante={variante} size={size} />;
 }
 
@@ -101,9 +101,10 @@ export function ByNuvora({ variante = 'positivo', size = 13 }) {
 }
 
 export function Boot({ text }) {
+  const mark = bootLogo(); // Eleevate o HUB clásico según el último tema conocido; si no, Nuvora
   return (
     <div className="boot">
-      <Logo variante="negativo" size={30} />
+      {mark ? <img className="boot-mark" src={mark} alt="" width={72} height={72} /> : <Logo variante="negativo" size={30} />}
       {text && <p>{text}</p>}
     </div>
   );

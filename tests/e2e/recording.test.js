@@ -29,7 +29,7 @@ before(async () => {
   const floorId = (await admin.get('/floors')).data.floors[0].id;
   const db = new DatabaseSync(path.join(srv.dataDir, 'office.db'));
   const put = db.prepare('UPDATE users SET pos_x = ?, pos_y = ?, floor_id = ? WHERE id = ?');
-  put.run(19, 55, floorId, admin.user.id); // Sala de ideas (privada) del mapa recreativo
+  put.run(19, 55, floorId, admin.user.id); // Roleplay (privada) del mapa recreativo
   put.run(22, 55, floorId, member.user.id);
   db.close();
   browser = await chromium.launch({

@@ -135,7 +135,7 @@ export function Kbd({ children }) {
 }
 
 export function Empty({ title, children, mascota }) {
-  const showMascot = mascota && document.documentElement.dataset.brand !== 'gtahub';
+  const showMascot = mascota && ['nuvora', 'custom'].includes(document.documentElement.dataset.brand); // las mascotas son de Nuvora
   return (
     <div className="empty">
       {showMascot && <Mascota nombre={mascota.nombre || 'nuvi'} pose={mascota.pose || 'idle'} face={mascota.face || 'smile'} size={mascota.size || 96} />}

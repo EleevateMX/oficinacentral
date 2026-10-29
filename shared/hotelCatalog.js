@@ -20,7 +20,7 @@ export const HOTEL_CATS = [
   { id: 'plantas', name: 'Plantas' },
   { id: 'pisos', name: 'Pisos y tapetes' },
   { id: 'pared', name: 'Pared' },
-  { id: 'gtahub', name: 'GTAHUB' },
+  { id: 'gtahub', name: 'HUB' },
   { id: 'diversion', name: 'Diversión' },
 ];
 
@@ -33,7 +33,7 @@ export const HOTEL_FURNI = [
   F('sofa_3', 'Sofá grande', 'sillas', { w: 3, h: 1, sit: 0.6, colors: ['#2b2d38', '#FE3377', '#7d8471'] }),
   F('armchair', 'Sillón', 'sillas', { h: 1, sit: 0.6, colors: ['#e05ca5', '#3d7be0', '#7a4a2b'] }),
   F('beanbag', 'Puff', 'sillas', { h: 0.5, sit: 0.35, rots: [0], colors: ['#FE3377', '#FFCC00', '#3a86ff', '#2fb67c'] }),
-  F('throne', 'Trono GTAHUB', 'sillas', { h: 1.6, sit: 0.8, colors: ['#FFCC00'] }),
+  F('throne', 'Trono HUB', 'sillas', { h: 1.6, sit: 0.8, colors: ['#FFCC00'] }),
   // Mesas
   F('table_small', 'Mesita', 'mesas', { h: 0.9, stack: true, rots: [0], colors: ['#b5794a', '#f4f4f6', '#2b2b2f'] }),
   F('table_dining', 'Mesa de comedor', 'mesas', { w: 2, l: 2, h: 0.9, stack: true, rots: [0], colors: ['#b5794a', '#2b2b2f'] }),
@@ -63,15 +63,15 @@ export const HOTEL_FURNI = [
   F('rug_long', 'Alfombra', 'pisos', { w: 1, l: 3, h: 0.02, walk: true, rots: [0, 2], colors: ['#c0392b', '#2b2d38', '#2fb67c'] }),
   F('floor_tile', 'Loseta', 'pisos', { h: 0.02, walk: true, rots: [0], colors: ['#f4f4f6', '#141414', '#FE3377', '#3a86ff', '#FFCC00', '#2fb67c'] }),
   // Pared
-  W('poster_gtahub', 'Póster GTAHUB', 'pared'),
+  W('poster_gtahub', 'Póster HUB', 'pared'),
   W('window', 'Ventana', 'pared', { w: 2 }),
   W('clock', 'Reloj', 'pared'),
   W('shelf_wall', 'Repisa', 'pared', { w: 2 }),
-  W('neon_sign', 'Letrero de neón GTAHUB', 'pared', { w: 2, interact: 'toggle', states: 2 }),
+  W('neon_sign', 'Letrero de neón HUB', 'pared', { w: 2, interact: 'toggle', states: 2 }),
   W('frame_photo', 'Cuadro', 'pared', { colors: ['#FE3377', '#3a86ff', '#2fb67c'] }),
-  // GTAHUB
-  F('gtahub_rug', 'Tapete GTAHUB', 'gtahub', { w: 3, l: 3, h: 0.02, walk: true, rots: [0] }),
-  F('gtahub_statue', 'Estatua del logo', 'gtahub', { h: 2.2, rots: [0] }),
+  // HUB (ids gtahub_* por compatibilidad con inventarios)
+  F('gtahub_rug', 'Tapete HUB', 'gtahub', { w: 3, l: 3, h: 0.02, walk: true, rots: [0] }),
+  F('gtahub_statue', 'Escultura hexagonal', 'gtahub', { h: 2.2, rots: [0] }),
   F('gtahub_car', 'Auto deportivo (decoración)', 'gtahub', { w: 2, l: 3, h: 1.1, colors: ['#FE3377', '#FFCC00', '#141414'] }),
   // Diversión
   F('dice', 'Dado', 'diversion', { h: 0.5, rots: [0], interact: 'dice', states: 7 }),

@@ -1,22 +1,28 @@
 // Hotel (agente D): la vista de llegada ("Hotel view") con el elevador.
 // Guarda el aviso/promo que el staff edita (título, texto y botón que lleva a una sala) en settings.
 import { getSetting, setSetting } from './db.js';
+import { officialKey } from '../shared/hotelOfficialRooms.js';
 
 const KEY = 'hotel_promo';
 const CTRL = new RegExp(`[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`, 'g');
 const clean = (s, n) => String(s ?? '').replace(CTRL, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+const OLD_TITLE = '¡Bienvenido al Hotel GTA' + 'HUB!'; // el título de fábrica de antes (si alguien lo guardó tal cual)
 export const DEFAULT_PROMO = {
-  title: '¡Bienvenido al Hotel GTAHUB!',
-  text: 'Sube por el elevador a las salas oficiales, decora tu propia sala y conoce a la comunidad.',
-  button: 'Ir a la Sala de juegos',
-  roomKey: 'juegos',
+  title: '¡Bienvenido a MeDed Friends!',
+  text: 'Platica en Charla General, sube por el elevador a Roleplay, League of Legends y las demás salas, o decora la tuya.',
+  button: 'Ir a League of Legends',
+  roomKey: 'lol',
   roomId: null,
 };
 
 export function getPromo() {
   let v = null;
   try { v = JSON.parse(getSetting(KEY, 'null')); } catch { v = null; }
-  return { ...DEFAULT_PROMO, ...(v || {}) };
+  const p = { ...DEFAULT_PROMO, ...(v || {}) };
+  // Avisos guardados antes del cambio de salas: la clave vieja ('juegos', 'hq'…) apunta a la sala nueva
+  if (p.roomKey) p.roomKey = officialKey(p.roomKey);
+  if (p.title === OLD_TITLE) p.title = DEFAULT_PROMO.title;
+  return p;
 }
 
 export function cleanPromo(b = {}) {

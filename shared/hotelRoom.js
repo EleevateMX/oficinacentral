@@ -89,8 +89,9 @@ const DEST = new Set(['floor', 'walk', 'sit', 'lay', 'teleport']);
 export const isDestKind = (k) => DEST.has(k);
 
 // A* con 8 direcciones, sin cortar esquinas. occupied: Set de "x,y" donde no se puede terminar.
+// blocked: Set de "x,y" por donde no se puede pasar (otras personas); no cuenta para las esquinas.
 // Devuelve [[x, y, z], …] sin incluir la casilla de salida, o null si no hay camino.
-export function findPath(room, from, to, { occupied = new Set(), maxNodes = 6000 } = {}) {
+export function findPath(room, from, to, { occupied = new Set(), blocked = null, maxNodes = 6000 } = {}) {
   const { W, H } = room;
   const dest = tileInfo(room, to.x, to.y);
   if (!dest || !DEST.has(dest.kind)) return null;
@@ -114,8 +115,9 @@ export function findPath(room, from, to, { occupied = new Set(), maxNodes = 6000
   push({ x: from.x, y: from.y, f: h(from.x, from.y) });
   const closed = new Set();
   let n = 0;
-  const passInfo = (x, y) => {
+  const passInfo = (x, y, people = true) => {
     if (x < 0 || y < 0 || x >= W || y >= H) return null;
+    if (people && blocked?.has(`${x},${y}`)) return null;
     const t = tileInfo(room, x, y);
     if (!t) return null;
     if (x === to.x && y === to.y) return DEST.has(t.kind) ? t : null;
@@ -140,7 +142,7 @@ export function findPath(room, from, to, { occupied = new Set(), maxNodes = 6000
       if (!t || Math.abs(t.z - cz) > MAX_STEP) continue;
       if (dx && dy) {
         // Diagonal: las dos casillas de al lado tienen que estar libres (no se corta esquina)
-        const a = passInfo(cur.x + dx, cur.y), b = passInfo(cur.x, cur.y + dy);
+        const a = passInfo(cur.x + dx, cur.y, false), b = passInfo(cur.x, cur.y + dy, false);
         const okA = a && PASS.has(a.kind), okB = b && PASS.has(b.kind);
         if (!okA || !okB) continue;
       }

@@ -341,7 +341,9 @@ function neon_hex(s, { c, st }) {
     const p = hexPts(x, y, r);
     if (on) glow(ctx, x, y, 40, c, 0.28);
     hexPath(ctx, x, y, r);
-    ctx.moveTo(x, y); ctx.lineTo(p[5][0], p[5][1]); ctx.moveTo(x, y); ctx.lineTo(p[1][0], p[1][1]); ctx.moveTo(x, y); ctx.lineTo(p[3][0], p[3][1]);
+    // hexágono interior (adorno abstracto)
+    hexPts(x, y, r * 0.5).forEach(([a, b], i) => (i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)));
+    ctx.closePath();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     neonStroke(ctx, c, on, 2.2);
     // soportes
@@ -510,8 +512,8 @@ function arcade(s, { c, st, t }) {
       front: (x, w, h) => {
         fr(x, 1.5, 1.5, w - 3, h - 3, on ? '#2a0f1f' : '#1a1a1f');
         if (on) glow(x, w / 2, h / 2, w * 0.6, c === PINK ? YELLOW : PINK, 0.45);
-        const hh = Math.min(h * 0.5, 5), ww = wordWidth('GTAHUB', hh);
-        drawWord(x, 'GTAHUB', (w - ww) / 2, (h - hh) / 2, hh, on ? '#ffffff' : '#666', 1);
+        const hh = Math.min(h * 0.5, 5), ww = wordWidth('ARCADE', hh);
+        drawWord(x, 'ARCADE', (w - ww) / 2, (h - hh) / 2, hh, on ? '#ffffff' : '#666', 1);
       },
     },
   });
@@ -712,7 +714,7 @@ function floor_tile(s, { c }) {
   });
 }
 
-// ---------- GTAHUB ----------
+// ---------- HUB (ids gtahub_* por compatibilidad) ----------
 function gtahub_rug(s) {
   s.box(0.05, 0.05, 0, 2.95, 2.95, 0.03, '#17161b', {
     outline: '#0a0a0c',
@@ -720,15 +722,17 @@ function gtahub_rug(s) {
       top: (x, w, h) => {
         fr(x, 3, 3, w - 6, h - 6, PINK); fr(x, 7, 7, w - 14, h - 14, '#17161b');
         x.strokeStyle = YELLOW; x.lineWidth = 1; x.strokeRect(10, 10, w - 20, h - 20);
-        for (const [a, b] of [[14, 14], [w - 14, 14], [14, h - 14], [w - 14, h - 14]]) hexLogo(x, a, b, 3, { inner: false, right: PINK, left: PINK, top: YELLOW });
+        for (const [a, b] of [[14, 14], [w - 14, 14], [14, h - 14], [w - 14, h - 14]]) { dotc(x, a, b, 2.4, YELLOW); dotc(x, a, b, 1, PINK); }
         // patrón de hexágonos tenue
         x.strokeStyle = rgba('#ffffff', 0.05); x.lineWidth = 0.8;
         for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) { hexPath(x, 16 + i * 11 + (j % 2) * 5.5, 16 + j * 9.5, 5); x.stroke(); }
-        const cx = w / 2, cy = h * 0.44;
-        hexLogo(x, cx, cy, w * 0.2, { ring: '#ffffff', outline: '#0b0b0d' });
-        const hh = 8, ww = wordWidth('GTAHUB', hh);
-        drawWord(x, 'GTAHUB', cx - ww / 2 + 0.6, h * 0.73 + 0.6, hh, '#000', 2.2);
-        drawWord(x, 'GTAHUB', cx - ww / 2, h * 0.73, hh, '#ffffff', 2);
+        // Palabra HUB al centro dentro de un rombo de neón (sin logo)
+        const cx = w / 2, cy = h / 2;
+        x.strokeStyle = rgba(PINK, 0.9); x.lineWidth = 1.6;
+        x.beginPath(); x.moveTo(cx, cy - h * 0.3); x.lineTo(cx + w * 0.3, cy); x.lineTo(cx, cy + h * 0.3); x.lineTo(cx - w * 0.3, cy); x.closePath(); x.stroke();
+        const hh = 12, ww = wordWidth('HUB', hh);
+        drawWord(x, 'HUB', cx - ww / 2 + 0.7, cy - hh / 2 + 0.7, hh, '#000', 3);
+        drawWord(x, 'HUB', cx - ww / 2, cy - hh / 2, hh, '#ffffff', 2.6);
       },
     },
   });
@@ -741,8 +745,8 @@ function gtahub_statue(s) {
     const r = rng(3); x.strokeStyle = rgba('#9b968c', 0.3); x.lineWidth = 0.6;
     for (let i = 0; i < 3; i++) { x.beginPath(); x.moveTo(r() * w, 0); x.quadraticCurveTo(r() * w, h / 2, r() * w, h); x.stroke(); }
     fr(x, 3, h * 0.36, w - 6, 9, gold); fr(x, 3.8, h * 0.36 + 0.8, w - 7.6, 7.4, '#e0b400');
-    const hh = Math.min(4.4, ((w - 9) * 6) / 31), ww = wordWidth('GTAHUB', hh);
-    drawWord(x, 'GTAHUB', (w - ww) / 2, h * 0.36 + 4.5 - hh / 2, hh, '#3b2a00', 0.8);
+    const hh = Math.min(4.4, ((w - 9) * 6) / 31), ww = wordWidth('HUB', hh);
+    drawWord(x, 'HUB', (w - ww) / 2, h * 0.36 + 4.5 - hh / 2, hh, '#3b2a00', 0.8);
     sheen(x, w, h, 0.12);
   };
   s.box(0.18, 0.18, 0.12, 0.82, 0.82, 0.86, marble, { decal: { front: plaque, right: (x, w, h) => { const r = rng(5); x.strokeStyle = rgba('#9b968c', 0.3); x.lineWidth = 0.6; for (let i = 0; i < 3; i++) { x.beginPath(); x.moveTo(r() * w, 0); x.quadraticCurveTo(r() * w, h / 2, r() * w, h); x.stroke(); } } } });
@@ -756,7 +760,16 @@ function gtahub_statue(s) {
     ctx.strokeStyle = rgba('#ffffff', 0.6); ctx.lineWidth = 0.8; ctx.stroke();
     glow(ctx, x, y, 30, PINK, 0.2);
   });
-  s.box(0.29, 0.29, 1.45, 0.71, 0.71, 1.87, PINK, { flat: true, outline: '#3a0a1c', faces: { top: YELLOW, front: PINK, right: '#b8195a', left: PINK, back: '#b8195a' }, decal: { top: (x, w, h) => sheen(x, w, h, 0.25), front: (x, w, h) => sheen(x, w, h, 0.18) } });
+  // Esfera de cristal rosa flotando dentro del aro
+  s.custom([0.3, 0.3, 1.45, 0.7, 0.7, 1.87], (ctx) => {
+    const [x, y] = s.P(0.5, 0.5, 1.66), r = 9;
+    const g = ctx.createRadialGradient(x - 3, y - 3.5, 1, x, y, r);
+    g.addColorStop(0, '#ffe3ee'); g.addColorStop(0.35, '#ff7aa6'); g.addColorStop(1, '#a3164f');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#3a0a1c'; ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.strokeStyle = rgba(YELLOW, 0.8); ctx.lineWidth = 0.8; ctx.beginPath(); ctx.ellipse(x, y, r * 1.2, r * 0.35, -0.35, 0, TAU); ctx.stroke();
+    dotc(ctx, x - 3.2, y - 3.6, 1.6, rgba('#ffffff', 0.85));
+  });
   s.over((ctx) => { const [x, y] = s.P(0.5, 0.5, 2.05); star(ctx, x + 14, y - 6, 3.5, '#ffffff', 0.9); star(ctx, x - 16, y + 12, 2.5, '#ffffff', 0.7); });
 }
 
