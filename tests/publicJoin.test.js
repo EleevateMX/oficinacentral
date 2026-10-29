@@ -80,6 +80,7 @@ test('encendido: Discord crea un miembro y la segunda vez entra a la misma cuent
   assert.equal((await withSid(again.sid).get('/auth/me')).data.user.id, me.id);
   // Un solo HUB por Discord
   const d = new DatabaseSync(path.join(srv.dataDir, 'office.db'));
+  d.exec('PRAGMA busy_timeout = 5000'); // el servidor puede estar escribiendo (auditoría) al mismo tiempo
   assert.equal(d.prepare('SELECT COUNT(*) AS n FROM users WHERE discord_id = ?').get(p.id).n, 1);
   assert.throws(() => d.prepare('UPDATE users SET discord_id = ? WHERE id = 1').run(p.id), /UNIQUE/);
   // Registro de auditoría con su origen
