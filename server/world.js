@@ -88,7 +88,7 @@ export function furnishDesks(floorId, { walls = true } = {}) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Oficina', 'recreativo'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1', 'migr_recreativo_v1']) setSetting(k, '1'); return; }
+  if (!rows.length) { createFloor('Oficina', 'recreativo'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1', 'migr_recreativo_v1', 'migr_recreativo_temas_v1']) setSetting(k, '1'); migrateHubName(); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
@@ -130,6 +130,46 @@ export function loadWorld() {
   // Una vez: el mapa nuevo (recreativo) pasa a ser la oficina principal y el HQ se archiva (solo admins)
   if (!getSetting('migr_recreativo_v1')) migrateRecreativo();
   for (const r of db.prepare('SELECT id FROM floors ORDER BY sort, id').all()) rebuild(r.id);
+  // Una vez: la oficina recreativa pasa a las salas temáticas (Charla General, Roleplay, League of Legends…)
+  if (!getSetting('migr_recreativo_temas_v1')) migrateRecreativoTemas();
+  migrateHubName();
+}
+
+// Nombres viejos de las áreas de la oficina recreativa → salas temáticas. Se renombran antes de
+// renovar el mapa para que conserven líderes, reservaciones y eventos.
+export const RECREATIVO_RENAMES = {
+  'Cafetería': 'Café', 'Jardín y terraza': 'Jardín', Biblioteca: 'Estudio / Tareas', 'Sala de juntas': 'League of Legends',
+  'Zona zen': 'Minecraft', Auditorio: 'Torneos', 'Sala de juegos': 'Juegos', Lounge: 'Charla General',
+  'Sala creativa': 'Arte y Diseño', 'Sala de ideas': 'Roleplay', 'Sala 1:1': 'Sala VIP 1:1', 'Estudio de stream': 'Stream',
+  Cine: 'Cine y Anime', 'Karaoke y música': 'Música y Karaoke',
+};
+
+// Renueva con la plantilla nueva las oficinas recreativas visibles (no toca los pisos archivados).
+// Los escritorios reclamados se quedan en el mismo lugar si ahí sigue habiendo uno.
+export function migrateRecreativoTemas() {
+  const rows = db.prepare("SELECT id FROM floors WHERE template = 'recreativo' AND admin_only = 0 ORDER BY sort, id").all();
+  const ren = db.prepare('UPDATE areas SET name = ? WHERE id = ?');
+  for (const r of rows) {
+    const areas = db.prepare('SELECT id, name FROM areas WHERE floor_id = ?').all(r.id);
+    const names = new Set(areas.map((a) => a.name));
+    tx(() => {
+      for (const a of areas) {
+        const to = RECREATIVO_RENAMES[a.name];
+        if (to && !names.has(to)) { ren.run(to, a.id); names.add(to); }
+      }
+    });
+    rebuild(r.id);
+    resetFloorLayout(r.id);
+  }
+  setSetting('migr_recreativo_temas_v1', '1');
+}
+
+// El nombre de la oficina pasa del nombre viejo de la comunidad (gtahub) a "HUB" (solo si se llamaba exactamente así; se puede cambiar en Preferencias)
+export function migrateHubName() {
+  if (getSetting('migr_hub_name_v1')) return;
+  const cur = getSetting('office_name') || process.env.OFFICE_NAME || '';
+  if (/^\s*gtahub\s*$/i.test(cur)) setSetting('office_name', 'HUB');
+  setSetting('migr_hub_name_v1', '1');
 }
 
 // Crea la "Oficina" con la plantilla recreativa como primer piso y deja los pisos HQ
@@ -205,7 +245,7 @@ export function resetFloorLayout(floorId) {
     if (!owner) continue;
     const chair = f.state.objects.find((o) => CHAIR_TYPES.includes(o.type) && o.deskId == null && inside(o, d.zone));
     saved.push({
-      owner,
+      owner, x: d.object.x, y: d.object.y,
       area: areaAt(f.state, d.object.x, d.object.y)?.name || null,
       type: d.object.type, color: d.object.color,
       chair: chair ? { type: chair.type, color: chair.color } : null,
@@ -238,13 +278,17 @@ export function resetFloorLayout(floorId) {
     // Escritorios reclamados: al mismo departamento si se puede
     const free = new Set(g.state.desks.map((d) => d.id));
     const areaOf = (d) => areaAt(g.state, d.object.x, d.object.y)?.name || null;
-    const pick = (area) => {
+    const pick = (area, x, y) => {
+      const spot = g.state.desks.find((d) => free.has(d.id) && d.object.x === x && d.object.y === y && areaOf(d) === area);
       const same = g.state.desks.find((d) => free.has(d.id) && area && areaOf(d) === area);
-      return same || g.state.desks.find((d) => free.has(d.id));
+      return spot || same || g.state.desks.find((d) => free.has(d.id));
     };
     const claim = db.prepare('INSERT INTO desk_claims (desk_id, owner_id, claimed_at) VALUES (?, ?, ?)');
+    // Primero los que conservan su lugar exacto, luego los demás
+    const exact = (s0) => g.state.desks.some((d) => d.object.x === s0.x && d.object.y === s0.y && areaOf(d) === s0.area);
+    saved.sort((a, b) => exact(b) - exact(a));
     for (const s0 of saved) {
-      const d = pick(s0.area);
+      const d = pick(s0.area, s0.x, s0.y);
       if (!d) continue;
       free.delete(d.id);
       claim.run(d.id, s0.owner, now());

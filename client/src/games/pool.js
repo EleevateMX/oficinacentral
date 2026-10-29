@@ -862,7 +862,7 @@ function buildTable() {
   t.font = '900 64px system-ui, sans-serif';
   t.textAlign = 'center'; t.textBaseline = 'middle';
   t.fillStyle = 'rgba(255,255,255,.045)';
-  t.fillText('GTAHUB', MX, MY);
+  t.fillText('HUB', MX, MY);
   // Marcas: línea de cabecera y puntos
   t.strokeStyle = 'rgba(255,255,255,.13)'; t.lineWidth = 1;
   t.beginPath(); t.moveTo(HEAD_X, T + 2); t.lineTo(HEAD_X, B - 2); t.stroke();

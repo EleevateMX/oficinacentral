@@ -8,7 +8,7 @@ import { videoFor, activeScreens } from '../lib/screens.js';
 import { daylight, GLOWS, setMusic, footstep, MUSIC_AREAS } from '../lib/ambience.js';
 import { CATALOG, COLORS, objSize, seatAt } from '@shared/catalog.js';
 import { seatPose, STAND_EMOTES } from '../lib/seating.js';
-import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
+import { drawFloorLayer, drawObject, sortObjects, drawAvatar, setRenderBrand, setRenderAreas, preloadBrandLogo, drawPartyHat, setAnimTime } from '../lib/render.js';
 import { todayMD } from '../lib/birthdays.js';
 import { emotePose, drawEmoteFx } from '../lib/emoteFx.js';
 import { buildSeason, seasonObjects, interactSeason, drawSeasonGround, drawSeasonDecor, drawSeasonWalkers, drawSeasonSky, drawSeasonScreen } from '../lib/seasonal.js';
@@ -167,6 +167,7 @@ export default function MapView({ active }) {
   useEffect(() => {
     if (!floor) return;
     setRenderBrand(mapBrand(config));
+    setRenderAreas(floor.areas); // letreros con el nombre de la sala
     const layer = () => {
       const c = document.createElement('canvas');
       c.width = floor.W * T;
@@ -183,7 +184,7 @@ export default function MapView({ active }) {
     const live = { under: [], top: [] };
     for (const o of sortObjects(floor.objects)) {
       const cat = CATALOG[o.type];
-      const isLive = cat?.animated || cat?.brand || CRISP.has(o.type);
+      const isLive = cat?.animated || cat?.brand || cat?.crisp || CRISP.has(o.type);
       if (isLive) live[cat.under ? 'under' : 'top'].push(o);
       else drawObject(cat?.under ? base.ctx : top.ctx, o);
     }

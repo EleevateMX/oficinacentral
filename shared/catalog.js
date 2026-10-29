@@ -155,12 +155,12 @@ export const CATALOG = {
   boba: d('Té de burbujas', 'comida', 0.25, 0.5, { colorable: true, color: '#c8a27c' }),
   tacos: d('Tacos', 'comida', 0.75, 0.5),
   cake: d('Pastel', 'comida', 0.5, 0.5, { colorable: true, color: '#f8a5c2' }),
-  // GTAHUB
+  // Marca (hexágonos)
   hexLamp: d('Lámpara hexagonal', 'gtahub', 0.75, 0.75, { colorable: true, color: '#FE3377' }),
   hexBadge: d('Insignia hexagonal', 'gtahub', 0.5, 0.5, { colorable: true, color: '#FFCC00' }),
   cubeLogo: d('Cubo isométrico', 'gtahub', 0.5, 0.5, { colorable: true, color: '#FE3377' }),
   hexNeon: d('Neón hexagonal', 'gtahub', 1, 0.75, { colorable: true, color: '#FE3377' }),
-  // Marca: sin color elegido toman los colores del tema de la oficina (GTAHUB, Nuvora o propio)
+  // Marca: sin color elegido toman los colores del tema de la oficina (HUB, Nuvora o propio)
   bunting: d('Banderines', 'gtahub', 4, 0.75, { colorable: true, brand: true }),
   wallBanner: d('Estandarte', 'gtahub', 1, 1.5, { colorable: true, brand: true }),
   neonLogo: d('Neón con el nombre', 'gtahub', 3, 0.75, { colorable: true, brand: true }),
@@ -169,14 +169,25 @@ export const CATALOG = {
   fairyLights: d('Luces colgantes', 'gtahub', 4, 0.5, { colorable: true, brand: true }),
   balloons: d('Globos', 'gtahub', 1, 1.5, { colorable: true, brand: true }),
   deskFlag: d('Banderita de escritorio', 'gtahub', 0.5, 0.75, { colorable: true, brand: true }),
-  // GTAHUB premium (animated: se dibujan en cada cuadro, son pocos y baratos)
+  // Marca premium (animated: se dibujan en cada cuadro, son pocos y baratos)
   wavingFlag: f('Bandera que ondea', 'gtahub', 1, 1, { colorable: true, brand: true, animated: true }),
-  rollupBanner: f('Roll-up GTAHUB', 'gtahub', 1, 1, { colorable: true, brand: true }),
+  rollupBanner: f('Roll-up HUB', 'gtahub', 1, 1, { colorable: true, brand: true }),
   brandWall: d('Muro de logo iluminado', 'gtahub', 4, 1, { colorable: true, brand: true }),
   logoTotem: f('Tótem con logo', 'gtahub', 1, 1, { colorable: true, brand: true, animated: true }),
   photocall: f('Photocall', 'gtahub', 4, 1, { colorable: true, brand: true }),
   brandRug: d('Tapete con logo', 'gtahub', 3, 3, { colorable: true, brand: true, under: true }),
   trophyCase: f('Vitrina de trofeos', 'gtahub', 2, 1, { colorable: true, brand: true }),
+  // Marca genérica, sin logo (crisp: se pinta nítido en cada cuadro porque lleva texto)
+  neonHub: d('Neón HUB', 'gtahub', 3, 0.75, { colorable: true, brand: true }),
+  ringRug: d('Tapete de anillos', 'gtahub', 3, 3, { colorable: true, brand: true, under: true }),
+  // Salas temáticas de la comunidad (sin logos de juegos: solo arte genérico y texto)
+  roomSign: d('Letrero con el nombre de la sala', 'deco', 4, 0.75, { colorable: true, brand: true }),
+  neonGG: d('Neón GG', 'stream', 1.5, 0.75, { colorable: true, color: '#3DDC84', crisp: true }),
+  gamePoster: d('Póster gamer', 'stream', 1, 1.25, { colorable: true, color: '#3a86ff' }),
+  controllerRug: d('Tapete de control', 'stream', 3, 2, { colorable: true, color: '#8B7BFF', under: true }),
+  voxelBlock: f('Bloque de pixeles', 'deco', 1, 1, { colorable: true, color: '#5aa83c' }),
+  barrel: f('Barril', 'deco', 1, 1),
+  fireplace: f('Chimenea', 'muebles', 2, 1, { animated: true }),
   // Piso (alrededor de tu lugar)
   floorPlant: d('Planta grande', 'piso', 1, 1),
   floorLamp: d('Lámpara de pie', 'piso', 0.5, 1, { colorable: true, color: '#f4a261' }),

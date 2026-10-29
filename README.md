@@ -6,7 +6,7 @@ por audio/video, tiene su escritorio decorable, chat, calendario y actividad. **
 ## Marca
 
 El producto es **Nuvora** (identidad del Manual de marca v2: paleta profundo, verde, mandarina, uva y crema; Albert Sans y Public Sans; Nuvi como anfitriona).
-Cada oficina elige su tema en **Preferencias → Marca de la oficina**: *Nuvora*, *GTAHUB* (azul índigo y login oscuro) o *Personalizado* (color y logo propios).
+Cada oficina elige su tema en **Preferencias → Marca de la oficina**: *Nuvora*, *HUB* (tema `gtahub`: login oscuro) o *Personalizado* (color y logo propios).
 La firma “by nuvora” se mantiene en el inicio de sesión.
 
 ## Qué incluye
@@ -126,15 +126,19 @@ client/src/      interfaz (React + Vite)
 
 - Avatares chibi en pixel-art armados **por piezas**: 13 peinados, 5 ojos, 4 bocas, vello facial, 11 prendas, pantalón/short/falda,
   gorra o sombrero, lentes, audífonos y extras. **Cualquier color** en cada pieza (más de 15 millones de combinaciones de piezas).
-- Paquetes de inicio: 12 personajes de **Oficina** y 12 de **GTAHUB**, más los PNG que suban los admins (Preferencias → Personajes).
+- Paquetes de inicio: 12 personajes de **Oficina** y 12 de **HUB**, más los PNG que suban los admins (Preferencias → Personajes).
 - Hojas de 96×192 (3 cuadros × 4 direcciones, 32×48 cada uno); `node tools/characters/generate.mjs` exporta galerías y hojas a `docs/personajes/`.
   Para agregar un prediseñado, añade su ficha a `PRESETS` en `shared/sprite.js`.
-- **Decorador**: más de 70 objetos de escritorio y de piso (tecnología, gamer y stream, mascotas, comida, plantas, GTAHUB…).
+- **Decorador**: más de 70 objetos de escritorio y de piso (tecnología, gamer y stream, mascotas, comida, plantas, marca HUB, salas gamer…).
   En **Mi lugar** cada quien elige el modelo y color de su escritorio y su silla. Límite de 30 objetos por escritorio.
 
 ## Mapa y departamentos
 
-- Plantilla **Oficina HQ** (predeterminada en instalaciones nuevas, y disponible al crear un piso): sala de reuniones, jardín con
+- Plantilla **Oficina recreativa** (predeterminada en instalaciones nuevas): salas temáticas de la comunidad con letreros
+  que dicen su nombre: **Charla General**, **Roleplay** (taberna), **League of Legends**, **Valorant**, **Minecraft**, Juegos,
+  Torneos (escenario), Música y Karaoke, Cine y Anime, Stream, Arte y Diseño, Estudio / Tareas, Sala VIP 1:1, Café, Jardín,
+  Coworking (escritorios para reclamar), cabinas privadas y Recepción con el elevador al Hotel.
+- Plantilla **Oficina HQ** (archivada para admins, y disponible al crear un piso): sala de reuniones, jardín con
   estanque, salas de staff, cocina, Dirección, Mapping / Design, Engineering, Marketing, tres salas chicas de cristal,
   Staff / Orgs, lounge, Dev Oeste/Este, sala de reuniones sur, recepción con entrada, zona de descanso y sala de juegos (65 escritorios).
 - Esquinas recortadas, paredes de cristal, sombras de muros y formas curvas (estanques, plazas y jardines) para que no se vea cuadrado.
@@ -144,7 +148,7 @@ client/src/      interfaz (React + Vite)
   para que quienes tienen escritorio ahí añadan decoración (cada quien mueve solo lo suyo). Nadie toca el escritorio de otra persona.
   Límite de 150 objetos por departamento.
 - **Marca en el salón**: banderines, estandartes, neón con el nombre de la oficina, logo en el piso, pósters, luces, globos,
-  banderitas de escritorio y astas con bandera. Si no se les elige color toman los del tema (rosa, amarillo y negro en GTAHUB;
+  banderitas de escritorio y astas con bandera. Si no se les elige color toman los del tema (rosa, amarillo y negro en HUB;
   verde y mandarina en Nuvora) y los muros llevan una franja del color de la marca.
 
 ## Trabajo diario en la oficina

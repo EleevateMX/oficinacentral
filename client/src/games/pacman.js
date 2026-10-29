@@ -642,7 +642,7 @@ export function create(canvas, ctx) {
         g.shadowColor = PINK; g.shadowBlur = 14;
         text('COME-PUNTOS', W / 2, cy - 34, 34, YEL);
         g.shadowBlur = 0;
-        text('GTAHUB ARCADE', W / 2, cy - 6, 12, PINK, 'center', 700);
+        text('HUB ARCADE', W / 2, cy - 6, 12, PINK, 'center', 700);
         drawPlayer((W / 2 - 60 - TS / 2) / TS, (cy + 30 - TOP - TS / 2) / TS, 3, 0.1 + 0.6 * Math.abs(Math.sin(t * 6)), 1.4);
         GHOSTS.forEach((_, i) => drawGhost(i, { x: (W / 2 - 22 + i * 26 - TS / 2) / TS, y: (cy + 30 - TOP - TS / 2) / TS, dir: 1, st: 'out', fr: false }, t));
         if (!watcher) text(Math.floor(t * 2) % 2 ? 'Espacio, una flecha o toca para empezar' : '', W / 2, cy + 74, 13, '#fff', 'center', 600);

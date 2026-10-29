@@ -228,7 +228,7 @@ export default function SecretSanta() {
             ) : st.canJoin ? (
               <>
                 <div className="santa-sub">🎄 ¿Te apuntas? Escribe tu lista de deseos</div>
-                <textarea rows={4} value={wish} maxLength={2000} onChange={(e) => setWish(e.target.value)} placeholder="Ej. una sudadera de GTAHUB, stickers, un libro… (puedes pegar enlaces)" />
+                <textarea rows={4} value={wish} maxLength={2000} onChange={(e) => setWish(e.target.value)} placeholder="Ej. una sudadera de HUB, stickers, un libro… (puedes pegar enlaces)" />
                 <button className="btn primary big-santa" onClick={() => act(() => api.post('/santa/join', { wishlist: wish }), '🎁 ¡Ya estás en el Amigo secreto!').then((ok) => ok && confetti({ count: 70, duration: 2200 }))}><Gift size={16} /> Participar</button>
               </>
             ) : <div className="muted">La inscripción ya cerró. ¡Suerte para el próximo! 🎄</div>}

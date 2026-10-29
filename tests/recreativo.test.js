@@ -51,9 +51,9 @@ describe('plantilla recreativa', () => {
     const names = areas.map((a) => a.name);
     for (const bad of [/staff/i, /orgs/i, /^admin/i, /engineering/i, /gameplay/i, /liveops/i, /testing/i, /mapping/i, /design/i, /marketing/i, /direcci/i])
       assert.ok(!names.some((n) => bad.test(n)), `no debe haber un área como ${bad}`);
-    for (const want of ['Recepción', 'Coworking', 'Zona de enfoque', 'Sala de juntas', 'Cafetería', 'Lounge', 'Sala de juegos', 'Auditorio', 'Jardín y terraza'])
+    for (const want of ['Recepción', 'Coworking', 'Zona de enfoque', 'Café', 'Charla General', 'Juegos', 'Torneos', 'Jardín'])
       assert.ok(names.includes(want), `falta el área ${want}`);
-    assert.ok(areas.filter((a) => a.private && /^Sala /.test(a.name) && a.name !== 'Sala de juntas').length >= 2, 'hay salas privadas para reuniones');
+    assert.ok(areas.filter((a) => a.private && !/^Cabina/.test(a.name)).length >= 4, 'hay salas privadas');
     assert.ok(areas.filter((a) => a.private && /^Cabina/.test(a.name)).length >= 2, 'hay cabinas telefónicas privadas');
   });
 
@@ -69,19 +69,23 @@ describe('plantilla recreativa', () => {
     const has = (type) => objects.filter((o) => o.type === type);
     assert.equal(has('reception').length, 1);
     assert.equal(has('hotelElevator').length, 1);
-    assert.ok(has('wavingFlag').length && has('neonLogo').length && has('floorLogo').length, 'piezas de la marca');
+    // Marca discreta: sin logos grandes, solo el neón HUB de la recepción
+    for (const type of ['wavingFlag', 'neonLogo', 'floorLogo', 'cubeLogo', 'poster', 'wallBanner', 'brandWall', 'logoTotem', 'photocall', 'brandRug', 'rollupBanner', 'flagPole'])
+      assert.equal(has(type).length, 0, `sin ${type}`);
+    assert.equal(has('neonHub').length, 1);
+    assert.equal(areaAt(f, has('neonHub')[0].x, has('neonHub')[0].y + 1).name, 'Recepción');
     // Rocola: se oye en el lounge
     const jb = has('jukebox')[0];
     assert.ok(jb);
-    assert.equal(areaAt(f, jb.x, jb.y).name, 'Lounge');
+    assert.equal(areaAt(f, jb.x, jb.y).name, 'Charla General');
     assert.equal(jukeboxAt(f, 70, 43)?.id, jb.id);
     assert.equal(jukeboxAt(f, 42, 53), null);
     // Escenario del auditorio: lo oye toda el área
-    const st = floorStages(f).find((s) => s.obj.type === 'stage' && s.area?.name === 'Auditorio');
-    assert.ok(st, 'el auditorio tiene escenario');
+    const st = floorStages(f).find((s) => s.obj.type === 'stage' && s.area?.name === 'Torneos');
+    assert.ok(st, 'Torneos tiene escenario');
     assert.ok(inStageScope(f, st, 40, 41));
     assert.equal(inStageScope(f, st, 42, 53), false);
-    assert.ok(has('stageMic').some((o) => areaAt(f, o.x, o.y)?.name === 'Auditorio'));
+    assert.ok(has('stageMic').some((o) => areaAt(f, o.x, o.y)?.name === 'Torneos'));
     // Mesas de juego reales con lugar alrededor para jugar y mirar
     for (const type of ['pingPong', 'poolTable', 'foosball', 'arcade']) {
       const list = has(type);

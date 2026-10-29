@@ -595,8 +595,8 @@ D.boba = (ctx, x, y, w, h, o, c) => { R(ctx, o.color || c.color, x + 1, y + 4, w
 D.tacos = (ctx, x, y, w, h) => { for (let k = 0; k < 3; k++) { ctx.fillStyle = '#f2c94c'; ctx.beginPath(); ctx.arc(x + 5 + k * 7, y + 12, 5, Math.PI, 0); ctx.fill(); R(ctx, '#3f9447', x + 1 + k * 7, y + 9, 8, 2); R(ctx, '#e63946', x + 3 + k * 7, y + 8, 3, 1); } };
 D.cake = (ctx, x, y, w, h, o, c) => { R(ctx, '#7a4a2b', x + 2, y + 7, w - 4, 7); R(ctx, o.color || c.color, x + 2, y + 6, w - 4, 3); R(ctx, '#fff', x + 2, y + 6, w - 4, 1); R(ctx, '#ffd23f', x + w / 2 - 1, y + 1, 2, 5); R(ctx, '#FF8A3D', x + w / 2 - 1, y, 2, 2); };
 
-// ----- GTAHUB -----
-// Logo de la oficina como imagen (el de GTAHUB o el que suba el admin)
+// ----- Marca -----
+// Logo de la oficina como imagen (el del tema HUB o el que suba el admin)
 const logoCache = new Map();
 function brandLogo() {
   const url = BRAND.logo;
@@ -815,7 +815,7 @@ D.flagPole = (ctx, x, y, w, h, o) => {
   ctx.fillStyle = s; hexPath(ctx, x + w / 2 + 14, y - 36.5, 2); ctx.fill();
 };
 
-// ----- GTAHUB premium -----
+// ----- Marca premium -----
 // Tiempo de animación (lo pone el mapa en cada cuadro; en vistas previas queda quieto)
 let ANIM_T = 0;
 export function setAnimTime(t) { ANIM_T = t; }
@@ -870,7 +870,7 @@ D.wavingFlag = (ctx, x, y, w, h, o) => {
   if (!im) { ctx.fillStyle = '#fff'; hexPath(ctx, px + 1.5 + FW / 2, top + 2 + FH / 2 - 2 + wave(N / 2), 6); ctx.fill(); }
 };
 
-// Elevador al Hotel: marco de acero, puertas con el logo y flecha que parpadea
+// Elevador al Hotel: marco de acero, puertas lisas y flecha que parpadea
 D.hotelElevator = (ctx, x, y, w, h, o) => {
   const { p } = brandCols(o);
   const top = y - 30, H = h + 30;
@@ -890,8 +890,8 @@ D.hotelElevator = (ctx, x, y, w, h, o) => {
   ctx.fillStyle = g; ctx.fillRect(x + 4, dy, w - 8, dh);
   R(ctx, '#4a4c56', x + w / 2 - 0.5, dy, 1, dh);
   R(ctx, 'rgba(255,255,255,.35)', x + 6, dy + 2, 1, dh - 4);
-  // Logo al centro de las puertas
-  if (!drawLogo(ctx, x + w / 2, dy + dh / 2 - 2, 16)) { ctx.fillStyle = p; hexPath(ctx, x + w / 2, dy + dh / 2 - 2, 6); ctx.fill(); }
+  // Puertas lisas (sin logo): solo una franja de luz del color del tema
+  R(ctx, shade(p, 0.1), x + 6, dy + dh / 2 - 3, w - 12, 2);
   // Botón de llamar
   RR(ctx, '#2a2b33', x + w - 9, dy + dh / 2 + 6, 4, 8, 1.5);
   circle(ctx, on ? '#FFCC00' : '#8a7a2a', x + w - 7, dy + dh / 2 + 10, 1.2);
@@ -997,6 +997,200 @@ D.brandRug = (ctx, x, y, w, h, o) => {
   ctx.restore();
 };
 
+// ----- Salas temáticas y marca genérica (sin logo) -----
+// Áreas del piso que se está dibujando (para los letreros con el nombre de la sala)
+let AREAS = [];
+export function setRenderAreas(a) { AREAS = a || []; }
+function areaNameAt(tx, ty) {
+  let best = null;
+  for (const a of AREAS) if (tx >= a.x && tx < a.x + a.w && ty >= a.y && ty < a.y + a.h && (!best || a.w * a.h < best.w * best.h)) best = a;
+  return best?.name || null;
+}
+// Texto de neón: blanco con resplandor del color, ajustado al ancho
+function neonText(ctx, text, cx, cy, maxW, size, glow, { font = '"Archivo Black", "Arial Black", sans-serif', fill = '#fff', blur = 8 } = {}) {
+  ctx.save();
+  ctx.font = `${size}px ${font}`;
+  const tw = ctx.measureText(text).width;
+  if (tw > maxW) { size = Math.max(5, Math.floor(size * maxW / tw)); ctx.font = `${size}px ${font}`; }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = glow; ctx.shadowBlur = blur;
+  ctx.fillStyle = fill;
+  ctx.fillText(text, cx, cy + 1);
+  ctx.shadowBlur = 0;
+  const width = Math.min(maxW, ctx.measureText(text).width);
+  ctx.restore();
+  return width;
+}
+
+// Letrero de la sala: escribe el nombre del área que tiene abajo (o en la que está)
+D.roomSign = (ctx, x, y, w, h, o) => {
+  const { p, s } = brandCols(o);
+  const name = (areaNameAt((x + w / 2) / T, (y + h) / T + 0.6) || areaNameAt((x + w / 2) / T, (y + h / 2) / T) || 'Sala').toUpperCase();
+  RR(ctx, 'rgba(0,0,0,.25)', x + 2, y + 3, w - 2, h - 2, 4);
+  RR(ctx, '#121214', x + 1, y + 1, w - 2, h - 2, 4);
+  R(ctx, '#3a3a42', x + 4, y + 3, 2, 2); R(ctx, '#3a3a42', x + w - 6, y + 3, 2, 2);
+  const tw = neonText(ctx, name, x + w / 2, y + h / 2, w - 16, 12, p);
+  R(ctx, s, x + w / 2 - tw / 2, y + h - 4, tw, 1);
+};
+
+// Símbolo circular de la marca (disco azul marino, aro de acero y una "E" de tres barras), en pixel art
+function eMark(ctx, cx, cy, r) {
+  ctx.save();
+  circle(ctx, '#101120', cx, cy, r);
+  ctx.strokeStyle = '#5D7E9F'; ctx.lineWidth = Math.max(1, r * 0.16);
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.82, Math.PI * 0.35, Math.PI * 1.85); ctx.stroke();
+  ctx.strokeStyle = '#9CBED9'; ctx.lineWidth = Math.max(0.8, r * 0.08);
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.82, Math.PI * 0.9, Math.PI * 1.5); ctx.stroke();
+  const bw = r * 0.95, bh = Math.max(1, r * 0.2), x0 = cx - bw / 2 + r * 0.04;
+  ctx.fillStyle = '#ECE8DA';
+  for (const k of [-1, 0, 1]) ctx.fillRect(x0 + (k === 0 ? r * 0.12 : 0), cy + k * r * 0.36 - bh / 2, bw - (k === 0 ? r * 0.12 : 0), bh);
+  ctx.fillStyle = '#9CBED9'; ctx.fillRect(x0, cy - r * 0.36 - bh / 2, bh, r * 0.72 + bh);
+  ctx.restore();
+}
+
+// Neón "HUB": el símbolo circular chiquito y el nombre corto de la comunidad
+D.neonHub = (ctx, x, y, w, h, o) => {
+  const { p, s } = brandCols(o);
+  RR(ctx, 'rgba(0,0,0,.25)', x + 2, y + 3, w - 2, h - 2, 4);
+  RR(ctx, '#121214', x + 1, y + 1, w - 2, h - 2, 4);
+  eMark(ctx, x + 12, y + h / 2, 8);
+  const tw = neonText(ctx, 'HUB', x + w / 2 + 6, y + h / 2, w - 34, 14, p);
+  R(ctx, s, x + w / 2 + 6 - tw / 2, y + h - 4, tw, 1);
+};
+
+// Tapete redondo de anillos con los colores del tema (sin logo)
+D.ringRug = (ctx, x, y, w, h, o) => {
+  const { p, s, d } = brandCols(o);
+  const cx = x + w / 2, cy = y + h / 2, rx = w / 2 - 3, ry = h / 2 - 4;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.beginPath(); ctx.ellipse(cx + 2, cy + 3, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = d; ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = p; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(cx, cy, rx - 4, ry - 4, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([3, 4]); ctx.strokeStyle = s; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, cy, rx - 11, ry - 11, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = shade(p, 0.15); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.3, ry * 0.3, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+};
+
+// Neón "GG" con tubo de color
+D.neonGG = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  R(ctx, 'rgba(0,0,0,.25)', x + 3, y + 3, w - 4, h - 3);
+  RR(ctx, 'rgba(18,18,20,.85)', x + 1, y + 1, w - 2, h - 2, 3);
+  neonText(ctx, 'GG', x + w / 2, y + h / 2, w - 8, 15, col, { fill: shade(col, 0.35), blur: 10, font: 'italic "Archivo Black", "Arial Black", sans-serif' });
+};
+
+// Póster gamer: arte abstracto (control, espadas, bloque o mira), varía según dónde está
+D.gamePoster = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const v = Math.abs(Math.round(o.x * 4 + o.y * 7)) % 4;
+  R(ctx, 'rgba(0,0,0,.15)', x + 4, y + 3, w - 4, h - 3);
+  R(ctx, '#141418', x + 2, y + 1, w - 4, h - 4);
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, shade(col, 0.12)); g.addColorStop(1, shade(col, -0.4));
+  ctx.fillStyle = g; ctx.fillRect(x + 4, y + 3, w - 8, h - 13);
+  const cx = x + w / 2, cy = y + 3 + (h - 13) / 2;
+  const ink = 'rgba(255,255,255,.92)', acc = shade(col, -0.55);
+  if (v === 0) { // control
+    RR(ctx, ink, cx - 8, cy - 4, 16, 8, 4); circle(ctx, ink, cx - 7, cy + 3, 3); circle(ctx, ink, cx + 7, cy + 3, 3);
+    R(ctx, acc, cx - 7, cy - 1, 4, 1.2); R(ctx, acc, cx - 5.6, cy - 2.4, 1.2, 4);
+    circle(ctx, acc, cx + 4, cy - 1, 1); circle(ctx, acc, cx + 6.5, cy + 1, 1);
+  } else if (v === 1) { // espadas cruzadas
+    ctx.save(); ctx.strokeStyle = ink; ctx.lineCap = 'round';
+    for (const k of [-1, 1]) {
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - 7 * k, cy - 8); ctx.lineTo(cx + 5 * k, cy + 5); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx + 2 * k, cy + 6); ctx.lineTo(cx + 7 * k, cy + 1); ctx.stroke();
+    }
+    ctx.restore();
+  } else if (v === 2) { // bloque de pixeles
+    R(ctx, '#5aa83c', cx - 7, cy - 7, 14, 5); R(ctx, '#8b5a2b', cx - 7, cy - 2, 14, 9);
+    for (const [dx, dy] of [[-5, 0], [1, 2], [-2, 4], [3, -1]]) R(ctx, '#6e4521', cx + dx, cy + dy, 2, 2);
+    R(ctx, '#4a8a2f', cx - 7, cy - 2, 3, 2); R(ctx, '#4a8a2f', cx + 1, cy - 2, 2, 3);
+  } else { // mira
+    ctx.save(); ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.stroke();
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 3, cy + dy * 3); ctx.lineTo(cx + dx * 9, cy + dy * 9); ctx.stroke(); }
+    ctx.restore(); circle(ctx, ink, cx, cy, 1.2);
+  }
+  R(ctx, 'rgba(255,255,255,.8)', x + 6, y + h - 9, w - 12, 2); R(ctx, col, x + 6, y + h - 6, (w - 12) * 0.6, 1);
+};
+
+// Tapete con forma de control
+D.controllerRug = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const dk = shade(col, -0.25), lt = shade(col, 0.2);
+  const gx = w * 0.2, gy = h * 0.32;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.beginPath(); ctx.roundRect(x + 4, y + 6, w - 6, h * 0.62, h * 0.3); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(x + 2, y + 4, w - 4, h * 0.62, h * 0.3); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + gx, y + h - gy, gx * 0.85, gy * 0.95, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + w - gx, y + h - gy, gx * 0.85, gy * 0.95, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = dk; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.roundRect(x + 6, y + 8, w - 12, h * 0.62 - 8, h * 0.24); ctx.stroke(); ctx.setLineDash([]);
+  const py = y + 4 + h * 0.3, s = Math.min(w, h) * 0.09;
+  R(ctx, lt, x + gx - s * 1.5, py - s / 2, s * 3, s); R(ctx, lt, x + gx - s / 2, py - s * 1.5, s, s * 3);
+  for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) circle(ctx, lt, x + w - gx + dx * s * 1.3, py + dy * s * 1.3, s * 0.6);
+  R(ctx, dk, x + w / 2 - s * 1.6, py - s * 0.3, s * 1.2, s * 0.6); R(ctx, dk, x + w / 2 + s * 0.4, py - s * 0.3, s * 1.2, s * 0.6);
+  ctx.restore();
+};
+
+// Bloque de pixeles: cara de arriba del color elegido (pasto) y lados de tierra
+D.voxelBlock = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const n = parseInt(col.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const grassy = g > r + 20 && g > b;
+  const side = grassy ? '#8b5a2b' : shade(col, -0.18);
+  const px = 4, bx = x + 2, bw = w - 4, top = y - 8, fh = h - 2;
+  R(ctx, 'rgba(0,0,0,.2)', bx + 2, y + h - 3, bw, 4);
+  R(ctx, shade(col, 0.12), bx, top, bw, 8); // cara de arriba
+  R(ctx, side, bx, top + 8, bw, fh);
+  if (grassy) { R(ctx, col, bx, top + 8, bw, 4); for (let k = 0; k < bw; k += px * 2) R(ctx, col, bx + k, top + 12, px, px); }
+  // pixeles sueltos (deterministas)
+  for (let k = 0; k < 7; k++) {
+    const hx = (Math.sin((o.x + 1) * 12.9898 + k * 78.233) * 43758.5453) % 1;
+    const hy = (Math.sin((o.y + 3) * 39.3468 + k * 11.135) * 24634.6345) % 1;
+    R(ctx, shade(side, k % 2 ? -0.12 : 0.1), bx + Math.floor(Math.abs(hx) * (bw / px)) * px, top + 14 + Math.floor(Math.abs(hy) * ((fh - 8) / px)) * px, px, px);
+  }
+  for (let k = 0; k < 3; k++) R(ctx, shade(col, k % 2 ? -0.08 : 0.2), bx + 4 + k * 8, top + 2 + (k % 2) * 3, px, 2);
+  R(ctx, 'rgba(0,0,0,.25)', bx + bw - 3, top + 8, 3, fh);
+};
+
+// Barril de taberna
+D.barrel = (ctx, x, y, w, h) => {
+  const cx = x + w / 2, bw = w - 8, top = y - 8, bh = h + 4;
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(cx + 2, y + h - 3, bw / 2 + 1, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  const g = ctx.createLinearGradient(cx - bw / 2, 0, cx + bw / 2, 0);
+  g.addColorStop(0, '#6e4521'); g.addColorStop(0.45, '#a8733f'); g.addColorStop(1, '#5a3819');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(cx - bw / 2, top + 3, bw, bh, 5); ctx.fill();
+  for (const yy of [top + 8, top + bh - 4]) R(ctx, '#3b3b42', cx - bw / 2, yy, bw, 2);
+  for (const dx of [-5, 0, 5]) R(ctx, 'rgba(0,0,0,.15)', cx + dx, top + 4, 1, bh - 2);
+  ctx.fillStyle = '#8b5a2b'; ctx.beginPath(); ctx.ellipse(cx, top + 4, bw / 2, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#3b3b42'; ctx.lineWidth = 1; ctx.stroke();
+  R(ctx, '#d9a066', cx - 1, top + bh / 2 + 3, 2, 3);
+};
+
+// Chimenea de piedra con fuego que titila
+D.fireplace = (ctx, x, y, w, h) => {
+  const top = y - 26;
+  R(ctx, 'rgba(0,0,0,.2)', x + 2, y + h - 3, w - 2, 4);
+  RR(ctx, '#7d7f88', x + 1, top, w - 2, h + 26, 3);
+  for (let r = 0; r < 6; r++) for (let k = 0; k < 4; k++) R(ctx, (r + k) % 2 ? '#8e909a' : '#6f717a', x + 3 + k * 15 - (r % 2) * 7, top + 2 + r * 9, 13, 7);
+  RR(ctx, '#5a3820', x - 1, top - 2, w + 2, 5, 2); // repisa
+  R(ctx, '#2a1a12', x + 10, top + 14, w - 20, h + 10);
+  const t = ANIM_T / 1000;
+  const fx = x + w / 2, fy = y + h - 4;
+  R(ctx, '#5a3820', fx - 12, fy - 3, 24, 3);
+  ctx.save(); ctx.shadowColor = '#ff9f1c'; ctx.shadowBlur = 12;
+  for (const [dx, sz, col, ph] of [[-6, 9, '#e85d04', 0], [5, 10, '#e85d04', 1.7], [0, 13, '#f48c06', 0.8], [0, 8, '#ffd23f', 2.3]]) {
+    const k = 1 + Math.sin(t * 9 + ph) * 0.12;
+    ctx.fillStyle = col; ctx.beginPath();
+    ctx.moveTo(fx + dx - sz * 0.45, fy - 2); ctx.quadraticCurveTo(fx + dx - sz * 0.5, fy - sz * 0.7 * k, fx + dx + Math.sin(t * 7 + ph) * 1.5, fy - sz * 1.3 * k);
+    ctx.quadraticCurveTo(fx + dx + sz * 0.5, fy - sz * 0.7 * k, fx + dx + sz * 0.45, fy - 2); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  R(ctx, 'rgba(255,170,60,.18)', x + 6, y + h - 2, w - 12, 3);
+};
+
 // ---- Escenario con micrófono (ver shared/stage.js) ----
 function stageMicStand(ctx, cx, by, col) {
   R(ctx, 'rgba(0,0,0,.25)', cx - 5, by - 1, 10, 2);
@@ -1028,10 +1222,11 @@ D.stage = (ctx, x, y, w, h, o) => {
     const on = (i + k) % 3 !== 0;
     circle(ctx, on ? s : shade(s, -0.45), x + (i + 0.5) * (w / n), y + h - face / 2 + 1, 1.8);
   }
-  // logo tenue al centro y bocinas atrás
+  // círculo de luz tenue al centro (sin logo) y bocinas atrás
   ctx.save(); ctx.globalAlpha = 0.28;
-  const cy = y + (h - face) / 2;
-  if (!drawLogo(ctx, x + w / 2, cy, Math.min(h - face - 6, 42))) { ctx.strokeStyle = s; ctx.lineWidth = 2; hexPath(ctx, x + w / 2, cy, Math.min(14, (h - face) / 2 - 3)); ctx.stroke(); }
+  const cy = y + (h - face) / 2, rr = Math.min(16, (h - face) / 2 - 3);
+  ctx.strokeStyle = s; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + w / 2, cy, rr, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + w / 2, cy, rr * 0.55, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
   for (const sx of [x + 4, x + w - 14]) {
     RR(ctx, '#0a0a0c', sx, y + 3, 10, 13, 2);
@@ -1072,9 +1267,9 @@ D.trophyCase = (ctx, x, y, w, h, o) => {
     const cx = x + 4 + (w - 8) * (k + 0.5) / n;
     cup(cx, shelves[0], k % 3 === 0 ? '#FFCC00' : k % 3 === 1 ? '#d9dde3' : '#d08a4a');
     if (k % 2 === 0) cup(cx, shelves[1], '#FFCC00');
-    else { ctx.fillStyle = p; hexPath(ctx, cx, shelves[1] - 5, 4); ctx.fill(); }
+    else circle(ctx, p, cx, shelves[1] - 5, 3.5); // medalla
   }
-  if (!drawLogo(ctx, x + w / 2, bot - 3, 12)) R(ctx, s, x + w / 2 - 8, bot - 4, 16, 2);
+  R(ctx, s, x + w / 2 - 8, bot - 4, 16, 2);
   // reflejo del vidrio
   ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(x + 6, top + 3); ctx.lineTo(x + 14, top + 3); ctx.lineTo(x + 6, bot - 12); ctx.closePath(); ctx.fill();
   R(ctx, d, x + 1, top, w - 2, 2);
@@ -1286,7 +1481,6 @@ D.reception = (ctx, x, y, w, h, o, c) => {
   ctx.save(); ctx.shadowColor = p; ctx.shadowBlur = 8;
   R(ctx, p, x + 4, y + h - 6, w - 8, 2);
   ctx.restore();
-  if (!drawLogo(ctx, x + w / 2, y + h / 2 - 3, 18)) { ctx.fillStyle = p; hexPath(ctx, x + w / 2, y + h / 2 - 3, 6); ctx.fill(); }
 };
 
 // ---------- Pantallas y cosas de escritorio ----------

@@ -3,7 +3,7 @@ export const SEASONS = {
   halloween: { name: 'Halloween y Día de Muertos', from: [10, 1], to: [11, 5] },
   navidad: { name: 'Navidad', from: [12, 1], to: [1, 6] },
   // El aniversario no tiene fecha fija: la pone el admin (MM-DD) y dura ese día y los 2 anteriores
-  aniversario: { name: 'Aniversario de GTAHUB', days: 3 },
+  aniversario: { name: 'Aniversario de HUB', days: 3 },
 };
 export const SEASON_SETTINGS = ['auto', 'none', ...Object.keys(SEASONS)];
 

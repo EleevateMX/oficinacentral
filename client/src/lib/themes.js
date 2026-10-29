@@ -1,8 +1,8 @@
 // Temas de oficina. Nuvora es el producto; cada oficina puede usar el tema de Nuvora,
-// el de GTAHUB o uno personalizado (color propio + logo).
+// el de HUB o uno personalizado (color propio + logo).
 export const THEMES = [
   { id: 'nuvora', name: 'Nuvora', desc: 'Crema, profundo y mandarina. Albert Sans y Public Sans.', swatches: ['#0A2B2C', '#157A6E', '#FF8A3D', '#F3F4EE'] },
-  { id: 'gtahub', name: 'GTAHUB', desc: 'Rosa, amarillo y negro del Manual de Redes. Archivo Black e Inter.', swatches: ['#101010', '#FE3377', '#FFCC00', '#181818'] },
+  { id: 'gtahub', name: 'HUB', desc: 'Rosa, amarillo y negro del Manual de Redes. Archivo Black e Inter.', swatches: ['#101010', '#FE3377', '#FFCC00', '#181818'] },
   { id: 'custom', name: 'Personalizado', desc: 'Tu color principal y tu logo sobre la base de Nuvora.', swatches: [] },
 ];
 
@@ -27,11 +27,11 @@ export function applyBrand(config = {}) {
   if (meta) meta.content = theme === 'gtahub' ? '#101010' : '#0A2B2C';
 }
 
-// Marca GTAHUB: con su tema o si la oficina se llama GTAHUB (Nuvora es solo la plataforma)
+// Marca HUB (tema 'gtahub'): con su tema o si la oficina se llama así (Nuvora es solo la plataforma)
 export const GTAHUB_LOGO = '/themes/gtahub/logo.png';
 export const isGtahub = (config = {}) => config.theme === 'gtahub' || /gtahub/i.test(config.officeName || '');
 
-// Logo de la oficina: el subido por el admin, el de GTAHUB o el símbolo de Nuvora.
+// Logo de la oficina: el subido por el admin, el del tema HUB o el símbolo de Nuvora.
 export function officeLogo(config = {}) {
   if (config.logoUrl) return config.logoUrl;
   if (isGtahub(config)) return GTAHUB_LOGO;

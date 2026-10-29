@@ -30,7 +30,7 @@ export const AREA_COLORS = [
   { id: 'terra', name: 'Terracota' },
   { id: 'slate', name: 'Pizarra' },
   { id: 'concrete', name: 'Cemento pulido' },
-  { id: 'hex', name: 'Hexágonos (GTAHUB)' },
+  { id: 'hex', name: 'Hexágonos (HUB)' },
   { id: 'redRug', name: 'Roja ornamental' },
   { id: 'diamond', name: 'Rombos gris azulado' },
 ];
@@ -509,7 +509,7 @@ function templateHQ() {
   return { W, H, spawn: { x: 42, y: 53 }, floor: b.floor, walls: b.walls, objects: b.objects, areas: b.areas, decals: b.decals };
 }
 
-// ---------------- Plantilla Recreativa (coworking, café, juegos y auditorio) ----------------
+// ---------------- Plantilla Recreativa (salas temáticas de la comunidad) ----------------
 // Oficina para pasar el rato y también trabajar: sin departamentos ni áreas de staff.
 // Recepción, elevador al Hotel, escenario y rocola vienen incluidos (no necesitan migración).
 function templateRecreativo() {
@@ -536,11 +536,14 @@ function templateRecreativo() {
   const room = (x, y, w, h, t) => b.fill(x, y, w, h, t);
   const PINK = '#FE3377', YEL = '#FFCC00', DARK = '#101010';
 
+  // Colores de las salas temáticas (sin logos de juegos: solo colores y arte genérico)
+  const NAVY = '#0A1428', GOLD = '#C8AA6E', TEAL = '#0397AB', RED = '#FF4655', GRASS = '#5aa83c', WOOD = '#7a4a2b';
+
   // ===== Fila superior (y 10..19), frente de cristal en y 20 =====
   for (const x of [25, 48, 61, 80]) b.vWall(x, Y0, 11);
   b.glass(X0, 20, X1 - X0 + 1, 1);
 
-  // Cafetería con barra
+  // Café con barra
   room(X0, Y0, 20, 10, 'wood2');
   for (let x = 12; x <= 17; x++) b.door(x, 20, 'wood2');
   b.o('fridge', 8, Y0); b.o('counter', 9, Y0, { w: 5 }); b.o('coffee', 14, Y0);
@@ -552,9 +555,11 @@ function templateRecreativo() {
     b.o('roundTable', tx, ty, { color: '#ffffff' });
     b.chair(tx - 1, ty, 1, '#c99c72'); b.chair(tx + 2, ty, 3, '#c99c72');
   }
+  b.o('mug', 17.4, 13.1, { color: PINK }); b.o('donut', 21.6, 15.2); b.o('boba', 18.3, 17.1);
   b.o('plant', X0, 18); b.o('tallPlant', 23, 18);
   b.o('window', 8, 9); b.o('window', 18, 9);
-  b.area('cafe', 'Cafetería', X0, Y0, 20, 10, { color: 'none' });
+  b.o('roomSign', 12.25, 9.15, { color: '#f4a261' });
+  b.area('cafe', 'Café', X0, Y0, 20, 10, { color: 'none' });
 
   // Jardín interior con estanque y terraza
   room(26, Y0, 22, 10, 'grass2');
@@ -567,41 +572,52 @@ function templateRecreativo() {
   b.o('bench', 29, 14, { rot: 1 }); b.o('bench', 44, 14, { rot: 1 });
   for (const [x, y] of [[30, 11], [43, 11], [29, 17], [44, 17], [33, 18], [40, 18]]) b.o('flowers', x, y);
   b.o('bush', 27, 16); b.o('bush', 46, 16); b.o('fern', 32, 10); b.o('fern', 41, 10);
-  b.area('jardin', 'Jardín y terraza', 26, Y0, 22, 10, { shape: 'round' });
+  b.o('roomSign', 34.75, 9.15, { color: '#3DDC84' });
+  b.area('jardin', 'Jardín', 26, Y0, 22, 10, { shape: 'round' });
 
-  // Biblioteca / rincón de lectura
+  // Estudio / Tareas: libreros y sillones para leer o hacer la tarea en silencio
   room(49, Y0, 12, 10, 'wood2');
   for (const x of [54, 55]) b.door(x, 20, 'wood2');
-  b.o('bookshelf', 49, Y0); b.o('bookshelf', 52, Y0); b.o('bookshelf', 56, Y0); b.o('tallPlant', 59, Y0);
+  b.o('bookshelf', 49, Y0); b.o('bookshelf', 57, Y0); b.o('tallPlant', 60, Y0);
   b.o('armchair', 50, 13, { rot: 1, color: '#7a4a2b' }); b.o('roundTable', 51, 13, { color: '#c88a55' }); b.o('armchair', 53, 13, { rot: 3, color: '#7a4a2b' });
   b.o('armchair', 56, 13, { rot: 1, color: '#2b6f5a' }); b.o('roundTable', 57, 13, { color: '#c88a55' }); b.o('armchair', 59, 13, { rot: 3, color: '#2b6f5a' });
   b.o('sofaSmall', 51, 17, { color: '#7a4a2b' }); b.o('plant', 49, 18); b.o('plant', 59, 18);
   b.o('arcLamp', 55, 16.5); b.o('books', 51.25, 13.1, { color: '#3a86ff' }); b.o('books', 57.25, 13.1, { color: '#e63946' });
-  b.area('biblioteca', 'Biblioteca', 49, Y0, 12, 10, { color: 'redRug' });
+  b.o('laptop', 52.1, 13.3); b.o('notebook', 58.1, 13.3); b.o('lamp', 55.2, 10.1, { color: '#f4a261' });
+  b.o('roomSign', 52.1, 9.15, { color: '#8ecae6' });
+  b.area('estudio', 'Estudio / Tareas', 49, Y0, 12, 10, { color: 'green' });
 
-  // Sala de juntas grande
+  // League of Legends: mesa de equipo con PCs, pantalla gigante, azul y dorado (privada: los de dentro se oyen)
   room(62, Y0, 18, 10, 'blue');
   for (const x of [70, 71]) b.door(x, 20, 'wood');
-  b.o('bigScreen', 68, Y0);
-  b.o('confTable', 65, 14, { w: 12 });
-  for (let i = 65; i < 77; i += 2) { b.chair(i, 13, 2, DARK); b.chair(i + 1, 16, 0, DARK); }
-  b.chair(64, 14, 1, DARK); b.chair(77, 14, 3, DARK);
-  b.o('plant', 62, Y0); b.o('cabinet', 79, Y0); b.o('tallPlant', 62, 18); b.o('tallPlant', 79, 18);
-  b.o('window', 73, 9);
-  b.area('juntas', 'Sala de juntas', 62, Y0, 18, 10, { private: true });
+  b.o('bigScreen', 68, Y0, { color: NAVY });
+  b.o('gamingPC', 66.9, Y0, { color: TEAL }); b.o('gamingPC', 73.1, Y0, { color: GOLD });
+  b.o('confTable', 65, 14, { w: 12, color: '#1b2440' });
+  for (let i = 65; i < 77; i += 2) {
+    b.o('gamingChair', i, 13, { rot: 2, color: i % 4 === 1 ? TEAL : GOLD });
+    b.o('gamingChair', i + 1, 16, { rot: 0, color: i % 4 === 1 ? GOLD : TEAL });
+    b.o('monitor', i + 0.12, 14.05, { color: NAVY }); b.o('keyboard', i + 0.12, 14.7);
+    b.o('monitor', i + 1.12, 15.05, { color: NAVY });
+  }
+  b.o('gamingChair', 64, 14, { rot: 1, color: GOLD }); b.o('gamingChair', 77, 14, { rot: 3, color: GOLD });
+  b.o('plant', 62, Y0); b.o('tallPlant', 62, 18); b.o('tallPlant', 79, 18); b.o('trophyCase', 76, 18, { color: GOLD });
+  b.o('gamePoster', 63.5, 10.1, { color: TEAL }); b.o('gamePoster', 78.2, 10.1, { color: GOLD });
+  b.o('neonGG', 65.1, 9.3, { color: GOLD });
+  b.o('roomSign', 73.2, 9.15, { w: 4.5, color: GOLD });
+  b.area('lol', 'League of Legends', 62, Y0, 18, 10, { private: true });
 
-  // Zona zen (meditar, acuario, bambú)
-  room(81, Y0, 14, 10, 'tile');
-  for (const x of [86, 87, 88]) b.door(x, 20, 'tile');
-  b.o('aquarium', 83, Y0); b.o('plantShelf', 86, Y0); b.o('bamboo', 90, Y0); b.o('bamboo', 91, Y0);
-  b.o('gong', 92, 13);
-  for (const [x, y, c] of [[84, 14, '#06d6a0'], [86, 15, '#8ecae6'], [88, 14, '#9b5de5'], [86, 13, '#f15bb5']]) b.o('beanBag', x, y, { color: c });
-  b.o('roundRug', 85.5, 13.5, { color: '#a3e1c8' });
-  b.o('bamboo', 81, 17); b.o('bamboo', 81, 18); b.o('fern', 93, 18); b.o('fern', 92, 17);
-  b.o('sofaSmall', 89, 18, { color: '#e9edf2' });
-  b.area('zen', 'Zona zen', 81, Y0, 14, 10, { color: 'green', shape: 'round' });
+  // Minecraft: pasto, árboles y bloques de pixeles
+  room(81, Y0, 14, 10, 'grass2');
+  for (const x of [86, 87, 88]) b.door(x, 20, 'grass2');
+  for (const [x, y, c] of [[81, 10, GRASS], [82, 10, GRASS], [83, 10, '#8a8f98'], [81, 11, GRASS], [86, 13, '#b5824a'], [87, 13, '#8a8f98'], [93, 18, GRASS], [92, 18, '#b5824a']]) b.o('voxelBlock', x, y, { color: c });
+  b.o('tree', 89, 10); b.o('tree', 91, 10); b.o('tree', 92, 12); b.o('tree', 93, 15); b.o('bush', 81, 18);
+  for (const [x, y, c] of [[84, 15, GRASS], [86, 16, '#8b5a2b'], [88, 15, '#5ce1e6'], [90, 16, '#e8e8ee']]) b.o('beanBag', x, y, { color: c });
+  b.o('fern', 82, 16); b.o('fern', 90, 13); b.o('flowers', 83, 18); b.o('flowers', 91, 18);
+  b.o('sofaSmall', 87, 18, { color: '#8b5a2b' });
+  b.o('roomSign', 84.6, 9.15, { color: GRASS });
+  b.area('minecraft', 'Minecraft', 81, Y0, 14, 10, { shape: 'round' });
 
-  // ===== Centro izquierdo: coworking y zona de enfoque =====
+  // ===== Centro izquierdo: coworking, cabinas y Valorant =====
   b.area('coworking', 'Coworking', 6, 23, 28, 13, { color: 'sand' });
   const rows = [[25, 'glassDesk', ['#FE3377', '#8B7BFF']], [29, 'woodDesk', ['#FFCC00', '#06a77d']], [33, 'standingDesk', ['#3a86ff', '#FE3377']]];
   for (const [y, type, cols] of rows) {
@@ -615,7 +631,7 @@ function templateRecreativo() {
   b.o('coffee', 30, 31); b.o('watercooler', 32, 31);
   b.o('tallPlant', 29, 34); b.o('tallPlant', 32, 34);
 
-  // Zona de enfoque: cabinas telefónicas (privadas) y cubículos silenciosos
+  // Zona de enfoque: cabinas telefónicas (privadas)
   b.glass(X0, 37, 16, 1); b.glass(X0, 41, 16, 1);
   for (const x of [8, 12, 16, 20]) b.glass(x, 37, 1, 5);
   for (let k = 0; k < 4; k++) {
@@ -626,15 +642,20 @@ function templateRecreativo() {
     b.o('floorLamp', x0 + 0.25, 38.5, { color: '#f4a261' }); b.o('plant', x0 + 2, 38); b.o('laptop', x0 + 2.1, 39.6);
     b.area(`cabina${k + 1}`, `Cabina ${k + 1}`, x0, 38, 3, 3, { private: true });
   }
-  b.area('enfoque', 'Zona de enfoque', X0, 37, 29, 8, { color: 'mint' });
-  for (const y of [38, 42]) for (const x of [22, 27]) { b.o('cubicle', x, y); b.chair(x + 2, y + 1, 0); }
-  b.o('bookshelf', 31, 38 - 1 + 1, {}); b.o('tallPlant', 32, 42);
+  b.area('enfoque', 'Zona de enfoque', X0, 37, 16, 8, { color: 'mint' });
 
-  // ===== Centro: auditorio con escenario =====
-  b.area('auditorio', 'Auditorio', 36, 23, 22, 22, { color: 'diamond' });
+  // Valorant: escritorios gamer (se pueden reclamar), rojo y negro
+  b.area('valorant', 'Valorant', 21, 37, 13, 8, { color: 'slate' });
+  for (const y of [38, 42]) b.deskRow([22, 27], y, { type: 'gamingDesk', color: '#1b1b22', chairType: 'gamingChair', chairColor: [RED, '#2b2b33'] });
+  b.o('arcade', 32, 38, { color: RED }); b.o('arcade', 33, 38, { color: '#2b2b33' });
+  b.o('tallPlant', 32, 42); b.o('tallSpeaker', 33.25, 42.5);
+  b.o('ledStrip', 22, 37.3, { w: 8, color: RED });
+
+  // ===== Centro: Torneos (auditorio con escenario) =====
+  b.area('torneos', 'Torneos', 36, 23, 22, 22, { color: 'diamond' });
   b.o('bigScreen', 44, 23);
   for (const [type, x, y, extra] of RECREATIVO_STAGE) b.o(type, x, y, extra);
-  b.o('wallBanner', 41.5, 23); b.o('wallBanner', 51.5, 23);
+  b.o('trophyCase', 40, 23); b.o('trophyCase', 52, 23);
   b.o('tallSpeaker', 42.25, 25); b.o('tallSpeaker', 50.25, 25);
   b.o('carpetRunner', 46, 29, { h: 13, color: PINK });
   for (const y of [30, 32, 34, 36]) for (let x = 38; x < 56; x++) if (x < 45 || x > 48) b.o('confChair', x, y, { color: x < 45 ? PINK : YEL });
@@ -642,10 +663,10 @@ function templateRecreativo() {
   for (const [x, c] of [[38, PINK], [40, YEL], [42, '#3a86ff'], [51, '#3a86ff'], [53, YEL], [55, PINK]]) b.o('beanBag', x, 42, { color: c });
   for (const y of [23, 28, 33, 38, 43]) { b.o('tallPlant', 36, y); b.o('tallPlant', 57, y); }
 
-  // ===== Centro derecho: sala de juegos y lounge =====
-  b.area('juegos', 'Sala de juegos', 60, 23, 34, 11, { color: 'purple' });
+  // ===== Centro derecho: Juegos y Charla General =====
+  b.area('juegos', 'Juegos', 60, 23, 34, 11, { color: 'purple' });
   for (const [x, c] of [[61, PINK], [62, YEL], [63, '#3a86ff'], [64, '#2bb673']]) b.o('arcade', x, 23, { color: c });
-  b.o('bigScreen', 67, 23); b.o('rug', 66, 25, { w: 7, h: 2, color: '#2b2f3a' });
+  b.o('bigScreen', 67, 23); b.o('controllerRug', 66, 25, { w: 7, h: 2, color: '#2b2f3a' });
   b.o('sofaSmall', 68, 28, { rot: 2, color: PINK });
   for (const [x, c] of [[67, PINK], [69, YEL], [71, '#3a86ff']]) b.o('beanBag', x, 26, { color: c });
   b.o('controller', 68.25, 25.6, { color: PINK }); b.o('controller', 70.25, 25.6, { color: '#3a86ff' });
@@ -656,78 +677,108 @@ function templateRecreativo() {
   for (const [x, y] of [[70, 29], [72, 29], [70, 31], [72, 31]]) b.o('stool', x, y, { color: YEL });
   b.o('tallPlant', 60, 32); b.o('tallPlant', 92, 32); b.o('tallPlant', 83, 32); b.o('tallPlant', 75, 32);
 
-  b.area('lounge', 'Lounge', 60, 35, 34, 10, { color: 'rug', shape: 'soft' });
-  b.o('jukebox', 61, 35); // rocola: música compartida en el lounge
+  // Charla General: la sala grande para platicar, con sofás en círculo y la rocola
+  b.area('charla', 'Charla General', 60, 35, 34, 10, { color: 'rug', shape: 'soft' });
+  b.o('jukebox', 61, 35); // rocola: música compartida en la sala
   b.o('tv', 76, 35); b.o('bookshelf', 67, 35); b.o('aquarium', 80, 35);
-  b.o('rug', 62, 38, { w: 7, h: 3, color: '#5a7fd6' }); b.o('roundRug', 88.5, 39.25, { color: '#c592d3' }); b.o('plant', 71, 35); b.o('plant', 84, 35); b.o('fairyLights', 86.5, 35);
+  b.o('plant', 71, 35); b.o('plant', 84, 35); b.o('fairyLights', 86.5, 35);
+  b.o('rug', 62, 38, { w: 7, h: 3, color: '#e8a27c' }); b.o('rug', 71, 38, { w: 7, h: 3, color: '#c592d3' }); b.o('roundRug', 88.5, 39.25, { color: '#FFCC00' });
+  // Círculo 1
   b.o('sofa', 63, 37, { color: PINK }); b.o('roundTable', 64, 39, { w: 3 }); b.o('sofa', 63, 41, { rot: 2, color: DARK });
-  b.o('sofa', 75, 40, { rot: 2, color: '#3a86ff' }); b.o('armchair', 73, 38, { rot: 1, color: YEL }); b.o('armchair', 81, 38, { rot: 3, color: YEL });
+  b.o('armchair', 62, 39, { rot: 1, color: YEL }); b.o('armchair', 68, 39, { rot: 3, color: YEL });
+  // Círculo 2
+  b.o('sofa', 72, 37, { color: '#3a86ff' }); b.o('roundTable', 73, 39, { w: 3, color: '#ffffff' }); b.o('sofa', 72, 41, { rot: 2, color: '#3a86ff' });
+  b.o('armchair', 71, 39, { rot: 1, color: PINK }); b.o('armchair', 77, 39, { rot: 3, color: PINK });
+  // Círculo 3
   b.o('lSofa', 86, 38, { color: '#9b5de5' }); b.o('roundTable', 89, 39, { color: '#ffffff' }); b.o('armchair', 91, 39, { rot: 3, color: '#9b5de5' });
-  b.o('tallPlant', 60, 43); b.o('tallPlant', 92, 43); b.o('floorLamp', 70.25, 40); b.o('floorPlant', 83, 42); b.o('floorPlant', 69, 42.5);
+  b.o('sofaSmall', 87, 41, { rot: 2, color: '#9b5de5' });
+  b.o('beanBag', 81, 39, { color: '#06d6a0' }); b.o('beanBag', 82, 41, { color: PINK }); b.o('beanBag', 80, 41, { color: YEL });
+  b.o('mug', 64.4, 39.2, { color: PINK }); b.o('pizza', 73.6, 39.1); b.o('boba', 89.4, 39.1);
+  b.o('tallPlant', 60, 43); b.o('tallPlant', 92, 43); b.o('floorLamp', 70.25, 40); b.o('floorPlant', 84, 42); b.o('floorPlant', 69, 42.5);
 
   // ===== Fila inferior (y 47..57), frente de cristal en y 46 =====
   b.glass(X0, 46, X1 - X0 + 1, 1);
   for (const x of [15, 26, 34, 51, 64, 80]) b.vWall(x, 46, 12);
 
-  // Salas privadas para reuniones
-  room(X0, 47, 10, 11, 'blue');
+  // Arte y Diseño (privada)
+  room(X0, 47, 10, 11, 'concrete');
   for (const x of [9, 10]) b.door(x, 46, 'wood');
-  b.o('whiteboard', 6, 47); b.o('easel', 11, 47); b.o('plant', 13, 47);
+  b.o('whiteboard', 6, 47); b.o('painting', 9, 47, { color: '#3a86ff' }); b.o('easel', 11, 47); b.o('plant', 13, 47);
   b.o('table', 8, 50, { w: 4, color: '#e8e8ee' });
   for (let i = 8; i < 12; i += 2) { b.chair(i, 49, 2, PINK); b.chair(i + 1, 52, 0, PINK); }
+  b.o('pencilCup', 8.4, 50.2, { color: YEL }); b.o('stickyNotes', 9.6, 50.6); b.o('tablet', 10.6, 50.3); b.o('vase', 11.2, 50.1);
+  b.o('easel', 6, 52); b.o('easel', 13, 51);
+  b.o('roundRug', 9, 54, { color: YEL });
   b.o('beanBag', 7, 55, { color: YEL }); b.o('beanBag', 11, 55, { color: PINK }); b.o('tallPlant', 13, 55);
-  b.area('creativa', 'Sala creativa', X0, 47, 10, 11, { private: true });
+  b.area('arte', 'Arte y Diseño', X0, 47, 10, 11, { private: true });
 
-  room(16, 47, 10, 11, 'blue');
-  for (const x of [22, 23]) b.door(x, 46, 'wood');
-  b.o('tv', 18, 47); b.o('plant', 16, 47); b.o('plant', 24, 47);
-  b.o('meetingTable', 18, 50, { w: 6 });
-  for (let i = 18; i < 24; i += 2) { b.chair(i, 49, 2, '#3a86ff'); b.chair(i + 1, 53, 0, '#3a86ff'); }
-  b.chair(17, 51, 1, '#3a86ff'); b.chair(24, 51, 3, '#3a86ff');
-  b.o('tallPlant', 16, 56); b.o('tallPlant', 24, 56);
-  b.area('ideas', 'Sala de ideas', 16, 47, 10, 11, { private: true });
+  // Roleplay: taberna con mesa larga, chimenea y barriles (privada)
+  room(16, 47, 10, 11, 'wood2');
+  for (const x of [22, 23]) b.door(x, 46, 'wood2');
+  b.o('barrel', 16, 47); b.o('barrel', 17, 47); b.o('fireplace', 19, 47); b.o('shelf', 23, 47);
+  b.o('rug', 17, 49, { w: 8, h: 4, color: '#8c3d38' });
+  b.o('table', 18, 50, { w: 6, color: WOOD });
+  for (let i = 18; i < 24; i += 2) { b.chair(i, 49, 2, '#5a3820'); b.chair(i + 1, 52, 0, '#5a3820'); }
+  b.chair(17, 50, 1, '#5a3820'); b.chair(24, 50, 3, '#5a3820');
+  b.o('mug', 18.4, 50.3, { color: '#c99c72' }); b.o('mug', 20.6, 50.9, { color: '#c99c72' }); b.o('mug', 22.6, 50.3, { color: '#c99c72' });
+  b.o('tacos', 19.4, 50.5); b.o('lamp', 21.2, 50.1, { color: '#f4a261' }); b.o('books', 23.2, 50.6, { color: '#8c3d38' });
+  b.o('floorLamp', 16.25, 50, { color: '#f4a261' }); b.o('floorLamp', 25.25, 50, { color: '#f4a261' });
+  b.o('counter', 18, 57, { w: 4 });
+  for (let i = 18; i < 22; i++) b.o('stool', i, 56, { color: WOOD });
+  b.o('barrel', 16, 56); b.o('barrel', 25, 56); b.o('barrel', 24, 57);
+  b.area('roleplay', 'Roleplay', 16, 47, 10, 11, { private: true });
 
-  room(27, 47, 7, 11, 'rose');
-  b.door(30, 46, 'rose');
-  b.o('roundTable', 29, 51, { color: '#ffffff' });
-  b.o('armchair', 28, 51, { rot: 1, color: PINK }); b.o('armchair', 31, 51, { rot: 3, color: PINK });
+  // Sala VIP 1:1: alfombra roja, sillones negros y dorado (privada)
+  room(27, 47, 7, 11, 'redRug');
+  b.door(30, 46, 'redRug');
+  b.o('roundTable', 29, 51, { color: YEL });
+  b.o('armchair', 28, 51, { rot: 1, color: '#1d1d22' }); b.o('armchair', 31, 51, { rot: 3, color: '#1d1d22' });
+  b.o('trophy', 29.25, 51.1); b.o('cake', 30.1, 51.2, { color: YEL });
   b.o('plant', 27, 47); b.o('plant', 33, 47); b.o('tallPlant', 27, 56); b.o('tallPlant', 33, 56);
-  b.o('plantShelf', 31, 47); b.o('floorLamp', 32.25, 50);
-  b.area('uno', 'Sala 1:1', 27, 47, 7, 11, { private: true });
+  b.o('plantShelf', 31, 47); b.o('floorLamp', 32.25, 50, { color: YEL });
+  b.o('sofaSmall', 29, 55, { color: '#1d1d22' });
+  b.area('vip', 'Sala VIP 1:1', 27, 47, 7, 11, { private: true });
 
   // Recepción y entrada (mismo lugar que en HQ: letrero, mostrador y elevador al Hotel)
-  room(35, 46, 16, 12, 'hex');
-  for (let x = 35; x <= 50; x++) b.door(x, 46, 'hex');
+  room(35, 46, 16, 12, 'slate');
+  for (let x = 35; x <= 50; x++) b.door(x, 46, 'slate');
   for (const x of [41, 42, 43, 44]) b.door(x, 58, 'path');
   b.o('reception', 40.5, 49);
   b.o('officeChair', 42.5, 48, { rot: 2 });
-  b.o('cubeLogo', 42.75, 49.1); b.o('hexLamp', 40.7, 48.9); b.o('monitor', 44, 48.9);
-  b.o('hotelElevator', HOTEL_ELEVATOR_SPOT.x, HOTEL_ELEVATOR_SPOT.y); // elevador al Hotel
+  b.o('smallPlant', 42.8, 49.05); b.o('lamp', 40.9, 48.95, { color: '#E0B15A' }); b.o('monitor', 44, 48.9);
+  b.o('hotelElevator', HOTEL_ELEVATOR_SPOT.x, HOTEL_ELEVATOR_SPOT.y); // elevador al Hotel 
   b.o('sofaSmall', 36, 51, { rot: 1, color: PINK }); b.o('sofaSmall', 49, 51, { rot: 3, color: PINK });
   b.o('tallPlant', 35, 47); b.o('tallPlant', 50, 47); b.o('plant', 36, 56); b.o('plant', 49, 56);
+  b.o('neonHub', 41.5, 47.1);
+  b.o('carpetRunner', 42, 54, { h: 4 });
+  b.o('armchair', 40, 55, { rot: 1, color: '#2a2a30' }); b.o('armchair', 45, 55, { rot: 3, color: '#2a2a30' });
+  b.o('floorLamp', 39.25, 55, { color: '#E0B15A' }); b.o('floorLamp', 46.25, 55, { color: '#E0B15A' });
+  b.o('ringRug', 41.5, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
   b.area('recepcion', 'Recepción', 35, 47, 16, 11, { color: 'none' });
 
-  // Estudio de stream
+  // Stream (privada)
   room(52, 47, 12, 11, 'slate');
   for (const x of [57, 58]) b.door(x, 46, 'slate');
   b.o('table', 54, 49, { w: 4, color: '#26262e' });
   b.o('gamingChair', 55, 51, { color: PINK }); b.o('gamingChair', 56, 51, { color: '#3a86ff' });
   b.o('gamingPC', 54.25, 48.9, { color: PINK }); b.o('curvedMonitor', 55.25, 49); b.o('mic', 57.25, 49.25); b.o('ringLight', 52.25, 49.1);
   b.o('neonSign', 55.5, 47.3, { color: PINK }); b.o('shelf', 59, 47); b.o('figure', 59.5, 47.1, { color: PINK }); b.o('carModel', 60.5, 47.2);
-  b.o('rug', 54, 54, { w: 4, color: '#8B7BFF' });
+  b.o('controllerRug', 54.5, 52.7, { color: '#8B7BFF' });
   b.o('sofaSmall', 54, 55, { color: DARK }); b.o('tallSpeaker', 52.25, 55.75); b.o('tallSpeaker', 62.25, 55.75);
   b.o('plant', 62, 47); b.o('camera', 60.25, 51.25); b.o('beanBag', 59, 55, { color: PINK });
-  b.area('stream', 'Estudio de stream', 52, 47, 12, 11, { private: true });
+  b.o('neonGG', 60.2, 49.4, { color: '#8B7BFF' });
+  b.area('stream', 'Stream', 52, 47, 12, 11, { private: true });
 
-  // Cine
+  // Cine y Anime (privada)
   room(65, 47, 15, 11, 'redRug');
   for (const x of [76, 77, 78]) b.door(x, 46, 'redRug');
   b.o('bigScreen', 70, 47);
   for (const y of [51, 54]) { b.o('sofa', 66, y, { rot: 2, color: '#d62828' }); b.o('sofa', 74, y, { rot: 2, color: '#d62828' }); }
   b.o('vending', 65, 56, { color: YEL }); b.o('tallPlant', 79, 56); b.o('tallSpeaker', 67.25, 47.25); b.o('tallSpeaker', 76.25, 47.25);
-  b.area('cine', 'Cine', 65, 47, 15, 11, { private: true });
+  b.o('neonSign', 68.3, 47.4, { color: '#f15bb5' }); b.o('plushie', 66.3, 55.3, { color: '#f8a5c2' }); b.o('boba', 72.4, 55.4, { color: '#c8a27c' });
+  b.area('cine', 'Cine y Anime', 65, 47, 15, 11, { private: true });
 
-  // Karaoke y música
+  // Música y Karaoke
   room(81, 47, 14, 11, 'pattern');
   for (const x of [85, 86, 87]) b.door(x, 46, 'pattern');
   b.o('stage', 87, 47, { w: 5, h: 3, color: '#9b5de5' }); b.o('mic', 89.25, 48.25, { color: DARK });
@@ -735,21 +786,23 @@ function templateRecreativo() {
   b.o('tallSpeaker', 86.25, 47.25); b.o('tallSpeaker', 92.25, 47.25);
   b.o('sofa', 83, 53, { rot: 2, color: '#9b5de5' });
   for (const [x, y, c] of [[89, 54, PINK], [91, 53, YEL], [90, 51, '#06d6a0']]) b.o('beanBag', x, y, { color: c });
-  b.o('tallPlant', 81, 55);
-  b.area('karaoke', 'Karaoke y música', 81, 47, 14, 11, { color: 'purple', shape: 'soft' });
+  b.o('tallPlant', 81, 55); b.o('neonSign', 81.6, 47.2, { color: '#9b5de5' });
+  b.area('karaoke', 'Música y Karaoke', 81, 47, 14, 11, { color: 'purple', shape: 'soft' });
 
   // Pasillos con plantas
   for (const x of [8, 21, 30, 44, 52, 66, 76, 90]) b.o('plant', x, 21);
 
-  // ===== Marca =====
+  // ===== Decoración de comunidad (sin logos: banderines, luces y letreros con texto) =====
   for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 20.75);
   for (let x = 6; x <= 90; x += 5) b.o('bunting', x, 45.25);
-  b.o('neonLogo', 13.5, 9.15); b.o('neonLogo', 67, 9.15); b.o('poster', 63.5, 10.1); b.o('poster', 77.5, 10.1);
   b.o('fairyLights', 30.25, 10); b.o('fairyLights', 39.5, 10);
-  b.o('floorLogo', 41.5, 51); b.o('balloons', 37, 47.2); b.o('balloons', 48, 47.2);
-  for (const [type, x, y, extra] of RECEPTION_EXTRAS) b.o(type, x, y, extra);
-  b.o('wavingFlag', 39, 59); b.o('wavingFlag', 46, 59);
-  b.o('wallBanner', 82.2, 47.1);
+  b.o('tallPlant', 39, 59); b.o('tallPlant', 46, 59);
+  // Letreros en los pasillos: dicen el nombre de la sala que tienen abajo
+  b.o('roomSign', 12.5, 21.95, { color: '#FFCC00' }); // Coworking
+  b.o('roomSign', 44.5, 21.95, { color: '#FFCC00' }); // Torneos
+  b.o('roomSign', 79, 21.95, { color: '#8B7BFF' }); // Juegos
+  b.o('roomSign', 25, 36.15, { color: RED }); // Valorant
+  b.o('roomSign', 72, 34.15, { w: 5 }); // Charla General
 
   // ===== Exterior =====
   b.blob(42.5, 64, 5, 3.6, 'path');

@@ -904,7 +904,7 @@ function BulkInvites({ reload }) {
       ) : (
         <>
           <p className="muted small">Una persona por línea: <code>Nombre, correo, admin</code>. El correo y el rol son opcionales. También puedes subir un CSV exportado de Excel o Google Sheets.</p>
-          <textarea rows={6} placeholder={'Kevingare, kevin@gtahub.gg\nWodiw\nYamii, yamii@gtahub.gg, admin'} value={text} onChange={(e) => setText(e.target.value)} />
+          <textarea rows={6} placeholder={'Kevingare, kevin@hub.gg\nWodiw\nYamii, yamii@hub.gg, admin'} value={text} onChange={(e) => setText(e.target.value)} />
           <div className="row gap8">
             <button className="btn" type="button" onClick={() => fileRef.current.click()}><Upload size={15} /> Subir CSV</button>
             <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" hidden onChange={loadFile} />

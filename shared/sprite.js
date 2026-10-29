@@ -123,7 +123,7 @@ const P = (o) => ({ eyes: 'normal', mouth: 'neutral', facialHair: 'none', bottom
 // Personajes listos para elegir, agrupados por paquete
 export const PACKS = [
   { id: 'nuvora', name: 'Oficina' },
-  { id: 'gtahub', name: 'GTAHUB' },
+  { id: 'gtahub', name: 'HUB' },
 ];
 
 export const PRESETS = [
@@ -140,7 +140,7 @@ export const PRESETS = [
   P({ id: 'cafe', pack: 'nuvora', name: 'Fan del café', skin: '#c98a57', hair: '#6a3b22', hairStyle: 'ponytail', top: 'jacket', shirt: '#7d8471', accent: '#f4f4f6', pants: '#c9b48a', shoes: '#7a4a2b', eyes: 'sleepy', extra: 'scarf' }),
   P({ id: 'becaria', pack: 'nuvora', name: 'Becaria', skin: '#ffe0c7', hair: '#f28fb8', hairStyle: 'pigtails', top: 'tee', shirt: '#f4f4f6', accent: '#FF8A3D', pants: '#24477a', shoes: '#FF8A3D', bottom: 'shorts', extra: 'backpack', eyes: 'happy', mouth: 'smile' }),
 
-  // Paquete GTAHUB (reparto de las piezas de la marca, sin insignias ni logos de terceros)
+  // Paquete HUB (reparto de las piezas de la marca, sin insignias ni logos de terceros)
   P({ id: 'gh-traje-azul', pack: 'gtahub', name: 'Traje azul', skin: '#f6c9a0', hair: '#3b2418', hairStyle: 'slick', top: 'suit', shirt: '#2a3f78', accent: '#FE3377', pants: '#2a3f78', shoes: '#1d1d22' }),
   P({ id: 'gh-traje-rojo', pack: 'gtahub', name: 'Traje rojo', skin: '#c98a57', hair: '#1b1720', hairStyle: 'short', top: 'suit', shirt: '#c41a55', accent: '#101010', pants: '#101010', shoes: '#101010', eyewear: 'sunglasses' }),
   P({ id: 'gh-calle', pack: 'gtahub', name: 'Calle', skin: '#9a6038', hair: '#1b1720', hairStyle: 'buzz', top: 'hoodie', shirt: '#101010', accent: '#FE3377', pants: '#3e4462', shoes: '#f4f4f6', hat: 'cap', hatColor: '#FE3377', extra: 'backpack' }),
