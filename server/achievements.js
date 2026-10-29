@@ -8,6 +8,7 @@ import { flush, FLAG_EARLY, FLAG_NIGHT, counter, weekStart, addDays, localParts 
 import { shiftReport } from './shifts.js';
 import { presence, emitToUser, emitAll } from './realtime.js';
 import { pushNotification } from './push.js';
+import { hubEmit } from './hubEvents.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS achievements (
@@ -81,6 +82,7 @@ export function checkAchievements(uid, { at = now(), force = false } = {}) {
   for (const f of fresh) up.run(uid, f.id, f.tier, at);
   db.prepare('INSERT INTO achievement_checks (user_id, checked_at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET checked_at = excluded.checked_at').run(uid, at);
   if (fresh.length) award(uid, fresh, first);
+  if (fresh.length && !first) for (const f of fresh) hubEmit('badge:earned', { userId: uid, id: f.id, achievement: true }); // Discord (opcional)
   return fresh;
 }
 

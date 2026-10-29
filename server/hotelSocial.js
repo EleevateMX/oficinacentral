@@ -5,6 +5,7 @@
 // roomSocialOut, userSocialOut, saveRoomSocial) y usa su `hotelCtx`.
 import { db, now } from './db.js';
 import { hotelCtx, ensureOfficialRooms, ensureStarter } from './hotel.js';
+import { hubEmit } from './hubEvents.js';
 import { MAX_ROOMS_PER_USER } from '../shared/hotel.js';
 import { presence } from './realtime.js';
 import { localParts } from './stats.js';
@@ -397,6 +398,7 @@ export function registerHotelSocialRoutes(api, { fail, wrap }) {
     // Aviso para quien está en el Hotel ahora
     const ev = eventOf(r.id);
     for (const [uid, w] of hotelCtx.where) if (w.roomId !== r.id && uid !== req.user.id) w.socket.emit('hotel:event', { roomId: r.id, roomName: r.name, ...ev });
+    hubEmit('hotel:event', { roomId: r.id, roomName: r.name, ...ev, byName: req.user.display_name }); // aviso en Discord
     res.json({ event: ev });
   }));
   api.delete('/hotel/social/rooms/:id/event', wrap((req, res) => {

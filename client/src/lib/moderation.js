@@ -23,6 +23,9 @@ export function initModeration(store, s) {
     setBlocked(store, r.blocked);
     store.set({ muted: r.mute });
   }).catch(() => {});
+  // ¿Soy "Moderador de HUB"? (rol de Discord mapeado: puede moderar a miembros)
+  const loadMod = () => api.get('/mod/me').then((r) => store.set({ moderator: !!r.moderator && !r.admin })).catch(() => {});
+  s.on('connect', loadMod);
   s.on('connect', load);
 
   s.on('moderation:blocks', ({ blocked: list }) => setBlocked(store, list));
@@ -37,6 +40,14 @@ export function initModeration(store, s) {
     } else if (m.kind === 'unmute') {
       store.set({ muted: null });
       store.toast({ title: '🔊 Ya puedes volver a hablar y escribir.' });
+    } else if (m.kind === 'vmute') {
+      try { store.media?.setMic(false); } catch { /* sin micrófono */ }
+      store.toast({ title: `🎙️ Un moderador te quitó el micrófono ${fmtUntil(m.until)} (puedes seguir escribiendo).${why}`, kind: 'error', duration: 12e3 });
+    } else if (m.kind === 'unvmute') {
+      store.toast({ title: '🎙️ Ya puedes volver a usar el micrófono.' });
+    } else if (m.kind === 'move') {
+      try { store.media?.setMic(false); } catch { /* sin micrófono */ }
+      store.toast({ title: `↩️ Un moderador te sacó de la sala o llamada.${why}`, kind: 'error', duration: 10e3 });
     } else if (m.kind === 'kick') {
       store.kicked = true;
       store.toast({ title: `🚪 Un admin te sacó de la oficina. Podrás volver ${fmtUntil(m.until)}.${why}`, kind: 'error', duration: 120e3, action: { label: 'Volver a entrar', run: () => window.location.reload() } });
@@ -49,6 +60,7 @@ export function initModeration(store, s) {
   s.on('connect_error', (e) => {
     if (e.message === 'kicked') store.toast({ title: '🚪 Te sacaron de la oficina hace poco. Intenta entrar de nuevo en unos minutos.', kind: 'error', duration: 15e3 });
     if (e.message === 'banned') window.location.reload();
+    if (e.message === 'ip-banned') store.toast({ title: '⛔ Tu conexión está bloqueada por un administrador. Si crees que es un error, habla con el equipo en Discord.', kind: 'error', duration: 60e3 });
     if (e.message === 'too-many-tabs') store.toast({ title: 'Tienes la oficina abierta en demasiadas pestañas. Cierra alguna.', kind: 'error', duration: 15e3 });
     if (e.message === 'too-many-connections') store.toast({ title: 'Demasiadas conexiones desde tu red. Intenta en un momento.', kind: 'error', duration: 15e3 });
   });

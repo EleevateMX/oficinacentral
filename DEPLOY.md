@@ -385,5 +385,25 @@ solo cuando pasan las pruebas de GitHub. El audio y video van por **LiveKit Clou
 5. Si usas Entrar con Discord, agrega en Discord Developer Portal → OAuth2 → Redirects:
    `https://TU-DOMINIO/api/auth/discord/callback`.
 
+### Bot de Discord en Render (opcional)
+
+En *Environment* agrega (todas son opcionales; sin las dos primeras no pasa nada):
+
+| Variable | Qué poner |
+|---|---|
+| `DISCORD_BOT_TOKEN` | Developer Portal → tu app → **Bot** → *Reset Token* |
+| `DISCORD_GUILD_ID` | ID del servidor (Discord → Modo desarrollador → clic derecho al servidor → *Copiar ID*) |
+| `DISCORD_PUBLIC_KEY` | Developer Portal → *General Information* → **Public Key** (para los botones de moderación) |
+| `DISCORD_GATEWAY` | `1` para roles al instante (activa antes **Server Members Intent** en *Bot → Privileged Gateway Intents*) |
+| `MOD_WEBHOOK_URL` | Webhook de un canal privado del equipo, por si no usas bot (reportes sin botones) |
+
+1. Invita el bot con scope `bot` y los permisos Ver canales, Enviar mensajes, Insertar enlaces, Leer el historial y Gestionar mensajes
+   (Gestionar canales es opcional, solo para cambiar el tema de un canal):
+   `https://discord.com/oauth2/authorize?client_id=TU_CLIENT_ID&scope=bot&permissions=2251799813778448`
+2. Con `DISCORD_PUBLIC_KEY` puesta y el servicio ya desplegado, en *General Information → Interactions Endpoint URL* pon
+   `https://TU-DOMINIO/api/discord/interactions` y guarda (Discord manda una prueba firmada; si falla, revisa la llave y `PUBLIC_URL`).
+3. Entra a **Preferencias → Discord**: mapea roles, elige el canal de cada aviso y usa "Personalizar canal".
+   El token nunca se muestra en la app ni en los registros.
+
 Notas: el plan con disco no puede tener varias instancias y cada actualización tiene unos segundos sin servicio (normal con SQLite).
 El contenedor arranca como root solo para darle el disco al usuario `node` (`server/launch.js`) y luego baja privilegios.

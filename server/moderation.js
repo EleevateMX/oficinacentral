@@ -4,6 +4,8 @@
 import { db, now } from './db.js';
 import { audit, originAllowed, requestHost } from './security.js';
 import { guardSocket, admitSocket, trackSocketIp, socketIp } from './ratelimit.js';
+import { isIpBanned, recordUserIp } from './ipBans.js'; // baneo por IP (hash con sal)
+import { hubEmit } from './hubEvents.js'; // avisos al canal de moderación de Discord
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS sanctions (
@@ -60,6 +62,9 @@ export const muteOf = (uid) => active(uid, 'mute');
 export const banOf = (uid) => active(uid, 'ban');
 export const isMuted = (uid) => !!muteOf(uid);
 export const isBanned = (uid) => !!banOf(uid);
+// Silencio solo de voz (el chat sigue): sin micrófono ni señalización WebRTC. LiveKit también lo consulta.
+export const vmuteOf = (uid) => active(uid, 'vmute');
+export const isVoiceMuted = (uid) => !!vmuteOf(uid) || isMuted(uid);
 
 const sanctionOut = (r) => r && ({ id: r.id, userId: r.user_id, kind: r.kind, until: r.until, permanent: r.until == null, reason: r.reason, byId: r.by_id, createdAt: r.created_at });
 
@@ -171,6 +176,9 @@ export function socketGate(userId, { notify = null } = {}) {
         return false;
       }
       if (event === 'state' && m && typeof m === 'object' && m.mic === true) m.mic = false;
+    } else if (vmuteOf(userId)) {
+      if (event === 'rtc' || event === 'notes:segment') return false;
+      if (event === 'state' && m && typeof m === 'object' && m.mic === true) { m.mic = false; tell('🔇 Un admin te silenció en voz. Puedes seguir escribiendo en el chat.'); }
     }
     const k = TARGET_KEY[event];
     if (k && m && typeof m === 'object') {
@@ -190,9 +198,11 @@ export function socketAdmission(socket, user, userSockets) {
   if (isBanned(user.id)) return 'banned';
   if (kickUntil(user.id)) return 'kicked';
   const ip = socketIp(socket);
+  if (user.role !== 'admin' && isIpBanned(ip)) return 'ip-banned';
   const why = admitSocket(ip, userSockets);
   if (why) return why;
   socket.data.ip = ip;
+  recordUserIp(user.id, ip);
   return null;
 }
 
@@ -261,6 +271,7 @@ export function registerModerationRoutes(api, admin, deps) {
       .run(req.user.id, t.id, messageId, reason, text, snapshot, now()).lastInsertRowid);
     const row = reportOut(db.prepare('SELECT * FROM reports WHERE id = ?').get(id));
     emitToAdmins('moderation:report', row);
+    hubEmit('mod:report', { ...row, reporterName: req.user.display_name, targetName: t.display_name });
     alert?.(`🚩 Reporte: ${t.display_name}`, `${REPORT_REASONS[reason]} — reportado por ${req.user.display_name}${text ? `\n${text}` : ''}`, { level: 'warn', key: `report:${id}` });
     res.json({ ok: true, id });
   }));
@@ -301,7 +312,10 @@ export function registerModerationRoutes(api, admin, deps) {
     const minutes = rawMin == null || rawMin === '' ? null : Number(rawMin);
     if (minutes != null && (!Number.isFinite(minutes) || minutes < 1 || minutes > 525600)) return fail(res, 400, 'Duración inválida');
     const who = t.display_name;
-    const log = (text, data) => audit({ actor: req.user.id, action: text, target: `user:${t.id}`, data: { reason, minutes, ...data }, ip: req.ip });
+    const log = (text, data) => {
+      audit({ actor: req.user.id, action: text, target: `user:${t.id}`, data: { reason, minutes, ...data }, ip: req.ip });
+      hubEmit('mod:sanction', { text, actorName: req.user.display_name, targetId: t.id, targetName: who, reason });
+    };
     if (action === 'mute') {
       const m = addSanction(t.id, 'mute', { minutes: minutes ?? 60, reason, by: req.user.id });
       log(`Silenció a ${who} ${durLabel(minutes ?? 60)}${reason ? ` (${reason})` : ''}`);

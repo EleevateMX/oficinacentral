@@ -30,11 +30,16 @@ import { getIO } from './realtime.js';
 import { restRateLimit, perUser } from './ratelimit.js';
 import * as mod from './moderation.js'; // silenciar, sacar, suspender, bloquear y reportes
 import * as voice from './voiceGate.js'; // quién puede tener voz con quién (llamadas, LiveKit)
+import { ipBanGate } from './ipBans.js'; // baneo por IP
+import { registerModActionRoutes } from './modActions.js'; // silenciar voz, sacar de la sala, banear + IP
+import { registerDiscordBotRoutes, isModerator } from './discordBot.js'; // bot de Discord (opcional)
+import { hubEmit } from './hubEvents.js';
 
 export const api = express.Router();
 api.use(restRateLimit); // tope de peticiones por sesión o IP (server/ratelimit.js)
 api.use(sec.checkOrigin); // escrituras solo desde la propia oficina (CSRF)
 api.use(express.json({ limit: '1mb' }));
+api.use(ipBanGate); // IP bloqueada: no entra, no se registra, no acepta invitaciones (server/ipBans.js)
 
 // ---------- Utilidades ----------
 const wrap = (fn) => (req, res, next) => {
@@ -247,6 +252,7 @@ function finishLogin(req, res, u) {
   const token = createSession(u.id);
   res.setHeader('Set-Cookie', sessionCookie(token));
   res.json({ user: publicUser(u, u) });
+  hubEmit('user:login', { userId: u.id }); // roles de Discord
 }
 
 api.post('/auth/2fa', wrap((req, res) => {
@@ -325,6 +331,7 @@ api.post('/invites/:token/accept', wrap((req, res) => {
   res.setHeader('Set-Cookie', sessionCookie(token));
   broadcastUser(userId);
   res.json({ user: publicUser(getUser(userId), { id: userId }) });
+  hubEmit('member:joined', { userId }); // bienvenida en Discord
 }));
 
 // Todo lo de abajo requiere sesión
@@ -348,11 +355,11 @@ function livekitToken(user) {
     sub: String(user.id),
     name: user.display_name,
     nbf: nowS - 10,
-    exp: nowS + (mod.isMuted(user.id) ? 3600 : 6 * 3600),
+    exp: nowS + (mod.isVoiceMuted(user.id) ? 3600 : 6 * 3600),
     video: {
       room: voice.lkIssue(user.id), roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false,
       // Silenciado por un admin: puede ver y oír, pero no publicar micrófono
-      ...(mod.isMuted(user.id) ? { canPublishSources: ['camera', 'screen_share'] } : {}),
+      ...(mod.isVoiceMuted(user.id) ? { canPublishSources: ['camera', 'screen_share'] } : {}),
     },
   };
   const data = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
@@ -887,6 +894,8 @@ mod.registerModerationRoutes(api, admin, {
   fail, wrap, perUser, emitToUser, disconnectUser, destroyUserSessions, alert, onMute: voice.onMute,
   emitToAdmins: (ev, payload) => getIO()?.to('role:admin').emit(ev, payload),
 });
+registerModActionRoutes(api, admin, { fail, wrap, perUser, isModerator: (id) => isModerator(id) }); // /mod/:id, /admin/ipbans, /admin/ips/:id
+registerDiscordBotRoutes(api, admin, { fail, wrap, broadcastUser }); // /admin/discord…
 api.use('/admin', admin);
 registerAchievementRoutes(api);
 
@@ -1124,6 +1133,7 @@ api.post('/events', perUser('events', 20, 3600e3, 'Creaste muchos eventos en est
   for (const a of e.attendees) if (a !== req.user.id) notify(a, 'event', req.user.id, { eventId: id, title: e.title, startsAt: e.startsAt });
   emitAll('events', {});
   res.json({ event: eventRow(db.prepare('SELECT * FROM events WHERE id = ?').get(id)) });
+  hubEmit('office:event', { id, ...e, createdBy: req.user.id }); // aviso en Discord
 }));
 
 api.patch('/events/:id', perUser('events-edit', 60, 3600e3), wrap((req, res) => {

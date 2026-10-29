@@ -7,6 +7,8 @@ import { db, now, tx } from './db.js';
 import { isBanned } from './moderation.js';
 import { createSession, sessionCookie, hashPassword, defaultAvatar, randomToken, parseCookies } from './auth.js';
 import { newLoginTicket, audit } from './security.js';
+import { hubEmit } from './hubEvents.js';
+import { guildGateAllows } from './discordBot.js'; // "solo miembros del Discord" (opcional)
 
 const API = () => process.env.DISCORD_API_BASE || 'https://discord.com/api';
 const AUTHORIZE = () => process.env.DISCORD_AUTHORIZE_URL || 'https://discord.com/oauth2/authorize';
@@ -133,6 +135,7 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
       db.prepare('UPDATE users SET discord_id = ?, discord_name = ? WHERE id = ?').run(did, dname, st.userId);
       audit({ actor: st.userId, action: `Vinculó su cuenta de Discord (${dname})`, ip: req.ip });
       broadcastUser(st.userId);
+      hubEmit('user:linked', { userId: st.userId });
       return { query: { discord: 'linked' } };
     }
 
@@ -149,6 +152,7 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
         return uid;
       });
       broadcastUser(id);
+      hubEmit('member:joined', { userId: id });
       return { query: { discord: 'welcome' }, session: id };
     }
 
@@ -157,6 +161,7 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
     if (linked.disabled || isBanned(linked.id)) return { query: { discord: 'disabled' } };
     if (linked.totp_enabled) return { query: { login2fa: newLoginTicket(linked.id) } };
     if (linked.role === 'admin') audit({ actor: linked.id, action: 'Inició sesión con Discord (admin)', ip: req.ip });
+    hubEmit('user:login', { userId: linked.id });
     return { query: { discord: 'ok' }, session: linked.id };
   }
 
@@ -176,6 +181,11 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
       console.error('Discord:', e.message);
       if (ho) Object.assign(ho, { ready: true, result: { query: { discord: 'error' } } });
       return cookieOk ? back(res, { discord: 'error' }) : page(res, 'Error', '<h1>No se pudo conectar con Discord</h1><p>Vuelve a la app e inténtalo de nuevo.</p>');
+    }
+    // Opcional: solo miembros del servidor de Discord entran o se registran
+    if (st.mode !== 'link' && !(await guildGateAllows(profile.id))) {
+      if (ho) Object.assign(ho, { ready: true, result: { query: { discord: 'notmember' } } });
+      return cookieOk ? back(res, { discord: 'notmember' }) : page(res, 'Sin acceso', '<h1>Solo miembros del Discord</h1><p>Únete al servidor de Discord de la comunidad y vuelve a intentarlo.</p>');
     }
 
     if (cookieOk) {

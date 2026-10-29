@@ -94,6 +94,12 @@ export function openFromUrl(href) {
   else if (view === 'birthdays') office.set({ modal: { type: 'birthdays' } });
   else if (view === 'achievements') office.set({ modal: { type: 'achievements' } });
   else if (view === 'santa') office.set({ modal: { type: 'santa' } });
+  else if (view === 'moderation' && office.state.me?.role === 'admin') office.set({ modal: { type: 'prefs', section: 'moderation' } }); // desde Discord
+  else if (view === 'hotel') { // "Ir a la sala" desde Discord
+    const room = Number(url.searchParams.get('room'));
+    if (room > 0) import('../hotel/social/socialStore.js').then((m) => m.social.goRoom(room)).catch(() => office.set({ view: 'hotel' }));
+    else office.set({ view: 'hotel' });
+  }
 }
 
 // Se llama cuando la oficina ya cargó

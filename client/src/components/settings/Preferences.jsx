@@ -20,9 +20,10 @@ import { OfficeMark, ByNuvora } from '../brand.jsx';
 import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
 import { AnniversarySettings } from '../SeasonExtras.jsx';
 import EconomyAdmin from '../../hotel/economy/EconomyAdmin.jsx'; // Hotel: créditos HUB y códigos
-import { Coins, Award, Gavel } from 'lucide-react';
+import { Coins, Award, Gavel, Bot } from 'lucide-react';
 import BadgesAdmin from '../badges/BadgesAdmin.jsx'; // placas
 import { ModerationAdmin } from '../Moderation.jsx';
+import DiscordAdmin from './DiscordAdmin.jsx'; // bot de Discord: roles, avisos y canal
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -48,6 +49,7 @@ const SECTIONS = [
   { id: 'stats', label: 'Estadísticas', icon: BarChart3, admin: true },
   { id: 'hotel-economy', label: 'Créditos HUB', icon: Coins, admin: true },
   { id: 'badges', label: 'Placas', icon: Award, admin: true },
+  { id: 'discord', label: 'Discord', icon: Bot, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -101,6 +103,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'stats' && <StatsAdmin />}
             {cur === 'hotel-economy' && <EconomyAdmin />}
             {cur === 'badges' && <BadgesAdmin />}
+            {cur === 'discord' && <DiscordAdmin />}
           </div>
         </section>
       </div>

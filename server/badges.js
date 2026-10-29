@@ -9,6 +9,7 @@
 import { db, now } from './db.js';
 import { emitAll, emitToUser } from './realtime.js';
 import { audit } from './security.js';
+import { hubEmit } from './hubEvents.js'; // avisos a Discord
 import {
   BADGE_BY_ID, MAX_WORN, isFanBadge, isGrantable, cleanArt, NAME_MAX, DESC_MAX, PLATFORM_BY_ID,
   STREAM_BADGE_FOR, parseChannel, LIVE_HOURS,
@@ -137,6 +138,7 @@ export function giveBadge(uid, badgeId, { by = null, source = 'grant', note = ''
   const worn = wornIds(uid);
   if (worn.length < MAX_WORN && source !== 'claim') setWorn(uid, [...worn, badgeId]);
   if (!quiet) notifyFn(uid, 'badge', by, { id: badgeId, name: badgeName(badgeId), source, note: String(note || '').slice(0, 140) });
+  if (source !== 'claim' && source !== 'discord') hubEmit('badge:earned', { userId: uid, id: badgeId, name: badgeName(badgeId) });
   emitToUser(uid, 'badges:mine', { userId: uid });
   return true;
 }
@@ -258,6 +260,7 @@ export function registerBadgeRoutes(api, { fail, notify, requireAdmin, wrap }) {
     const live = liveOf(uid, at);
     emitAll('badges:live', { userId: uid, live });
     // Aviso opcional: a toda la oficina o solo a tus amigos del Hotel (una vez por transmisión)
+    if (!was || was.platform !== platform) hubEmit('streamer:live', { userId: uid, platform, url: live.url, name: userName(uid) });
     const announce = ['office', 'friends'].includes(req.body?.announce) ? req.body.announce : null;
     if (announce && (!was || was.platform !== platform)) {
       const msg = { userId: uid, platform, url: live.url, name: userName(uid) };
