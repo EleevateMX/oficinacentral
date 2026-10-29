@@ -1,3 +1,4 @@
+import { getMedia } from './getMedia.js';
 import { openMic } from './noise.js';
 
 // Calidad de pantalla compartida
@@ -101,12 +102,10 @@ export class MediaManager extends EventTarget {
   async setCam(on) {
     if (on && !this.videoTrack) {
       const hd = this.settings.hd;
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: hd ? 1280 : 640 }, height: { ideal: hd ? 720 : 360 }, frameRate: { ideal: 24 },
-          ...(this.settings.camId ? { deviceId: { exact: this.settings.camId } } : {}),
-        },
-      });
+      const s = await getMedia('video', (id) => ({
+        width: { ideal: hd ? 1280 : 640 }, height: { ideal: hd ? 720 : 360 }, frameRate: { ideal: 24 },
+        ...(id ? { deviceId: { exact: id } } : {}),
+      }), this.settings.camId);
       this.videoTrack = s.getVideoTracks()[0];
       this.localStream.addTrack(this.videoTrack);
     } else if (!on && this.videoTrack) {

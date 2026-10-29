@@ -4,10 +4,11 @@
 // suscribe cada persona: voz y cámara de quien está en tu sala, y solo las
 // pantallas que eligiste ver.
 import {
-  Room, RoomEvent, Track, VideoPreset, LocalAudioTrack, LocalVideoTrack, createLocalVideoTrack,
+  Room, RoomEvent, Track, VideoPreset, LocalAudioTrack, LocalVideoTrack,
 } from 'livekit-client';
 import { SCREEN_PRESETS } from './media.js';
 import { openMic } from './noise.js';
+import { getMedia } from './getMedia.js';
 
 const MIC = Track.Source.Microphone;
 const CAM = Track.Source.Camera;
@@ -202,10 +203,11 @@ export class LiveKitManager extends EventTarget {
   async setCam(on) {
     if (on && !this.videoTrack) {
       const hd = this.settings.hd;
-      this.videoTrack = await createLocalVideoTrack({
-        resolution: { width: hd ? 1280 : 640, height: hd ? 720 : 360, frameRate: 24 },
-        ...(this.settings.camId ? { deviceId: { exact: this.settings.camId } } : {}),
-      });
+      const s = await getMedia('video', (id) => ({
+        width: { ideal: hd ? 1280 : 640 }, height: { ideal: hd ? 720 : 360 }, frameRate: { ideal: 24 },
+        ...(id ? { deviceId: { exact: id } } : {}),
+      }), this.settings.camId);
+      this.videoTrack = new LocalVideoTrack(s.getVideoTracks()[0], undefined, true);
       await this.publish(this.videoTrack, { source: CAM, simulcast: true });
     } else if (!on && this.videoTrack) {
       const t = this.videoTrack;

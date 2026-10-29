@@ -6,6 +6,7 @@ import {
   X, Palette, Smile, Upload, Download, Settings, Calendar, Mic, Video, Users, Bell, Shield, Zap, KeyRound, UserCog, Mail, Building2, Copy, Check, Ban, RotateCcw, Volume2, Music, MessageSquareHeart, BarChart3,
 } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
+import { getMedia } from '../../lib/getMedia.js';
 import { api } from '../../lib/api.js';
 import DiscordButton from '../DiscordButton.jsx';
 import { listDevices } from '../../lib/media.js';
@@ -235,7 +236,7 @@ function CamPreview({ camId, hd }) {
   useEffect(() => {
     let stream;
     let alive = true;
-    navigator.mediaDevices?.getUserMedia({ video: { width: hd ? 1280 : 640, height: hd ? 720 : 360, ...(camId ? { deviceId: { exact: camId } } : {}) } })
+    getMedia('video', (id) => ({ width: { ideal: hd ? 1280 : 640 }, height: { ideal: hd ? 720 : 360 }, ...(id ? { deviceId: { exact: id } } : {}) }), camId)
       .then((s) => { if (!alive) { s.getTracks().forEach((t) => t.stop()); return; } stream = s; if (ref.current) ref.current.srcObject = s; })
       .catch((e) => setErr(e.name === 'NotAllowedError' ? 'Permiso de cámara denegado' : 'No hay cámara disponible'));
     return () => { alive = false; stream?.getTracks().forEach((t) => t.stop()); };
