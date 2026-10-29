@@ -1,7 +1,7 @@
 // Simulación de "Zombies en la oficina". La corre el anfitrión (asiento 0) con paso fijo;
 // el invitado solo manda su posición, sus disparos y sus compras. Sin DOM ni three.js.
 import {
-  ZOMBIE_TYPES, ZOMBIE_TYPE_IDS, BOSSES, BOSS_ORDER, WEAPONS, SHOP, upgradeCost, DROPS, CELL, TILE_M, EYE_H, PLAYER_R,
+  ZOMBIE_TYPES, ZOMBIE_TYPE_IDS, BOSSES, BOSS_ORDER, WEAPONS, SHOP, upgradeCost, DROPS, CELL, TILE_M, EYE_H, WALL_H, PLAYER_R,
   waveSpec, waveRoster, distanceField, moveCircle, rayCast, lineOfSight, killPoints, cellAt,
 } from '../../../../shared/zombies.js';
 

@@ -10,10 +10,10 @@ import * as THREE from 'three';
 import { office } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
 import { composeFloor } from '@shared/map.js';
-import { buildLevel, WEAPONS, TILE_M, EYE_H, SHOP, CELL, BOSSES, cellAt, isBossWave } from '@shared/zombies.js';
+import { buildLevel, WEAPONS, TILE_M, EYE_H, SHOP, CELL, BOSSES, cellAt, isBossWave, DROPS } from '@shared/zombies.js';
 import * as sim from './sim.js';
 import { buildWorld } from './world.js';
-import { Horde, bossModel, animateBoss, rememberBossMaterials, voxelAvatar, animateAvatar, weaponModel, armsModel } from './models.js';
+import { GEO, mat, Horde, bossModel, animateBoss, rememberBossMaterials, voxelAvatar, animateAvatar, weaponModel, armsModel } from './models.js';
 import { Particles, Splats, Rings, Tracers, Projectiles, Pickups, flashSprite } from './fx.js';
 import { Hud } from './hud.js';
 import { ZMenu } from './menu.js';
@@ -604,6 +604,7 @@ export function create(canvas, ctx) {
     renderer.shadowMap.enabled = q === 'alta';
     scene.fog.near = q === 'alta' ? 9 : 6; scene.fog.far = q === 'alta' ? 40 : 28;
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
+    warmed = false; // se vuelve a preparar con la calidad nueva
     fit();
   }
   function uiAction(id) {
@@ -951,6 +952,37 @@ export function create(canvas, ctx) {
       muzzle.scale.setScalar(wIdx === 1 ? 0.45 : 0.26);
     }
     vmFlashLight.intensity = flashT > 0 ? 6 : 0;
+    if (!warmed && fx.particles) warmUp();
+  }
+
+  // Prepara de una vez todo lo que aparece al disparar (destello, trazos, partículas, golpe blanco,
+  // proyectiles, botín y las 3 armas). Si no, la tarjeta de video lo prepara la primera vez que sale
+  // y el juego se congela un momento justo al disparar.
+  let warmed = false;
+  function warmUp() {
+    warmed = true;
+    const tmp = [];
+    try {
+      const at = new THREE.Vector3(camera.position.x, 1, camera.position.z - 2);
+      fx.particles.burst(at.x, at.y, at.z, 2, {}); fx.particles.update(0);
+      fx.tracers.add(at, at.clone().add(new THREE.Vector3(0, 0, -1)), 1); fx.tracers.update(0);
+      fx.rings.add(at.x, at.z);
+      fx.proj.update(sim.PROJ.map((kind, i) => ({ id: -1 - i, kind, x: at.x, z: at.z, h: 1 })), 0);
+      fx.drops.update(Object.keys(DROPS).map((kind, i) => ({ id: -1 - i, kind, x: at.x, z: at.z })), 0);
+      const white = new THREE.Mesh(GEO.box, mat('#ffffff')); white.position.copy(at); scene.add(white); tmp.push(white);
+      const shown = vm.weapons.map((w) => w.group.visible);
+      vm.weapons.forEach((w) => { w.group.visible = true; });
+      muzzle.visible = true;
+      renderer.compile(scene, camera);
+      renderer.compile(vmScene, vmCam);
+      vm.weapons.forEach((w, i) => { w.group.visible = shown[i]; });
+    } catch (e) { console.warn('Zombies: no se pudo precalentar', e); }
+    for (const o of tmp) scene.remove(o);
+    muzzle.visible = false;
+    fx.particles.p.length = 0; fx.particles.update(0);
+    fx.tracers.list.length = 0; fx.tracers.update(0);
+    fx.rings.update(99);
+    fx.proj.update([], 0); fx.drops.update([], 0);
   }
 
   function drawHud(dt, P, eye, eyeSeat, scr) {
@@ -998,7 +1030,7 @@ export function create(canvas, ctx) {
 
   // ---------- Pruebas automáticas (inofensivo en producción) ----------
   const debug = {
-    state: () => ({ phase: latestPhase(), wave: isHost && Sim ? Sim.wave : latest?.w || 0, left: isHost && Sim ? sim.remaining(Sim) : latest?.left, hp: myState()?.hp, alive: myAlive(), kills: myState()?.kills || 0, score: myState()?.earned || 0, pts: myState()?.pts, zombies: (isHost && Sim ? Sim.zombies : viewZombies).filter((z) => z.st !== 'dead').length, boss: (isHost && Sim ? (Sim.bossId && BOSSES[Sim.zombies.find((z) => z.id === Sim.bossId)?.boss]?.name) : viewBoss?.name) || null, seat: mySeat, host: isHost, players: room.seats.filter(Boolean).length, fps, frames, menu, shopOpen, screen: uiScreen(), lobby: lobbyNow(), ready: !!level, quality, x: me.x, y: me.y }),
+    state: () => ({ phase: latestPhase(), wave: isHost && Sim ? Sim.wave : latest?.w || 0, left: isHost && Sim ? sim.remaining(Sim) : latest?.left, hp: myState()?.hp, alive: myAlive(), kills: myState()?.kills || 0, score: myState()?.earned || 0, pts: myState()?.pts, zombies: (isHost && Sim ? Sim.zombies : viewZombies).filter((z) => z.st !== 'dead').length, boss: (isHost && Sim ? (Sim.bossId && BOSSES[Sim.zombies.find((z) => z.id === Sim.bossId)?.boss]?.name) : viewBoss?.name) || null, seat: mySeat, host: isHost, players: room.seats.filter(Boolean).length, fps, frames, menu, shopOpen, screen: uiScreen(), lobby: lobbyNow(), ready: !!level, quality, x: me.x, y: me.y, programs: renderer.info.programs?.length || 0, warmed }),
     // jugar ya: arranca la sala (si hace falta) y suelta el menú
     play: () => { if (isHost && lobby) startMatch(false); entered = true; menu = false; fresh = false; },
     start: () => startMatch(false),

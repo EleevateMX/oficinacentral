@@ -130,6 +130,24 @@ describe('simulación', () => {
   const f = floorOf('recreativo');
   const L = buildLevel(f, f.objects.find((o) => o.type === 'zombieArcade'));
 
+  test('un disparo que no le da a nadie pega en muro, techo o piso sin romperse', () => {
+    const S = sim.createSim(L, { seed: 5 });
+    const P = S.players[0];
+    // sin zombis: hacia el frente, hacia arriba (techo) y hacia abajo (piso), con las 3 armas
+    for (const p of [0, 1.2, -1.2]) {
+      for (const w of [0, 1, 2]) {
+        for (const r of sim.pellets(w, P.a, p, 7)) {
+          const t = sim.traceShot(L, [], { x: P.x, y: P.y, a: r.a, p: r.p });
+          assert.equal(t.hit, null);
+          assert.ok(Number.isFinite(t.d) && t.d >= 0, `distancia ${t.d}`);
+          assert.ok(t.h >= 0 && t.h <= WALL_H, `altura ${t.h}`);
+        }
+      }
+    }
+    P.owned = [true, true, true];
+    for (const w of [0, 1, 2]) assert.doesNotThrow(() => sim.fire(S, 0, { x: P.x, y: P.y, a: P.a, p: 0.9, w, seed: 11 }));
+  });
+
   test('intro, primera horda, disparos que matan y descanso con bono', () => {
     const S = sim.createSim(L, { seed: 3 });
     S.god = true;
