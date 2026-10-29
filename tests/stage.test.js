@@ -92,8 +92,8 @@ describe('escenario: fila de manos levantadas', () => {
     const [sa, sb, sc, sd] = await Promise.all([admin, ana, beto, caro].map(connect));
     try {
       const go = (s, p) => s.emit('move', { floorId: payload.id, ...p, dir: 'down', tp: true });
-      go(sa, { x: 75, y: 24 }); // ponente
-      go(sb, spot(90, 37)); go(sc, spot(62, 33)); go(sd, spot(70, 29));
+      go(sa, { x: 46, y: 25 }); // ponente
+      go(sb, spot(38, 28)); go(sc, spot(55, 28)); go(sd, spot(40, 41));
       await sleep(200);
 
       // El ponente no puede levantar la mano; el público sí, en orden
@@ -161,8 +161,8 @@ describe('escenario: fila de manos levantadas', () => {
     const f = composeFloor(payload);
     const [sd, se] = await Promise.all([dani, eli].map(connect));
     try {
-      sd.emit('move', { floorId: payload.id, x: 74, y: 24, dir: 'down', tp: true });
-      se.emit('move', { floorId: payload.id, ...nearestWalkable(f, 91, 33), dir: 'down', tp: true });
+      sd.emit('move', { floorId: payload.id, x: 47, y: 25, dir: 'down', tp: true });
+      se.emit('move', { floorId: payload.id, ...nearestWalkable(f, 54, 41), dir: 'down', tp: true });
       await sleep(200);
       const got = once(se, 'room-msg', (m) => m.from === dani.user.id);
       sd.emit('room-msg', { text: 'Bienvenidos a la junta' });

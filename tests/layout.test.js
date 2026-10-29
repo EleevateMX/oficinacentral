@@ -11,17 +11,19 @@ after(async () => { await srv?.stop(); });
 test('renovar el mapa conserva escritorio, departamento y decoración', async () => {
   const admin = await adminClient(srv.url);
   const ana = await createMember(srv.url, admin, 'Ana');
-  const floor = async () => { const p = (await admin.get('/floors/1')).data.floor; return { ...p, ...composeFloor(p) }; };
+  // Piso con la plantilla HQ (departamentos); la oficina principal es la recreativa
+  const id = (await admin.post('/floors', { name: 'HQ', template: 'hq' })).data.floor.id;
+  const floor = async () => { const p = (await admin.get(`/floors/${id}`)).data.floor; return { ...p, ...composeFloor(p) }; };
   const area = (f, o) => f.areas.find((a) => o.x >= a.x && o.y >= a.y && o.x < a.x + a.w && o.y < a.y + a.h)?.name;
   let f = await floor();
   const desk = f.desks.find((d) => area(f, d.object) === 'Marketing');
   assert.ok(desk, 'hay escritorios en Marketing');
   assert.equal((await ana.post(`/desks/${desk.id}/claim`)).status, 200);
-  const flag = await ana.post('/floors/1/objects', { type: 'deskFlag', x: desk.object.x + 0.25, y: desk.object.y + 0.25 });
+  const flag = await ana.post(`/floors/${id}/objects`, { type: 'deskFlag', x: desk.object.x + 0.25, y: desk.object.y + 0.25 });
   assert.equal(flag.status, 200);
 
-  assert.equal((await ana.post('/floors/1/reset-layout')).status, 403);
-  const r = await admin.post('/floors/1/reset-layout');
+  assert.equal((await ana.post(`/floors/${id}/reset-layout`)).status, 403);
+  const r = await admin.post(`/floors/${id}/reset-layout`);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.kept, 1);
 

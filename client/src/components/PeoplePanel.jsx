@@ -66,12 +66,13 @@ export default function PeoplePanel() {
         <button className="icon-btn" title="Ocultar panel" onClick={() => office.set({ sidebarCollapsed: true })}><PanelLeftClose size={18} /></button>
       </div>
       <div className="floor-pick">
-        <button className="link-btn" onClick={() => setFloorMenu(!floorMenu)}><Layers size={14} /> {floor?.name} <ChevronDown size={14} /></button>
+        <button className="link-btn" onClick={() => setFloorMenu(!floorMenu)}><Layers size={14} /> {floor?.name} {floors.find((f) => f.id === floor?.id)?.adminOnly && <Lock size={12} className="floor-lock-ico" />} <ChevronDown size={14} /></button>
         {floorMenu && (
           <div className="popover down left">
             {floors.map((f) => (
               <button key={f.id} className={`pop-item ${f.id === floor?.id ? 'on' : ''}`} onClick={() => { setFloorMenu(false); if (f.id !== floor?.id) office.changeFloor(f.id); }}>
-                {f.name}
+                <span className="floor-name">{f.name}</span>
+                {f.adminOnly && <span className="floor-lock" title="Archivado: solo lo ven los admins"><Lock size={11} /> Solo admins</span>}
               </button>
             ))}
           </div>

@@ -168,7 +168,7 @@ describe('rocola en tiempo real', () => {
     try {
       // Beto está lejos (recepción): no puede poner música
       b.emit('move', { floorId: 1, x: 40, y: 53, dir: 'down', tp: true });
-      a.emit('move', { floorId: 1, x: 70, y: 49, dir: 'down', tp: true });
+      a.emit('move', { floorId: 1, x: 70, y: 43, dir: 'down', tp: true });
       await wait(150);
       assert.match((await call(b, 'jukebox:add', { objectId: box.id, videoId: 'dQw4w9WgXcQ', title: 'X' })).error, /Acércate/);
       assert.match((await call(a, 'jukebox:add', { objectId: box.id, videoId: '../etc', title: 'X' })).error, /no es válido/);
@@ -187,7 +187,7 @@ describe('rocola en tiempo real', () => {
       const all = await call(b, 'jukebox:sync', {});
       assert.equal(all.all.find((x) => x.objectId === box.id)?.current.videoId, 'dQw4w9WgXcQ');
       // Beto entra a la zona, vota por saltar: con 2 oyentes hacen falta 2 votos
-      b.emit('move', { floorId: 1, x: 71, y: 49, dir: 'down', tp: true });
+      b.emit('move', { floorId: 1, x: 71, y: 43, dir: 'down', tp: true });
       await wait(150);
       await wait(2000); // límite de una canción cada 2 s
       assert.ok((await call(a, 'jukebox:add', { objectId: box.id, videoId: 'aaaaaaaaaaa', title: 'Dos' })).ok);

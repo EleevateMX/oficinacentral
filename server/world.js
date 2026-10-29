@@ -38,16 +38,18 @@ function rebuild(id) {
       .all(id).map((r) => [r.desk_id, r.owner_id]),
   );
   const state = composeFloor({ template: row.template, areas, objects });
-  const f = { id: row.id, name: row.name, template: row.template, sort: row.sort, state, claims };
+  const f = { id: row.id, name: row.name, template: row.template, sort: row.sort, adminOnly: !!row.admin_only, state, claims };
   floors.set(id, f);
   return f;
 }
 
-export function createFloor(name, template = 'open') {
+export function createFloor(name, template = 'open', { adminOnly = false, first = false } = {}) {
   if (!TEMPLATES[template]) throw new WorldError('Plantilla inválida');
   const id = tx(() => {
-    const sort = db.prepare('SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM floors').get().s;
-    const fid = Number(db.prepare('INSERT INTO floors (name, template, sort, created_at) VALUES (?, ?, ?, ?)').run(name, template, sort, now()).lastInsertRowid);
+    const sort = first
+      ? db.prepare('SELECT COALESCE(MIN(sort), 1) - 1 AS s FROM floors').get().s
+      : db.prepare('SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM floors').get().s;
+    const fid = Number(db.prepare('INSERT INTO floors (name, template, sort, admin_only, created_at) VALUES (?, ?, ?, ?, ?)').run(name, template, sort, adminOnly ? 1 : 0, now()).lastInsertRowid);
     const t = getTemplate(template);
     const insA = db.prepare('INSERT INTO areas (floor_id, name, x, y, w, h, color, private, shape) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     for (const a of t.areas) insA.run(fid, a.name, a.x, a.y, a.w, a.h, a.color, a.private ? 1 : 0, a.shape || 'soft');
@@ -56,13 +58,14 @@ export function createFloor(name, template = 'open') {
     return fid;
   });
   if (template === 'hq') furnishDesks(id);
+  if (template === 'recreativo') furnishDesks(id, { walls: false });
   return rebuild(id);
 }
 
 // Amuebla los escritorios de un piso: mamparas de cubículo y un equipo básico
 // (monitor y teclado) en los que no tienen decoración. No toca lo ya decorado.
 const DEPT_WALLS = { glassDesk: '#b9a7e6', gamingDesk: '#8fc9bb', standingDesk: '#f0a7a0', desk: '#a9b9d6', woodDesk: null };
-export function furnishDesks(floorId) {
+export function furnishDesks(floorId, { walls = true } = {}) {
   const desks = db.prepare(`SELECT * FROM objects WHERE floor_id = ? AND type IN (${DESK_TYPES.map(() => '?').join(',')})`).all(floorId, ...DESK_TYPES);
   const hasWalls = db.prepare("SELECT 1 FROM objects WHERE floor_id = ? AND type = 'cubicleWalls' AND x = ? AND y = ?");
   const hasDecor = db.prepare('SELECT 1 FROM objects WHERE desk_id = ?');
@@ -71,7 +74,7 @@ export function furnishDesks(floorId) {
   tx(() => {
     for (const d of desks) {
       const wall = DEPT_WALLS[d.type];
-      if (wall !== null && !hasWalls.get(floorId, d.x, d.y)) { ins.run(floorId, 'cubicleWalls', d.x, d.y, wall ?? null, null, now()); n++; }
+      if (walls && wall !== null && !hasWalls.get(floorId, d.x, d.y)) { ins.run(floorId, 'cubicleWalls', d.x, d.y, wall ?? null, null, now()); n++; }
       if (!hasDecor.get(d.id)) {
         const dual = (d.x + d.y) % 2 === 0;
         ins.run(floorId, dual ? 'dualMonitor' : 'monitor', d.x + (dual ? 0.75 : 1.125), d.y, null, d.id, now());
@@ -85,7 +88,7 @@ export function furnishDesks(floorId) {
 
 export function loadWorld() {
   const rows = db.prepare('SELECT id FROM floors ORDER BY sort, id').all();
-  if (!rows.length) { createFloor('Piso 1', 'hq'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1']) setSetting(k, '1'); return; }
+  if (!rows.length) { createFloor('Oficina', 'recreativo'); for (const k of ['migr_cubicles_v1', 'migr_reception_v1', 'migr_reception_center_v1', 'migr_flags_v1', 'migr_stage_v1', 'migr_jukebox_v1', 'migr_hotel_elevator_v1', 'migr_recreativo_v1']) setSetting(k, '1'); return; }
   // Una vez: mamparas y equipo en los escritorios de oficinas ya creadas
   if (!getSetting('migr_cubicles_v1')) {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) furnishDesks(r.id);
@@ -124,7 +127,22 @@ export function loadWorld() {
     for (const r of db.prepare("SELECT id FROM floors WHERE template = 'hq'").all()) addHotelElevator(r.id);
     setSetting('migr_hotel_elevator_v1', '1');
   }
-  for (const r of rows) rebuild(r.id);
+  // Una vez: el mapa nuevo (recreativo) pasa a ser la oficina principal y el HQ se archiva (solo admins)
+  if (!getSetting('migr_recreativo_v1')) migrateRecreativo();
+  for (const r of db.prepare('SELECT id FROM floors ORDER BY sort, id').all()) rebuild(r.id);
+}
+
+// Crea la "Oficina" con la plantilla recreativa como primer piso y deja los pisos HQ
+// guardados como archivo que solo ven los admins (con sus escritorios y objetos intactos).
+export function migrateRecreativo() {
+  const exists = db.prepare("SELECT id FROM floors WHERE template = 'recreativo' ORDER BY id LIMIT 1").get();
+  if (!exists) createFloor('Oficina', 'recreativo', { first: true });
+  tx(() => {
+    const hq = db.prepare("SELECT id, name FROM floors WHERE template = 'hq' AND admin_only = 0 ORDER BY sort, id").all();
+    const upd = db.prepare('UPDATE floors SET admin_only = 1, name = ? WHERE id = ?');
+    hq.forEach((r, i) => upd.run(i === 0 ? 'Oficina HQ (archivo)' : `Oficina HQ ${i + 1} (archivo)`, r.id));
+    setSetting('migr_recreativo_v1', '1');
+  });
 }
 
 function addHotelElevator(floorId) {
@@ -238,6 +256,7 @@ export function resetFloorLayout(floorId) {
     }
   });
   if (f.template === 'hq') furnishDesks(floorId);
+  if (f.template === 'recreativo') furnishDesks(floorId, { walls: false });
   return { floor: rebuild(floorId), kept: saved.length, moved };
 }
 
@@ -245,12 +264,36 @@ export function getFloor(id) {
   return floors.get(Number(id)) || null;
 }
 
-export function listFloors() {
-  return [...floors.values()].sort((a, b) => a.sort - b.sort || a.id - b.id).map((f) => ({ id: f.id, name: f.name, template: f.template }));
+// Pisos que ve una persona: los "solo admins" (archivo) no aparecen para los demás.
+// Sin usuario: todos (uso interno del servidor).
+export const isAdminUser = (user) => user?.role === 'admin';
+export function canSeeFloor(user, id) {
+  const f = getFloor(id);
+  return !!f && (!f.adminOnly || isAdminUser(user));
+}
+export function isFloorAdminOnly(id) {
+  return !!getFloor(id)?.adminOnly;
 }
 
+export function listFloors(user = null) {
+  return [...floors.values()]
+    .filter((f) => !user || !f.adminOnly || isAdminUser(user))
+    .sort((a, b) => a.sort - b.sort || a.id - b.id)
+    .map((f) => ({ id: f.id, name: f.name, template: f.template, adminOnly: f.adminOnly }));
+}
+
+// Piso por defecto (spawn): el primero que ven todos
 export function defaultFloorId() {
-  return listFloors()[0]?.id;
+  const all = listFloors();
+  return (all.find((f) => !f.adminOnly) || all[0])?.id;
+}
+
+export function setFloorAdminOnly(id, on) {
+  const f = getFloor(id);
+  if (!f) throw new WorldError('Piso no encontrado', 404);
+  if (on && !listFloors().some((x) => x.id !== f.id && !x.adminOnly)) throw new WorldError('Debe quedar al menos un piso visible para todos');
+  db.prepare('UPDATE floors SET admin_only = ? WHERE id = ?').run(on ? 1 : 0, f.id);
+  return rebuild(f.id);
 }
 
 // Salas cerradas en este momento (en memoria: al reiniciar el servidor se abren)
@@ -271,7 +314,7 @@ export function floorPayload(id) {
   const f = getFloor(id);
   if (!f) return null;
   return {
-    id: f.id, name: f.name, template: f.template,
+    id: f.id, name: f.name, template: f.template, adminOnly: f.adminOnly,
     areas: f.state.areas, objects: f.state.objects,
     claims: Object.fromEntries(f.claims),
   };
@@ -286,6 +329,7 @@ export function renameFloor(id, name) {
 export function deleteFloor(id) {
   if (!getFloor(id)) throw new WorldError('Piso no encontrado', 404);
   if (floors.size <= 1) throw new WorldError('No puedes borrar el único piso');
+  if (!getFloor(id).adminOnly && !listFloors().some((x) => x.id !== Number(id) && !x.adminOnly)) throw new WorldError('Debe quedar al menos un piso visible para todos');
   db.prepare('DELETE FROM floors WHERE id = ?').run(id);
   floors.delete(Number(id));
 }
@@ -304,9 +348,10 @@ function findDesk(deskId) {
   return null;
 }
 
-export function claimDesk(userId, deskId) {
+export function claimDesk(userId, deskId, user = null) {
   const found = findDesk(deskId);
   if (!found) throw new WorldError('Escritorio no encontrado', 404);
+  if (user && found.floor.adminOnly && !isAdminUser(user)) throw new WorldError('Escritorio no encontrado', 404);
   const owner = found.floor.claims.get(deskId);
   if (owner && owner !== userId) throw new WorldError('Ese escritorio ya tiene dueño');
   const prev = deskOf(userId);
@@ -494,6 +539,7 @@ function editRole(user, f, row) {
 }
 
 function assertCanEdit(user, f, row) {
+  if (f.adminOnly && !isAdminUser(user)) throw new WorldError('Objeto no encontrado', 404);
   const role = editRole(user, f, row);
   if (!role) throw new WorldError('Solo puedes editar tu escritorio, su decoración y lo que te toca de tu departamento', 403);
   return role;
@@ -592,6 +638,7 @@ export function styleArea(user, id, patch) {
   if (!row) throw new WorldError('Área no encontrada', 404);
   const f = getFloor(row.floor_id);
   const area = f.state.areas.find((a) => a.id === row.id);
+  if (f.adminOnly && !isAdminUser(user)) throw new WorldError('Área no encontrada', 404);
   if (user.role !== 'admin' && !isLeader(user, area)) throw new WorldError('Solo el líder del departamento puede cambiar esto', 403);
   const allowed = {};
   for (const k of ['color', 'shape', 'openDecor']) if (patch[k] !== undefined) allowed[k] = patch[k];

@@ -546,6 +546,7 @@ class Office {
     const target = this.players[userId];
     this.set({ view: 'map', profileCard: null });
     if (!target) return this.toast({ title: 'Esa persona no está conectada' });
+    if (target.floorId == null) return this.toast({ title: 'Esa persona está en un piso al que no tienes acceso' });
     const me = this.myPlayer;
     if (target.floorId !== me.floorId) {
       await this.changeFloor(target.floorId, { x: target.x, y: target.y + 1 });

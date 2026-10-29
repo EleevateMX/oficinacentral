@@ -322,7 +322,10 @@ function DeptTab({ floor, me, depts }) {
 function FloorsTab({ floor }) {
   const floors = useOffice((s) => s.floors);
   const [name, setName] = useState('');
-  const [template, setTemplate] = useState('hq');
+  const [template, setTemplate] = useState('recreativo');
+  const setAdminOnly = (f, v) => api.patch(`/floors/${f.id}`, { adminOnly: v })
+    .then(() => office.toast({ title: v ? `🔒 "${f.name}" ahora solo lo ven los admins` : `"${f.name}" ya lo ven todos` }))
+    .catch((err) => office.toast({ title: err.message, kind: 'error' }));
 
   const add = async (e) => {
     e.preventDefault();
@@ -346,7 +349,7 @@ function FloorsTab({ floor }) {
               <input className="inline-input" defaultValue={f.name} onBlur={(e) => e.target.value.trim() && e.target.value !== f.name && api.patch(`/floors/${f.id}`, { name: e.target.value }).catch((err) => office.toast({ title: err.message, kind: 'error' }))} />
               <div className="row gap4">
                 {f.id !== floor.id && <button className="btn tiny" onClick={() => office.changeFloor(f.id)}>Ir</button>}
-                {f.template === 'hq' && (
+                {(f.template === 'hq' || f.template === 'recreativo') && (
                   <button className="btn tiny" title="Pone la distribución más nueva del mapa. Los escritorios reclamados se conservan con su decoración." onClick={async () => {
                     if (!confirm(`¿Renovar el mapa de "${f.name}"?\n\nSe pone la distribución más nueva. Cada persona conserva su escritorio (en su mismo departamento si existe) con su decoración. Los muebles que se hayan movido o agregado a mano vuelven a como vienen en el mapa.`)) return;
                     try {
@@ -362,6 +365,10 @@ function FloorsTab({ floor }) {
                 )}
               </div>
             </div>
+            <label className="row between floor-admin-only">
+              <span className="small"><Lock size={12} /> Solo admins <span className="muted">(archivado, oculto para los demás)</span></span>
+              <Toggle checked={!!f.adminOnly} onChange={(v) => setAdminOnly(f, v)} />
+            </label>
           </div>
         ))}
       </div>

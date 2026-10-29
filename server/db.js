@@ -177,6 +177,7 @@ addColumn('users', 'totp_recovery', 'TEXT');
 addColumn('users', 'shift_at', 'INTEGER');
 addColumn('events', 'area_id', 'INTEGER');
 addColumn('areas', 'open_decor', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('floors', 'admin_only', 'INTEGER NOT NULL DEFAULT 0'); // piso archivado: solo lo ven los admins
 addColumn('users', 'birthday', 'TEXT'); // 'MM-DD' (sin año, por privacidad)
 db.exec(`CREATE TABLE IF NOT EXISTS birthday_wishes (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

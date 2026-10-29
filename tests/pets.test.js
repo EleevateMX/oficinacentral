@@ -61,12 +61,12 @@ test('mascotas: ánimo, validación, enfriamientos y alegría al llegar', async 
 
     // Acariciar requiere estar junto a la mascota
     const fid = a.hello.players[ana.user.id].floorId;
-    await moveTo(a, fid, 10, 10);
-    await moveTo(b, fid, 20, 20);
+    await moveTo(a, fid, 10, 22);
+    await moveTo(b, fid, 20, 30);
     const far = await act(b, { kind: 'pet', owner: ana.user.id });
     assert.equal(far.ok, false);
     assert.match(far.error, /Acércate/);
-    await moveTo(b, fid, 11, 10);
+    await moveTo(b, fid, 11, 22);
     const notified = once(a, 'pet:action', (m) => m.kind === 'pet' && m.by === beto.user.id);
     const petted = await act(b, { kind: 'pet', owner: ana.user.id });
     assert.equal(petted.ok, true);
@@ -81,11 +81,11 @@ test('mascotas: ánimo, validación, enfriamientos y alegría al llegar', async 
 
     // La pelota: quien está cerca puede lanzarla; cae a máximo 6 casillas
     const ball = once(a, 'pet:action', (m) => m.kind === 'ball');
-    assert.equal((await act(b, { kind: 'ball', owner: ana.user.id, x: 40, y: 10 })).ok, true);
+    assert.equal((await act(b, { kind: 'ball', owner: ana.user.id, x: 40, y: 22 })).ok, true);
     const bm = await ball;
     assert.equal(bm.fx, 11);
     assert.equal(bm.x, 17);
-    assert.equal(bm.y, 10);
+    assert.equal(bm.y, 22);
 
     // Trucos: solo la dueña
     assert.equal((await act(b, { kind: 'trick', owner: ana.user.id, trick: 'sit' })).ok, false);

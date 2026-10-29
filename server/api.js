@@ -6,7 +6,7 @@ import {
   parseCookies, sessionCookie, SESSION_COOKIE, loginRateLimited, clearLoginAttempts,
   validateNewAccount, defaultAvatar, randomToken,
 } from './auth.js';
-import { publicPresence, emitAll, emitToUser, presence, relocate, disconnectUser } from './realtime.js';
+import { presenceFor, emitAll, emitToUser, presence, relocate, disconnectUser, emitFloors, emitFloor, evictNonAdmins } from './realtime.js';
 import * as world from './world.js';
 import { alert } from './alerts.js';
 import * as sec from './security.js';
@@ -44,7 +44,8 @@ function parseJSON(s, fallback) {
   try { return JSON.parse(s); } catch { return fallback; }
 }
 
-export function publicUser(u) {
+// viewer: quien pide los datos (si no es admin, no ve a nadie dentro de un piso archivado)
+export function publicUser(u, viewer = null) {
   return {
     id: u.id,
     username: u.username,
@@ -64,7 +65,7 @@ export function publicUser(u) {
     disabled: !!u.disabled,
     lastActive: u.last_active,
     createdAt: u.created_at,
-    ...publicPresence(u.id),
+    ...presenceFor(u.id, viewer?.role === 'admin'),
   };
 }
 
@@ -76,8 +77,14 @@ function broadcastUser(id) {
 }
 
 function broadcastFloor(floorId) {
-  const payload = world.floorPayload(floorId);
-  if (payload) emitAll('floor', payload);
+  emitFloor(floorId); // los pisos archivados solo les llegan a los admins
+}
+
+// Piso que esta persona puede ver (los archivados, solo admins): si no, 404
+function visibleFloor(req, res, id) {
+  if (world.canSeeFloor(req.user, id)) return true;
+  fail(res, 404, 'Piso no encontrado');
+  return false;
 }
 
 function requireAuth(req, res, next) {
@@ -353,7 +360,7 @@ api.get('/ice', wrap(async (req, res) => {
 // ---------- Usuarios y perfil ----------
 api.get('/users', (req, res) => {
   const rows = db.prepare('SELECT * FROM users ORDER BY display_name COLLATE NOCASE').all();
-  res.json({ users: rows.map(publicUser) });
+  res.json({ users: rows.map((u) => publicUser(u, req.user)) });
 });
 
 function sendDataUrl(res, dataUrl) {
@@ -1137,9 +1144,10 @@ api.delete('/notices/:id', wrap((req, res) => {
 }));
 
 // ---------- Mundo: pisos, objetos, áreas, escritorios ----------
-api.get('/floors', (req, res) => res.json({ floors: world.listFloors() }));
+api.get('/floors', (req, res) => res.json({ floors: world.listFloors(req.user) }));
 
 api.get('/floors/:id', (req, res) => {
+  if (!visibleFloor(req, res, Number(req.params.id))) return;
   const p = world.floorPayload(Number(req.params.id));
   if (!p) return fail(res, 404, 'Piso no encontrado');
   res.json({ floor: p });
@@ -1147,16 +1155,25 @@ api.get('/floors/:id', (req, res) => {
 
 api.post('/floors', requireAdmin, wrap((req, res) => {
   const name = String(req.body?.name || '').trim().slice(0, 40) || `Piso ${world.listFloors().length + 1}`;
-  const f = world.createFloor(name, req.body?.template || 'open');
-  emitAll('floors', { floors: world.listFloors() });
+  const f = world.createFloor(name, req.body?.template || 'open', { adminOnly: !!req.body?.adminOnly });
+  emitFloors();
   res.json({ floor: world.floorPayload(f.id) });
 }));
 
 api.patch('/floors/:id', requireAdmin, wrap((req, res) => {
+  const id = Number(req.params.id);
+  const hasName = req.body?.name !== undefined;
   const name = String(req.body?.name || '').trim().slice(0, 40);
-  if (!name) return fail(res, 400, 'Nombre inválido');
-  world.renameFloor(Number(req.params.id), name);
-  emitAll('floors', { floors: world.listFloors() });
+  if (hasName && !name) return fail(res, 400, 'Nombre inválido');
+  if (!hasName && req.body?.adminOnly === undefined) return fail(res, 400, 'Nada que cambiar');
+  if (!world.getFloor(id)) return fail(res, 404, 'Piso no encontrado');
+  // Solo admins: el piso se archiva y quien no es admin sale a la entrada del piso principal
+  if (req.body?.adminOnly !== undefined) {
+    world.setFloorAdminOnly(id, !!req.body.adminOnly);
+    if (req.body.adminOnly) evictNonAdmins(id);
+  }
+  if (hasName) world.renameFloor(id, name);
+  emitFloors();
   res.json({ ok: true });
 }));
 
@@ -1175,7 +1192,7 @@ api.delete('/floors/:id', requireAdmin, wrap((req, res) => {
   const fallback = world.defaultFloorId();
   for (const [uid, p] of presence) if (p.floorId === id) relocate(uid, fallback);
   db.prepare('UPDATE users SET floor_id = NULL, pos_x = NULL, pos_y = NULL WHERE floor_id = ?').run(id);
-  emitAll('floors', { floors: world.listFloors() });
+  emitFloors();
   res.json({ ok: true });
 }));
 
@@ -1188,6 +1205,7 @@ function unstickPlayers(floorId) {
 
 api.post('/floors/:id/objects', wrap((req, res) => {
   const floorId = Number(req.params.id);
+  if (!visibleFloor(req, res, floorId)) return;
   const id = world.addObject(req.user, floorId, req.body || {});
   broadcastFloor(floorId);
   unstickPlayers(floorId);
@@ -1239,7 +1257,7 @@ api.delete('/areas/:id', requireAdmin, wrap((req, res) => {
 }));
 
 api.post('/desks/:id/claim', wrap((req, res) => {
-  const changed = world.claimDesk(req.user.id, Number(req.params.id));
+  const changed = world.claimDesk(req.user.id, Number(req.params.id), req.user);
   changed.forEach(broadcastFloor);
   res.json({ ok: true });
 }));
