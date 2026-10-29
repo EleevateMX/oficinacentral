@@ -12,7 +12,9 @@ import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes
 import { DANCES } from './emoteFx.js';
 import { bindNotes } from './notes.js';
 import { onAchievementNotification, forgetBadges } from './achievements.js';
+import { initBadges, onBadgeNotification } from './badges.js';
 import { initPetSocket } from './petFx.js';
+import { initModeration, hideMessage } from './moderation.js'; // bloqueos, silencio, expulsión y reportes
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -166,6 +168,7 @@ class Office {
     this.socket = s;
     initStageClient(this, s); // escenario: fila de manos levantadas
     initPetSocket(this, s); // mascotas interactivas
+    initModeration(this, s); // moderación
     s.on('connect', () => {
       this.set({ connected: true });
       s.emit('visibility', { hidden: document.visibilityState === 'hidden' }); // para las notificaciones push
@@ -345,6 +348,7 @@ class Office {
         this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
       } else if (n.type === 'achievement') onAchievementNotification(this, n);
+      else if (n.type === 'badge') onBadgeNotification(this, n); // placas
       else if (n.type === 'hotel_gift') this.toast({ title: n.data.text || '🎁 Te regalaron un furni', action: { label: 'Ver', run: () => this.set({ view: 'hotel' }) }, duration: 9000 }); // Hotel
       else if (n.type === 'santa') {
         this.toast({ title: n.data.text || '🎁 Amigo secreto', action: { label: 'Ver', run: () => this.set({ modal: { type: 'santa' } }) }, duration: 9000 });
@@ -352,6 +356,7 @@ class Office {
       }
     });
     s.on('achievement', (m) => forgetBadges(m.userId));
+    initBadges(this, s); // placas y "en vivo" (lib/badges.js)
   }
 
   applyMediaPrefs() {
@@ -743,6 +748,7 @@ class Office {
   }
 
   onMessage(m) {
+    if (hideMessage(m)) return; // de alguien que bloqueaste
     const meId = this.state.me.id;
     let conv = m.conv;
     if (m.dm) {

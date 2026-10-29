@@ -4,22 +4,18 @@
 import React, { useEffect, useState } from 'react';
 import { GiveHandButton } from '../MechPanels.jsx'; // C: dar lo que traes en la mano
 import { UserEconomyActions } from '../economy/CardActions.jsx'; // A: intercambiar, regalar, créditos
-import { X, Crown, Shield, ShieldOff, UserMinus, Ban, MessageCircle, Armchair, UserPlus, Check, ThumbsUp, Repeat, Mail, Pencil, Award, Clock } from 'lucide-react';
+import { X, Crown, Shield, ShieldOff, UserMinus, Ban, MessageCircle, Armchair, UserPlus, Check, ThumbsUp, Repeat, Mail, Pencil, Clock } from 'lucide-react';
 import { office, useOffice } from '../../lib/store.js';
 import { api } from '../../lib/api.js';
 import { Avatar } from '../../components/ui.jsx';
-import { ACHIEVEMENT_BY_ID, tierLabel } from '@shared/achievements.js';
-import { MOTTO_MAX, MAX_BADGES, RESPECTS_PER_DAY } from '@shared/hotelSocial.js';
+import { BadgeImg, HotelBadgeRow, LiveButton, LiveTag } from '../../components/badges/Badge.jsx'; // placas (server/badges.js)
+import { MOTTO_MAX, RESPECTS_PER_DAY } from '@shared/hotelSocial.js';
 import { hotel, useHotel } from '../hotelStore.js';
 import { social, useSocial, socialHooks } from './socialStore.js';
 
-const TIER_CLS = ['', 'bronze', 'silver', 'gold'];
-
-export function BadgeChip({ id, tier, size = 30 }) {
-  const a = ACHIEVEMENT_BY_ID[id];
-  if (!a) return null;
-  const lvl = tierLabel(a, tier);
-  return <span className={`ht-badge-chip ${TIER_CLS[a.tiers.length > 1 ? tier : 3]}`} style={{ '--bs': `${size}px` }} title={`${a.name}${lvl ? ` (${lvl})` : ''} · ${a.desc}`}>{a.emoji}</span>;
+// Una placa (pixel art 40×40, ver client/src/lib/badgeArt.js)
+export function BadgeChip({ id, tier, size = 40 }) {
+  return <BadgeImg id={id} tier={tier} size={size} />;
 }
 
 export default function PersonCard({ userId }) {
@@ -35,7 +31,6 @@ export default function PersonCard({ userId }) {
   const [prof, setProf] = useState(null);
   const [editing, setEditing] = useState(false);
   const [motto, setMotto] = useState('');
-  const [picking, setPicking] = useState(false);
   const [, bump] = useState(0);
   const U = hotel.live.users.get(userId);
   const me = userId === hotel.me;
@@ -79,7 +74,7 @@ export default function PersonCard({ userId }) {
       <div className="ht-card-top">
         <Avatar user={u} size={48} showStatus={false} />
         <div>
-          <b>{u.displayName}</b>
+          <b>{u.displayName} <LiveTag userId={userId} /></b>
           <span className="ht-muted">{target === 'owner' ? <><Crown size={11} /> Dueño de la sala</> : rights.includes(userId) ? <><Shield size={11} /> Con permisos</> : friend ? <><Check size={11} /> Tu amigo</> : 'En el Hotel'}</span>
           <span className="ht-respects" title="Respetos recibidos"><ThumbsUp size={12} /> {respects} {respects === 1 ? 'respeto' : 'respetos'}</span>
         </div>
@@ -94,14 +89,7 @@ export default function PersonCard({ userId }) {
           “{mottoNow || (me ? 'Escribe tu lema…' : 'Sin lema')}”{me && <Pencil size={11} />}
         </button>
       )}
-      {(badges.length > 0 || me) && (
-        <div className="ht-badges-row">
-          {badges.map((b) => <BadgeChip key={b.id} id={b.id} tier={b.tier} />)}
-          {Array.from({ length: Math.max(0, MAX_BADGES - badges.length) }).map((_, i) => <span key={`e${i}`} className="ht-badge-chip empty" />)}
-          {me && <button className="ht-link small" onClick={() => setPicking((p) => !p)}><Award size={12} /> {picking ? 'Listo' : 'Elegir'}</button>}
-        </div>
-      )}
-      {me && picking && prof && <BadgePicker prof={prof} onSaved={(list) => setProf({ ...prof, badges: list })} />}
+      {(badges.length > 0 || me) && <HotelBadgeRow userId={userId} badges={badges} me={me} onPick={() => office.set({ modal: { type: 'badges' } })} />}
       <div className="ht-card-actions">
         {me ? (
           <button className="ht-btn" onClick={() => s.emit('hotel:sit')}><Armchair size={14} /> {U.sit ? 'Pararse' : 'Sentarse'}</button>
@@ -117,6 +105,7 @@ export default function PersonCard({ userId }) {
             <UserEconomyActions userId={userId} />
             <GiveHandButton userId={userId} />
             <button className="ht-btn" onClick={() => office.set({ profileCard: userId })}>Perfil</button>
+            <LiveButton userId={userId} className="ht-btn" />
             {(isOwner || admin) && !room.official && target !== 'owner' && (rights.includes(userId)
               ? <button className="ht-btn" onClick={() => setRight(false)}><ShieldOff size={14} /> Quitar permisos</button>
               : <button className="ht-btn" onClick={() => setRight(true)}><Shield size={14} /> Dar permisos</button>)}
@@ -124,31 +113,6 @@ export default function PersonCard({ userId }) {
             {(isOwner || admin) && !target && <button className="ht-btn danger" onClick={() => { s.emit('hotel:kick', { userId, ban: true }); close(); }}><Ban size={14} /> Vetar</button>}
           </>
         )}
-      </div>
-    </div>
-  );
-}
-
-function BadgePicker({ prof, onSaved }) {
-  const earned = prof.earned || [];
-  const [sel, setSel] = useState(() => prof.badges.map((b) => b.id));
-  const save = async (list) => {
-    setSel(list);
-    try { const r = await api.patch('/hotel/social/profile', { badges: list }); onSaved(r.badges.map((id) => ({ id, tier: earned.find((e) => e.id === id)?.tier || 1 }))); } catch (e) { office.toast({ title: e.message, kind: 'error' }); }
-  };
-  if (!earned.length) return <p className="ht-muted small ht-badge-pick">Aún no ganas insignias. Se ganan con los logros de la oficina 🏅</p>;
-  return (
-    <div className="ht-badge-pick">
-      <small className="ht-muted">Elige hasta {MAX_BADGES} para mostrar ({sel.length}/{MAX_BADGES})</small>
-      <div className="ht-badge-grid">
-        {earned.map((b) => {
-          const on = sel.includes(b.id);
-          return (
-            <button key={b.id} className={`ht-badge-opt ${on ? 'on' : ''}`} disabled={!on && sel.length >= MAX_BADGES} onClick={() => save(on ? sel.filter((x) => x !== b.id) : [...sel, b.id])}>
-              <BadgeChip id={b.id} tier={b.tier} size={26} />
-            </button>
-          );
-        })}
       </div>
     </div>
   );

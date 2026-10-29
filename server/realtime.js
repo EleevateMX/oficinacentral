@@ -15,6 +15,7 @@ import { trackConnect, trackArea, trackDisconnect, bumpCounter } from './stats.j
 import { checkAchievements } from './achievements.js';
 import { initStage, initStageIO, stageCleanup } from './stage.js';
 import { initHotel, hotelCtx } from './hotel.js';
+import { socketShield, socketAdmission, hasBlocked } from './moderation.js'; // límites, moderación y conexiones
 
 let io = null;
 // userId -> { sockets:Set, floorId, x, y, dir, status, mic, cam, screen, connectedAt }
@@ -130,7 +131,8 @@ export function disconnectUser(userId) {
 }
 
 export function initRealtime(httpServer) {
-  io = new Server(httpServer, { maxHttpBufferSize: 1e6 });
+  // Tope por mensaje: lo más grande que manda la app es una oferta WebRTC o un trazo de pizarrón (~20 KB)
+  io = new Server(httpServer, { maxHttpBufferSize: Number(process.env.SOCKET_MAX_BYTES) || 200_000 });
   initStageIO(io, presence);
 
   io.use((socket, next) => {
@@ -138,11 +140,14 @@ export function initRealtime(httpServer) {
     const user = userFromToken(token);
     if (!user) return next(new Error('unauthorized'));
     socket.data.userId = user.id;
+    const why = socketAdmission(socket, user, presence.get(user.id)?.sockets.size || 0);
+    if (why) return next(new Error(why));
     next();
   });
 
   io.on('connection', (socket) => {
     const userId = socket.data.userId;
+    socketShield(socket, userId); // antes de cualquier socket.on: errores atrapados, límites y moderación
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
     socket.join(`user:${userId}`);
     socket.join(user.role === 'admin' ? 'role:admin' : 'role:member');
@@ -306,13 +311,13 @@ export function initRealtime(httpServer) {
       const f = getFloor(p.floorId)?.state;
       if (!f) return;
       const to = [userId];
-      for (const [id, q] of presence) if (id !== userId && canTalk(f, { ...p, floorId: p.floorId }, q)) to.push(id);
+      for (const [id, q] of presence) if (id !== userId && canTalk(f, { ...p, floorId: p.floorId }, q) && !hasBlocked(id, userId)) to.push(id);
       const msg = { from: userId, text, at: t, id: `${userId}-${t}`, to: to.length - 1 };
       for (const id of to) io.to(`user:${id}`).emit('room-msg', msg);
     });
 
     // Anotaciones sobre una pantalla compartida: se reenvían a quienes la ven
-    socket.on('annot:join', (sharer) => socket.join(`annot:${Number(sharer)}`));
+    socket.on('annot:join', (sharer) => { if (presence.has(Number(sharer))) socket.join(`annot:${Number(sharer)}`); });
     socket.on('annot:leave', (sharer) => socket.leave(`annot:${Number(sharer)}`));
     socket.on('annot', (m) => {
       const sharer = Number(m?.sharer);

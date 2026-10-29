@@ -25,8 +25,14 @@ import { registerStatsRoutes } from './stats.js';
 import { registerAchievementRoutes } from './achievements.js';
 import { registerHotelRoutes } from './hotel.js';
 import { THEME_IDS, officeTheme, userTheme, registerThemeRoutes } from './themes.js';
+import { registerBadgeRoutes } from './badges.js';
+import { getIO } from './realtime.js';
+import { restRateLimit, perUser } from './ratelimit.js';
+import * as mod from './moderation.js'; // silenciar, sacar, suspender, bloquear y reportes
 
 export const api = express.Router();
+api.use(restRateLimit); // tope de peticiones por sesión o IP (server/ratelimit.js)
+api.use(sec.checkOrigin); // escrituras solo desde la propia oficina (CSRF)
 api.use(express.json({ limit: '1mb' }));
 
 // ---------- Utilidades ----------
@@ -51,7 +57,8 @@ export function publicUser(u, viewer = null) {
     id: u.id,
     username: u.username,
     displayName: u.display_name,
-    email: u.email || '',
+    // El correo es privado: solo lo ven la propia persona y los admins
+    email: viewer && (viewer.role === 'admin' || viewer.id === u.id) ? u.email || '' : '',
     role: u.role,
     avatar: parseJSON(u.avatar, {}),
     photoUrl: u.photo ? `/api/users/${u.id}/photo?v=${u.photo_v}` : null,
@@ -74,7 +81,12 @@ const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
 function broadcastUser(id) {
   const u = getUser(id);
-  if (u) emitAll('user', publicUser(u));
+  if (!u) return;
+  const io = getIO();
+  if (!io) return;
+  io.to('role:admin').emit('user', publicUser(u, { role: 'admin' }));
+  io.to('role:member').except(`user:${id}`).emit('user', publicUser(u));
+  if (u.role !== 'admin') io.to(`user:${id}`).emit('user', publicUser(u, u));
 }
 
 function broadcastFloor(floorId) {
@@ -105,6 +117,7 @@ function requireAdmin(req, res, next) {
 }
 
 function notify(userId, type, actorId, data = {}) {
+  if (actorId && mod.hasBlocked(userId, actorId)) return;
   const id = Number(db.prepare('INSERT INTO notifications (user_id, type, actor_id, data, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(userId, type, actorId, JSON.stringify(data), now()).lastInsertRowid);
   emitToUser(userId, 'notification', notificationRow(db.prepare('SELECT * FROM notifications WHERE id = ?').get(id)));
@@ -204,23 +217,35 @@ api.post('/auth/login', wrap((req, res) => {
   const ip = req.ip;
   if (loginRateLimited(ip)) return fail(res, 429, 'Demasiados intentos. Espera unos minutos.');
   const { username, password } = req.body || {};
+  if (typeof username !== 'string' || typeof password !== 'string' || username.length > 120 || password.length > 200) return fail(res, 400, 'Usuario o contraseña incorrectos');
+  const wait = sec.loginLockedFor(username, ip);
+  if (wait) return fail(res, 429, `Demasiados intentos con esa cuenta. Espera ${wait > 90 ? `${Math.ceil(wait / 60)} min` : `${wait} s`}.`);
+  if (!sec.loginCapacityOk()) return fail(res, 429, 'Hay muchos inicios de sesión ahora mismo. Intenta en unos segundos.');
   const u = db.prepare('SELECT * FROM users WHERE username = ? OR (email != \'\' AND email = ?)').get(String(username || '').trim(), String(username || '').trim().toLowerCase());
-  if (!u || !verifyPassword(String(password || ''), u.password_hash)) {
+  // Con o sin cuenta se calcula la contraseña (mismo tiempo de respuesta: no revela qué usuarios existen)
+  const okPass = verifyPassword(String(password || ''), u?.password_hash || DUMMY_HASH);
+  if (!u || !okPass) {
+    sec.recordLoginFailure(username, ip);
     sec.audit({ actor: u?.id ?? null, action: `Inicio de sesión fallido (${String(username || '').slice(0, 40)})`, ip });
     return fail(res, 401, 'Usuario o contraseña incorrectos');
   }
   if (u.disabled) return fail(res, 403, 'Tu cuenta está desactivada. Habla con un administrador.');
+  const ban = mod.banOf(u.id);
+  if (ban) return res.status(403).json({ error: mod.banMessage(ban), code: 'banned', until: ban.until });
   clearLoginAttempts(ip);
+  sec.clearLoginFailures(username, ip);
   // Segundo paso: código de la app de autenticación
   if (u.totp_enabled) return res.json({ needs2fa: true, ticket: sec.newLoginTicket(u.id) });
   finishLogin(req, res, u);
 }));
 
+const DUMMY_HASH = hashPassword(randomToken(12));
+
 function finishLogin(req, res, u) {
   if (u.role === 'admin') sec.audit({ actor: u.id, action: 'Inició sesión (admin)', ip: req.ip });
   const token = createSession(u.id);
   res.setHeader('Set-Cookie', sessionCookie(token));
-  res.json({ user: publicUser(u) });
+  res.json({ user: publicUser(u, u) });
 }
 
 api.post('/auth/2fa', wrap((req, res) => {
@@ -229,6 +254,7 @@ api.post('/auth/2fa', wrap((req, res) => {
   if (!t) return fail(res, 401, 'El inicio de sesión expiró. Vuelve a escribir tu contraseña.');
   const u = getUser(t.userId);
   if (!u || u.disabled || !u.totp_enabled) return fail(res, 401, 'No se pudo verificar');
+  if (mod.isBanned(u.id)) return res.status(403).json({ error: mod.banMessage(mod.banOf(u.id)), code: 'banned' });
   const code = String(req.body?.code || '').trim();
   const step = sec.checkTotp(u.totp_secret, code, u.totp_last);
   if (step != null) {
@@ -253,7 +279,7 @@ api.post('/auth/logout', (req, res) => {
 });
 
 api.get('/auth/me', requireAuth, (req, res) => {
-  res.json({ user: { ...publicUser(req.user), uiTheme: userTheme(req.user) }, prefs: parseJSON(req.user.prefs, {}) });
+  res.json({ user: { ...publicUser(req.user, req.user), uiTheme: userTheme(req.user) }, prefs: parseJSON(req.user.prefs, {}) });
 });
 
 // ---------- Invitaciones (públicas) ----------
@@ -266,7 +292,7 @@ function validInvite(token) {
 registerDiscordRoutes(api, {
   validInvite,
   userFromReq: (req) => userFromToken(parseCookies(req.headers.cookie)[SESSION_COOKIE]),
-  publicUser,
+  publicUser: (u) => publicUser(u, u),
   broadcastUser: (id) => broadcastUser(id),
 });
 
@@ -281,8 +307,9 @@ api.post('/invites/:token/accept', wrap((req, res) => {
   const inv = validInvite(req.params.token);
   if (!inv) return fail(res, 404, 'La invitación no es válida o ya expiró.');
   const username = String(req.body?.username || '').trim();
-  const displayName = String(req.body?.displayName || '').trim();
+  const displayName = mod.cleanDisplayText(req.body?.displayName);
   const password = String(req.body?.password || '');
+  if (inv.role !== 'admin' && mod.impersonates(displayName)) return fail(res, 400, 'Ese nombre está reservado para el equipo de administración.');
   const email = String(req.body?.email || inv.email || '').trim().toLowerCase().slice(0, 120);
   const err = validateNewAccount({ username, password, displayName });
   if (err) return fail(res, 400, err);
@@ -296,7 +323,7 @@ api.post('/invites/:token/accept', wrap((req, res) => {
   const token = createSession(userId);
   res.setHeader('Set-Cookie', sessionCookie(token));
   broadcastUser(userId);
-  res.json({ user: publicUser(getUser(userId)) });
+  res.json({ user: publicUser(getUser(userId), { id: userId }) });
 }));
 
 // Todo lo de abajo requiere sesión
@@ -319,8 +346,12 @@ function livekitToken(user) {
     sub: String(user.id),
     name: user.display_name,
     nbf: nowS - 10,
-    exp: nowS + 6 * 3600,
-    video: { room: process.env.LIVEKIT_ROOM || 'oficina', roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false },
+    exp: nowS + (mod.isMuted(user.id) ? 3600 : 6 * 3600),
+    video: {
+      room: process.env.LIVEKIT_ROOM || 'oficina', roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false,
+      // Silenciado por un admin: puede ver y oír, pero no publicar micrófono
+      ...(mod.isMuted(user.id) ? { canPublishSources: ['camera', 'screen_share'] } : {}),
+    },
   };
   const data = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
   const sig = crypto.createHmac('sha256', process.env.LIVEKIT_API_SECRET).update(data).digest();
@@ -388,16 +419,17 @@ api.get('/users/:id/photo', (req, res) => {
 
 const AVATAR_KEYS = [...SPEC_KEYS, 'pet', 'petColor', 'petName'];
 
-api.patch('/me', wrap((req, res) => {
+api.patch('/me', perUser('profile', 20, 60e3), wrap((req, res) => {
   const b = req.body || {};
   const u = req.user;
-  const displayName = b.displayName !== undefined ? String(b.displayName).trim() : u.display_name;
+  const displayName = b.displayName !== undefined ? mod.cleanDisplayText(b.displayName, 41) : u.display_name;
   if (!displayName || displayName.length > 40) return fail(res, 400, 'El nombre debe tener entre 1 y 40 caracteres.');
+  if (b.displayName !== undefined && u.role !== 'admin' && displayName !== u.display_name && mod.impersonates(displayName)) return fail(res, 400, 'Ese nombre está reservado para el equipo de administración.');
   let timezone = u.timezone;
   if (b.timezone !== undefined) {
     try { new Intl.DateTimeFormat('es', { timeZone: b.timezone }); timezone = b.timezone; } catch { return fail(res, 400, 'Zona horaria inválida'); }
   }
-  const statusText = b.statusText !== undefined ? String(b.statusText).slice(0, 80) : u.status_text;
+  const statusText = b.statusText !== undefined ? mod.cleanDisplayText(b.statusText, 80) : u.status_text;
   let avatar = parseJSON(u.avatar, {});
   if (b.avatar && typeof b.avatar === 'object') {
     // El avatar se reemplaza completo: ficha generada o personaje subido (sprite)
@@ -417,7 +449,7 @@ api.patch('/me', wrap((req, res) => {
   db.prepare('UPDATE users SET display_name = ?, timezone = ?, status_text = ?, avatar = ?, email = ?, birthday = ? WHERE id = ?')
     .run(displayName, timezone, statusText, JSON.stringify(avatar), email, birthday, u.id);
   broadcastUser(u.id);
-  res.json({ user: publicUser(getUser(u.id)) });
+  res.json({ user: publicUser(getUser(u.id), u) });
 }));
 
 // ---------- Cumpleaños ----------
@@ -449,7 +481,7 @@ api.get('/birthdays/:userId/wishes', (req, res) => {
   res.json({ wishes: rows });
 });
 
-api.post('/birthdays/:userId/wish', wrap((req, res) => {
+api.post('/birthdays/:userId/wish', perUser('wish', 10, 60e3), wrap((req, res) => {
   const to = Number(req.params.userId);
   const target = getUser(to);
   if (!target || to === req.user.id) return fail(res, 400, 'No puedes felicitar a esa persona');
@@ -489,7 +521,7 @@ api.put('/me/shift', wrap((req, res) => {
   db.prepare('UPDATE users SET shift = ?, shift_at = ? WHERE id = ?').run(shift, shift ? now() : null, req.user.id);
   openShift(req.user.id, shift);
   broadcastUser(req.user.id);
-  res.json({ user: publicUser(getUser(req.user.id)) });
+  res.json({ user: publicUser(getUser(req.user.id), req.user) });
 }));
 
 api.put('/me/photo', wrap((req, res) => {
@@ -498,7 +530,7 @@ api.put('/me/photo', wrap((req, res) => {
   if (dataUrl.length > 700_000) return fail(res, 413, 'La imagen es muy grande');
   db.prepare('UPDATE users SET photo = ?, photo_v = photo_v + 1 WHERE id = ?').run(dataUrl, req.user.id);
   broadcastUser(req.user.id);
-  res.json({ user: publicUser(getUser(req.user.id)) });
+  res.json({ user: publicUser(getUser(req.user.id), req.user) });
 }));
 
 api.put('/me/pet-photo', wrap((req, res) => {
@@ -507,19 +539,19 @@ api.put('/me/pet-photo', wrap((req, res) => {
   if (dataUrl.length > 700_000) return fail(res, 413, 'La imagen es muy grande');
   db.prepare('UPDATE users SET pet_photo = ?, pet_photo_v = pet_photo_v + 1 WHERE id = ?').run(dataUrl, req.user.id);
   broadcastUser(req.user.id);
-  res.json({ user: publicUser(getUser(req.user.id)) });
+  res.json({ user: publicUser(getUser(req.user.id), req.user) });
 }));
 
 api.delete('/me/pet-photo', (req, res) => {
   db.prepare('UPDATE users SET pet_photo = NULL, pet_photo_v = pet_photo_v + 1 WHERE id = ?').run(req.user.id);
   broadcastUser(req.user.id);
-  res.json({ user: publicUser(getUser(req.user.id)) });
+  res.json({ user: publicUser(getUser(req.user.id), req.user) });
 });
 
 api.delete('/me/photo', (req, res) => {
   db.prepare('UPDATE users SET photo = NULL, photo_v = photo_v + 1 WHERE id = ?').run(req.user.id);
   broadcastUser(req.user.id);
-  res.json({ user: publicUser(getUser(req.user.id)) });
+  res.json({ user: publicUser(getUser(req.user.id), req.user) });
 });
 
 api.put('/me/prefs', (req, res) => {
@@ -530,7 +562,7 @@ api.put('/me/prefs', (req, res) => {
   res.json({ prefs });
 });
 
-api.post('/me/password', wrap((req, res) => {
+api.post('/me/password', perUser('password', 8, 15 * 60e3, 'Demasiados intentos. Espera unos minutos.'), wrap((req, res) => {
   const { current, password } = req.body || {};
   if (!verifyPassword(String(current || ''), req.user.password_hash)) return fail(res, 400, 'La contraseña actual no es correcta');
   if (!password || String(password).length < 8) return fail(res, 400, 'La nueva contraseña debe tener al menos 8 caracteres');
@@ -576,7 +608,7 @@ api.post('/me/2fa/setup', wrap((req, res) => {
   res.json({ secret, otpauth: sec.otpauthUrl(secret, req.user.username, officeConfig().officeName) });
 }));
 
-api.post('/me/2fa/enable', wrap((req, res) => {
+api.post('/me/2fa/enable', perUser('2fa-en', 10, 15 * 60e3, 'Demasiados intentos. Espera unos minutos.'), wrap((req, res) => {
   const u = getUser(req.user.id);
   if (u.totp_enabled) return fail(res, 400, 'Ya está activada');
   if (!u.totp_secret) return fail(res, 400, 'Primero genera el código QR');
@@ -588,7 +620,7 @@ api.post('/me/2fa/enable', wrap((req, res) => {
   res.json({ recoveryCodes: codes });
 }));
 
-api.post('/me/2fa/disable', wrap((req, res) => {
+api.post('/me/2fa/disable', perUser('2fa', 8, 15 * 60e3, 'Demasiados intentos. Espera unos minutos.'), wrap((req, res) => {
   const u = getUser(req.user.id);
   if (!u.totp_enabled) return fail(res, 400, 'No está activada');
   if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) return fail(res, 400, 'La contraseña no es correcta');
@@ -598,7 +630,7 @@ api.post('/me/2fa/disable', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
-api.post('/me/2fa/recovery', wrap((req, res) => {
+api.post('/me/2fa/recovery', perUser('2fa-rec', 8, 15 * 60e3, 'Demasiados intentos. Espera unos minutos.'), wrap((req, res) => {
   const u = getUser(req.user.id);
   if (!u.totp_enabled) return fail(res, 400, 'No está activada');
   if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) return fail(res, 400, 'La contraseña no es correcta');
@@ -799,7 +831,7 @@ admin.patch('/users/:id', wrap((req, res) => {
   db.prepare('UPDATE users SET role = ?, disabled = ? WHERE id = ?').run(role, disabled, id);
   if (disabled) { destroyUserSessions(id); disconnectUser(id); }
   broadcastUser(id);
-  res.json({ user: publicUser(getUser(id)) });
+  res.json({ user: publicUser(getUser(id), req.user) });
 }));
 
 admin.post('/users/:id/reset-2fa', wrap((req, res) => {
@@ -849,6 +881,10 @@ admin.patch('/feedback/:id', (req, res) => {
 });
 
 registerStatsRoutes(admin);
+mod.registerModerationRoutes(api, admin, {
+  fail, wrap, perUser, emitToUser, disconnectUser, destroyUserSessions, alert,
+  emitToAdmins: (ev, payload) => getIO()?.to('role:admin').emit(ev, payload),
+});
 api.use('/admin', admin);
 registerAchievementRoutes(api);
 
@@ -898,9 +934,10 @@ api.get('/chat', (req, res) => {
     const [a, b] = r.dm_key.split(':').map(Number);
     const otherId = a === uid ? b : a;
     const key = `d:${r.dm_key}`;
+    if (mod.hasBlocked(uid, otherId)) return null;
     const unread = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE dm_key = ? AND id > ? AND user_id != ?').get(r.dm_key, lastRead(uid, key), uid).n;
     return { conv: `d:${otherId}`, userId: otherId, lastId: r.last_id, unread };
-  });
+  }).filter(Boolean);
   res.json({ channels, dms });
 });
 
@@ -911,7 +948,9 @@ api.get('/messages', (req, res) => {
   const rows = c.channelId
     ? db.prepare('SELECT * FROM messages WHERE channel_id = ? AND id < ? ORDER BY id DESC LIMIT 60').all(c.channelId, before)
     : db.prepare('SELECT * FROM messages WHERE dm_key = ? AND id < ? ORDER BY id DESC LIMIT 60').all(c.dm, before);
-  res.json({ messages: rows.reverse().map(messageRow), hasMore: rows.length === 60 });
+  // Mensajes de personas que bloqueaste: no se muestran
+  const blocked = mod.blocksOf(req.user.id);
+  res.json({ messages: rows.reverse().filter((r) => !blocked.has(r.user_id)).map(messageRow), hasMore: rows.length === 60 });
 });
 
 export function postMessage(user, c, body, kind = 'text', attachments = []) {
@@ -921,22 +960,25 @@ export function postMessage(user, c, body, kind = 'text', attachments = []) {
   if (c.channelId) {
     emitAll('message', msg);
     // Menciones
-    const names = new Set([...body.matchAll(/@([a-zA-Z0-9_.-]{3,24})/g)].map((m) => m[1].toLowerCase()));
+    // Máximo 15 menciones distintas por mensaje (cada una es una notificación y un push)
+    const names = new Set([...body.matchAll(/@([a-zA-Z0-9_.-]{3,24})/g)].map((m) => m[1].toLowerCase()).slice(0, 15));
     for (const n of names) {
       const target = db.prepare('SELECT id FROM users WHERE username = ?').get(n);
       if (target && target.id !== user.id) notify(target.id, 'mention', user.id, { conv: c.key, messageId: id, preview: body.slice(0, 140) });
     }
   } else {
     emitToUser(user.id, 'message', msg);
-    emitToUser(c.otherId, 'message', msg);
+    // Si te bloqueó, el mensaje se guarda pero no le llega (ni aviso ni push)
+    if (!mod.hasBlocked(c.otherId, user.id)) emitToUser(c.otherId, 'message', msg);
   }
-  pushMessage(user, msg, { channelId: c.channelId, otherId: c.otherId });
+  if (!c.otherId || !mod.hasBlocked(c.otherId, user.id)) pushMessage(user, msg, { channelId: c.channelId, otherId: c.otherId });
   db.prepare('INSERT INTO reads (user_id, conv, last_read_id) VALUES (?, ?, ?) ON CONFLICT(user_id, conv) DO UPDATE SET last_read_id = excluded.last_read_id')
     .run(user.id, c.key, id);
   return msg;
 }
 
-api.post('/messages', wrap((req, res) => {
+api.post('/messages', perUser('messages', 12, 10e3, 'Vas muy rápido: espera unos segundos antes de seguir escribiendo.'), wrap((req, res) => {
+  if (mod.isMuted(req.user.id)) return fail(res, 403, `🔇 Estás silenciado ${mod.fmtUntil(mod.muteOf(req.user.id).until)}.`);
   const c = parseConv(req.body?.conv, req.user.id);
   if (!c) return fail(res, 400, 'Conversación inválida');
   const body = String(req.body?.body || '').trim();
@@ -947,7 +989,7 @@ api.post('/messages', wrap((req, res) => {
 }));
 
 // Reacciones con emoji: tocar la misma quita la tuya
-api.post('/messages/:id/react', wrap((req, res) => {
+api.post('/messages/:id/react', perUser('react', 30, 10e3), wrap((req, res) => {
   const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(Number(req.params.id));
   if (!m) return fail(res, 404, 'Mensaje no encontrado');
   const uid = req.user.id;
@@ -988,9 +1030,14 @@ api.post('/channels', requireAdmin, (req, res) => {
 });
 
 // Saludar (wave)
+const lastWave = new Map();
 api.post('/wave/:userId', wrap((req, res) => {
   const c = parseConv(`d:${req.params.userId}`, req.user.id);
   if (!c) return fail(res, 400, 'Usuario inválido');
+  const wk = `${req.user.id}:${c.otherId}`;
+  if (Date.now() - (lastWave.get(wk) || 0) < 10e3) return fail(res, 429, 'Ya la saludaste, espera unos segundos');
+  lastWave.set(wk, Date.now());
+  if (mod.hasBlocked(c.otherId, req.user.id)) return res.json({ ok: true });
   postMessage(req.user, c, 'wave', 'wave');
   notify(c.otherId, 'wave', req.user.id, {});
   res.json({ ok: true });
@@ -1004,11 +1051,12 @@ api.post('/call/:userId', wrap((req, res) => {
   const key = `${req.user.id}:${to}`;
   if (Date.now() - (lastCall.get(key) || 0) < 15e3) return fail(res, 429, 'Espera unos segundos antes de volver a llamar');
   lastCall.set(key, Date.now());
-  notify(to, 'call', req.user.id, {});
+  notify(to, 'call', req.user.id, {}); // si te bloqueó, notify() no le avisa
   res.json({ ok: true, online: presence.has(to) });
 }));
-api.post('/call/:userId/answer', wrap((req, res) => {
+api.post('/call/:userId/answer', perUser('answer', 20, 60e3), wrap((req, res) => {
   const to = Number(req.params.userId);
+  if (mod.eitherBlocked(to, req.user.id)) return res.json({ ok: true });
   emitToUser(to, 'call:answer', { from: req.user.id, accept: !!req.body?.accept });
   res.json({ ok: true });
 }));
@@ -1018,6 +1066,7 @@ registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push
 registerSantaRoutes(api, { fail, notify, requireAdmin, wrap }); // /santa… (amigo secreto)
 registerHotelRoutes(api, { fail, wrap, notify }); // /hotel… (salas isométricas)
 registerThemeRoutes(api, { fail }); // /themes y /me/theme (tema de cada persona)
+registerBadgeRoutes(api, { fail, notify, requireAdmin, wrap }); // /badges… y /admin/badges… (placas)
 
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);
@@ -1050,7 +1099,7 @@ function readEventBody(b) {
   const endsAt = Number(b?.endsAt);
   if (!title) return { error: 'El evento necesita un título' };
   if (!startsAt || !endsAt || endsAt <= startsAt) return { error: 'Revisa las horas del evento' };
-  const attendees = Array.isArray(b?.attendees) ? [...new Set(b.attendees.map(Number).filter((id) => getUser(id)))] : [];
+  const attendees = Array.isArray(b?.attendees) ? [...new Set(b.attendees.slice(0, 300).map(Number).filter((id) => Number.isInteger(id) && getUser(id)))] : [];
   return {
     title, startsAt, endsAt, attendees,
     description: String(b?.description || '').slice(0, 2000),
@@ -1059,7 +1108,7 @@ function readEventBody(b) {
   };
 }
 
-api.post('/events', wrap((req, res) => {
+api.post('/events', perUser('events', 20, 3600e3, 'Creaste muchos eventos en esta hora. Espera un poco.'), wrap((req, res) => {
   const e = readEventBody(req.body);
   if (e.error) return fail(res, 400, e.error);
   const id = tx(() => {
@@ -1073,7 +1122,7 @@ api.post('/events', wrap((req, res) => {
   res.json({ event: eventRow(db.prepare('SELECT * FROM events WHERE id = ?').get(id)) });
 }));
 
-api.patch('/events/:id', wrap((req, res) => {
+api.patch('/events/:id', perUser('events-edit', 60, 3600e3), wrap((req, res) => {
   const row = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(req.params.id));
   if (!row) return fail(res, 404, 'Evento no encontrado');
   if (row.created_by !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'Solo quien creó el evento puede editarlo');
@@ -1107,7 +1156,8 @@ api.get('/notices', (req, res) => {
   res.json({ notices: rows.map(noticeRow) });
 });
 
-api.post('/notices', wrap((req, res) => {
+api.post('/notices', perUser('notices', 5, 10 * 60e3, 'Publicaste varios anuncios seguidos. Espera unos minutos.'), wrap((req, res) => {
+  if (mod.isMuted(req.user.id)) return fail(res, 403, '🔇 Estás silenciado: no puedes publicar anuncios por ahora.');
   const text = String(req.body?.text || '').trim().slice(0, 500);
   if (!text) return fail(res, 400, 'Escribe el anuncio');
   const color = NOTE_COLORS.includes(req.body?.color) ? req.body.color : 'yellow';

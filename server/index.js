@@ -11,6 +11,7 @@ import { initRealtime } from './realtime.js';
 import { scheduleBackups } from './backup.js';
 import { alert, watchProcess } from './alerts.js';
 import { startPushScheduler } from './push.js';
+import { securityHeaders, setPageCsp } from './security.js';
 
 watchProcess();
 
@@ -36,11 +37,7 @@ if (userCount === 0) {
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : false);
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'same-origin');
-  next();
-});
+app.use(securityHeaders); // nosniff, frame, permisos, HSTS (server/security.js)
 app.use('/api', api);
 
 const dist = path.resolve('dist');
@@ -73,6 +70,7 @@ if (fs.existsSync(dist)) {
         .replace(/(name="theme-color" content=")[^"]*/, `$1${b.color}`);
     }
     res.setHeader('Cache-Control', 'no-cache');
+    setPageCsp(req, res);
     res.type('html').send(html);
   };
   app.get('/manifest.webmanifest', (req, res) => {

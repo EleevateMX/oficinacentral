@@ -38,6 +38,7 @@ import StagePanel from './StagePanel.jsx';
 import { JukeboxLayer } from './Jukebox.jsx';
 import { jukeboxActive } from '../lib/jukebox.js';
 import { SeasonPill } from './SeasonExtras.jsx';
+import { drawLiveTag } from '../lib/badges.js'; // placas: etiqueta LIVE
 
 const T = TILE;
 const STEP_MS = 135;
@@ -824,6 +825,7 @@ export default function MapView({ active }) {
         ctx.beginPath(); ctx.arc(sp.x - w / 2 + 10, y, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = isMe ? themeColors().onAccent : '#fff'; // texto legible sobre el acento del tema
         ctx.fillText(name, sp.x - w / 2 + 18, y + 1);
+        drawLiveTag(ctx, id, sp.x + w / 2 + 3, y); // placas: LIVE de streamers (lib/badges.js)
         // Etiquetas EN VIVO (transmite su pantalla) y ● REC (está grabando: lo ve toda la sala)
         const tags = [p.screen && ['EN VIVO', '#e63946', '#fff'], (isMe ? office.state.recording : p.recording) && ['● REC', '#fff', '#e63946'], inNotesRoom(office.state, f, p) && ['📝 NOTAS', '#FFCC00', '#141414'],
           stageAt(f, p.x, p.y) && ['🎤 En el escenario', '#FE3377', '#fff'], office.state.stage?.queue?.includes(Number(id)) && ['✋ Mano levantada', '#FFCC00', '#141414']].filter(Boolean);

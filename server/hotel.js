@@ -5,6 +5,7 @@
 import { db, now, addColumn } from './db.js';
 import { hashPassword, verifyPassword } from './auth.js';
 import { audit } from './security.js';
+import { hasBlocked } from './moderation.js';
 import { ROOM_MODELS, ROT_DIR, ACCESS, CHAT_MODES, MAX_ROOMS_PER_USER, MAX_FURNI_PER_ROOM, MAX_INVENTORY, ROOM_CAPACITY, WALK_SPEED, OFFICIAL_CAPACITY, OFFICIAL_MAX_FURNI, PUBLIC_MODELS } from '../shared/hotel.js';
 import { seedOfficialRooms, isSeedItem } from './hotelOfficial.js';
 import { FURNI_BY_ID, STARTER_INVENTORY } from '../shared/hotelCatalog.js';
@@ -534,7 +535,8 @@ export function initHotel(io, socket, userId) {
     }
     R.chat.push(msg);
     if (R.chat.length > 50) R.chat.shift();
-    IO.to(key(R.id)).emit('hotel:chat', msg);
+    // Quien bloqueó a esta persona no ve sus globitos (server/moderation.js)
+    IO.to(key(R.id)).except([...R.users.keys()].filter((id) => hasBlocked(id, userId)).map((id) => `user:${id}`)).emit('hotel:chat', msg);
     hook('chat', R, U, msg);
   });
 

@@ -6,6 +6,7 @@ import { Avatar, Toggle, Empty } from './ui.jsx';
 import { fmtRelative, sameDay } from '../lib/time.js';
 import { ACHIEVEMENT_BY_ID } from '@shared/achievements.js';
 import { badgeTitle } from '../lib/achievements.js';
+import { BadgeImg } from './badges/Badge.jsx'; // placas
 
 const TEXT = {
   wave: (n, count) => `👋 ${n} te saludó${count > 1 ? ` ${count} veces` : ''}`,
@@ -15,6 +16,7 @@ const TEXT = {
   call: (n) => `📞 ${n} te llamó`,
   achievement: (n, c, d) => `Conseguiste el logro «${badgeTitle(d?.id, d?.tier)}»${d?.count > 1 ? ` y ${d.count - 1} más` : ''}`,
   santa: () => '',
+  badge: (n, c, d) => `Recibiste la placa «${d?.name || 'nueva'}»${d?.note ? `: ${d.note}` : ''}`,
   hotel_gift: (n, c, d) => `🎁 ${n} te regaló «${d?.name || 'un furni'}» para el Hotel`,
 };
 const TITLE = { wave: 'Saludo de', mention: 'Mención de', event: 'Invitación de', birthday: 'Felicitación de', call: 'Llamada de' };
@@ -56,6 +58,7 @@ export default function ActivityPanel() {
       office.set({ view: 'calendar' });
       return;
     }
+    if (g.type === 'badge') { office.set({ modal: { type: 'badges' } }); return; } // placas
     if (g.type === 'achievement') {
       office.set({ modal: { type: 'achievements' } });
       return;
@@ -86,11 +89,11 @@ export default function ActivityPanel() {
           return (
             <button key={g.id} className={`activity ${g.read ? '' : 'unread'}`} onClick={() => open(g)}>
               <div className="activity-top">
-                <span>{g.type === 'achievement' ? '🏅 Nuevo logro' : g.type === 'santa' ? '🎁 Amigo secreto' : `${TITLE[g.type] || 'De'} ${name}`}</span>
+                <span>{g.type === 'badge' ? '🏅 Nueva placa' : g.type === 'achievement' ? '🏅 Nuevo logro' : g.type === 'santa' ? '🎁 Amigo secreto' : `${TITLE[g.type] || 'De'} ${name}`}</span>
                 <span className="muted">{fmtRelative(g.createdAt)}</span>
               </div>
               <div className="activity-body">
-                {g.type === 'achievement' ? <span className="ach-activity-icon">{ACHIEVEMENT_BY_ID[g.data?.id]?.emoji || '🏅'}</span> : g.type === 'santa' ? <span className="santa-act-ico">🎁</span> : <Avatar user={u} size={36} />}
+                {g.type === 'badge' ? <BadgeImg id={g.data?.id} size={36} /> : g.type === 'achievement' ? <span className="ach-activity-icon">{ACHIEVEMENT_BY_ID[g.data?.id]?.emoji || '🏅'}</span> : g.type === 'santa' ? <span className="santa-act-ico">🎁</span> : <Avatar user={u} size={36} />}
                 <span>{(TEXT[g.type] || (() => g.type))(name, g.count, g.data)}{g.type === 'event' && g.data.title ? `: ${g.data.title}` : ''}{g.type === 'mention' && g.data.preview ? `: “${g.data.preview}”` : ''}{g.type === 'birthday' && g.data.text ? `: “${g.data.text}”` : ''}{g.type === 'santa' ? g.data.text : ''}</span>
               </div>
             </button>

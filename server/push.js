@@ -13,6 +13,7 @@
 import webpush from 'web-push';
 import { db, now, getSetting, setSetting } from './db.js';
 import { presence } from './realtime.js';
+import { hasBlocked } from './moderation.js';
 import { ACHIEVEMENT_BY_ID, tierLabel } from '../shared/achievements.js';
 
 db.exec(`
@@ -197,6 +198,7 @@ export function pushMessage(sender, msg, { channelId = null, otherId = null } = 
       WHERE u.id != ? AND u.disabled = 0`).all(sender.id);
     for (const r of rows) {
       if (mentioned.has(String(r.username).toLowerCase())) continue;
+      if (hasBlocked(r.id, sender.id)) continue;
       if (notifPrefs(r.id).chat !== 'all') continue;
       pushLater(r.id, { title: `#${name} · ${sender.display_name}`, body, tag: `conv-c-${channelId}`, url: `/?conv=c:${channelId}` });
     }
@@ -267,6 +269,15 @@ export function startPushScheduler(everyMs = Number(process.env.PUSH_TICK_MS) ||
 }
 
 // ---------- Rutas (montadas después de requireAuth) ----------
+// Servicios push de los navegadores (Chrome/Edge/Firefox/Safari). PUSH_ALLOWED_HOSTS agrega más.
+const PUSH_HOSTS = ['fcm.googleapis.com', 'android.googleapis.com', 'updates.push.services.mozilla.com', 'push.services.mozilla.com', 'web.push.apple.com', 'notify.windows.com', 'push.apple.com'];
+export function pushHostAllowed(host) {
+  const h = String(host || '').toLowerCase();
+  const extra = String(process.env.PUSH_ALLOWED_HOSTS || '').split(/[\s,]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return [...PUSH_HOSTS, ...extra].some((d) => h === d || h.endsWith(`.${d}`));
+}
+const MAX_PUSH_DEVICES = 10;
+const lastPushTest = new Map();
 function readSubscription(b) {
   const s = b?.subscription || b;
   const endpoint = String(s?.endpoint || '');
@@ -275,6 +286,8 @@ function readSubscription(b) {
   let url;
   try { url = new URL(endpoint); } catch { return null; }
   if (url.protocol !== 'https:' || endpoint.length > 1000) return null;
+  // Solo servicios push reales (si no, el servidor podría mandar peticiones a cualquier dirección: SSRF)
+  if (!pushHostAllowed(url.hostname)) return null;
   if (!/^[A-Za-z0-9_-]{20,200}$/.test(p256dh) || !/^[A-Za-z0-9_-]{8,100}$/.test(auth)) return null;
   return { endpoint, p256dh, auth };
 }
@@ -287,6 +300,9 @@ export function registerPushRoutes(router) {
   router.post('/push/subscribe', (req, res) => {
     const s = readSubscription(req.body);
     if (!s) return res.status(400).json({ error: 'Suscripción inválida' });
+    // Tope de dispositivos por persona: se olvidan los más viejos
+    db.prepare(`DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint != ? AND id NOT IN
+      (SELECT id FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?)`).run(req.user.id, s.endpoint, req.user.id, MAX_PUSH_DEVICES - 1);
     // El mismo dispositivo puede cambiar de cuenta: la suscripción pasa a quien la registra
     db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`)
@@ -303,6 +319,8 @@ export function registerPushRoutes(router) {
 
   // Aviso de prueba a todos los dispositivos de quien lo pide (aunque tenga la app abierta)
   router.post('/push/test', async (req, res, next) => {
+    if (Date.now() - (lastPushTest.get(req.user.id) || 0) < 20e3) return res.status(429).json({ error: 'Espera unos segundos antes de otra prueba' });
+    lastPushTest.set(req.user.id, Date.now());
     try {
       const results = await sendToUser(req.user.id, { title: 'Nuvora', body: 'Las notificaciones de este dispositivo funcionan ✅', tag: 'test', url: '/' });
       res.json({ sent: results.filter((r) => r.ok).length, total: results.length });

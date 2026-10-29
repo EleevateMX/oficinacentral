@@ -20,7 +20,9 @@ import { OfficeMark, ByNuvora } from '../brand.jsx';
 import { InstallAppSection, PushDeviceRow } from './PushPrefs.jsx';
 import { AnniversarySettings } from '../SeasonExtras.jsx';
 import EconomyAdmin from '../../hotel/economy/EconomyAdmin.jsx'; // Hotel: créditos HUB y códigos
-import { Coins } from 'lucide-react';
+import { Coins, Award, Gavel } from 'lucide-react';
+import BadgesAdmin from '../badges/BadgesAdmin.jsx'; // placas
+import { ModerationAdmin } from '../Moderation.jsx';
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -41,9 +43,11 @@ const SECTIONS = [
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
   { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
+  { id: 'moderation', label: 'Moderación', icon: Gavel, admin: true },
   { id: 'feedback', label: 'Comentarios', icon: MessageSquareHeart, admin: true },
   { id: 'stats', label: 'Estadísticas', icon: BarChart3, admin: true },
   { id: 'hotel-economy', label: 'Créditos HUB', icon: Coins, admin: true },
+  { id: 'badges', label: 'Placas', icon: Award, admin: true },
 ];
 
 export default function Preferences({ section = 'general' }) {
@@ -92,9 +96,11 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'characters' && <CharactersAdmin />}
             {cur === 'brand' && <BrandAdmin />}
             {cur === 'security' && <SecurityAdmin />}
+            {cur === 'moderation' && <ModerationAdmin />}
             {cur === 'feedback' && <FeedbackAdmin api={api} />}
             {cur === 'stats' && <StatsAdmin />}
             {cur === 'hotel-economy' && <EconomyAdmin />}
+            {cur === 'badges' && <BadgesAdmin />}
           </div>
         </section>
       </div>

@@ -176,3 +176,119 @@ export function auditList({ limit = 100, before = null, q = '' } = {}) {
     ORDER BY a.id DESC LIMIT ?`).all(before, before, q, `%${q}%`, `%${q}%`, lim);
   return rows.map((r) => ({ id: r.id, actorId: r.actor_id, actorName: r.actor_name, action: r.action, target: r.target, data: r.data ? JSON.parse(r.data) : null, ip: r.ip, createdAt: r.created_at }));
 }
+
+// ---------- Inicio de sesión: bloqueo por cuenta y freno global ----------
+// Por cuenta: tras varios intentos fallidos se espera cada vez más (hasta 15 min).
+// La llave combina cuenta + IP (así un atacante desde otra red no deja fuera a la persona real)
+// y además hay un tope alto por cuenta desde cualquier IP (ataques repartidos).
+const failures = new Map(); // llave -> { n, until, last }
+const ACCOUNT_FREE_TRIES = 5;
+const ACCOUNT_GLOBAL_TRIES = 40;
+const acct = (username) => String(username || '').trim().toLowerCase().slice(0, 80);
+const lockKey = (username, ip) => `${acct(username)}|${ip}`;
+const globalKey = (username) => `${acct(username)}|*`;
+
+// Segundos que faltan para poder intentar de nuevo (0 = puede intentar)
+export function loginLockedFor(username, ip, t = Date.now()) {
+  const a = failures.get(lockKey(username, ip));
+  const g = failures.get(globalKey(username));
+  const until = Math.max(a?.until || 0, g?.until || 0);
+  return until > t ? Math.ceil((until - t) / 1000) : 0;
+}
+export function recordLoginFailure(username, ip, t = Date.now()) {
+  for (const [k, free] of [[lockKey(username, ip), ACCOUNT_FREE_TRIES], [globalKey(username), ACCOUNT_GLOBAL_TRIES]]) {
+    const a = failures.get(k) || { n: 0, until: 0, last: t };
+    if (t - a.last > 30 * 60e3) a.n = 0; // media hora sin intentos: se olvida
+    a.n++;
+    a.last = t;
+    // 15 s, 30 s, 1 min, 2 min… hasta 15 min
+    if (a.n > free) a.until = t + Math.min(15 * 60e3, 2 ** Math.min(16, a.n - free - 1) * 15e3);
+    failures.set(k, a);
+  }
+}
+export function clearLoginFailures(username, ip) {
+  failures.delete(lockKey(username, ip));
+}
+// Freno global: scrypt ocupa el proceso unos milisegundos; sin esto, muchas IPs a la vez lo saturan.
+const loginBucket = { tokens: null, at: Date.now() };
+export function loginCapacityOk(t = Date.now()) {
+  const perSec = Number(process.env.LOGIN_PER_SEC) || 10;
+  const cap = perSec * 4;
+  if (loginBucket.tokens == null) loginBucket.tokens = cap;
+  loginBucket.tokens = Math.min(cap, loginBucket.tokens + ((t - loginBucket.at) / 1000) * perSec);
+  loginBucket.at = t;
+  if (loginBucket.tokens < 1) return false;
+  loginBucket.tokens -= 1;
+  return true;
+}
+setInterval(() => {
+  const t = Date.now();
+  for (const [k, v] of failures) if (t - v.last > 60 * 60e3) failures.delete(k);
+}, 10 * 60e3).unref();
+
+// ---------- Encabezados de seguridad ----------
+// CSP compatible con la app: YouTube (rocola), LiveKit (medios), Google Fonts y RNNoise (WebAssembly).
+function wsOrigins(url) {
+  try {
+    const u = new URL(url);
+    const secure = u.protocol === 'wss:' || u.protocol === 'https:';
+    return [`${secure ? 'https' : 'http'}://${u.host}`, `${secure ? 'wss' : 'ws'}://${u.host}`];
+  } catch { return []; }
+}
+export function contentSecurityPolicy(host = '') {
+  const lk = process.env.LIVEKIT_URL ? wsOrigins(process.env.LIVEKIT_URL) : [];
+  // 'self' ya cubre el WebSocket en navegadores nuevos; Safari viejo necesita el host explícito
+  const self = host && /^[a-zA-Z0-9.:[\]-]+$/.test(host) ? [`wss://${host}`, `ws://${host}`] : [];
+  const extra = String(process.env.CSP_CONNECT_EXTRA || '').split(/[\s,]+/).filter((s) => /^(https|wss):\/\/[a-zA-Z0-9.*:-]+$/.test(s));
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com https://s.ytimg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https://i.ytimg.com https://*.ytimg.com https://cdn.discordapp.com",
+    "media-src 'self' data: blob:",
+    `connect-src 'self' ${[...self, ...lk, ...extra, 'https://www.youtube.com'].join(' ')}`,
+    'frame-src https://www.youtube.com https://www.youtube-nocookie.com',
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ].join('; ');
+}
+
+export function securityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=()');
+  if (process.env.NODE_ENV === 'production' && process.env.INSECURE_COOKIES !== '1') res.setHeader('Strict-Transport-Security', 'max-age=15552000');
+  next();
+}
+
+// Página principal: la CSP solo importa en documentos HTML. CSP_MODE=report-only|off para depurar.
+export function setPageCsp(req, res) {
+  const mode = process.env.CSP_MODE || 'enforce';
+  if (mode === 'off') return;
+  res.setHeader(mode === 'report-only' ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy', contentSecurityPolicy(req.headers.host));
+}
+
+// ---------- Origen de las peticiones (CSRF y secuestro del WebSocket) ----------
+// Con cookie de sesión, solo se aceptan escrituras y sockets desde la propia oficina.
+export function originAllowed(origin, host) {
+  if (!origin) return true; // sin cabecera Origin no es un navegador en otra página (curl, pruebas)
+  if (origin === 'null') return false;
+  let o;
+  try { o = new URL(origin); } catch { return false; }
+  if (host && o.host === host) return true;
+  const extra = String(process.env.ALLOWED_ORIGINS || '').split(/[\s,]+/).filter(Boolean);
+  return extra.includes(`${o.protocol}//${o.host}`);
+}
+const reqHost = (headers) => (process.env.TRUST_PROXY === '1' && headers['x-forwarded-host'] ? String(headers['x-forwarded-host']).split(',')[0].trim() : headers.host);
+export const requestHost = reqHost;
+
+export function checkOrigin(req, res, next) {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  if (!originAllowed(req.headers.origin, reqHost(req.headers))) return res.status(403).json({ error: 'Origen no permitido' });
+  return next();
+}
