@@ -355,11 +355,11 @@ function livekitToken(user) {
     sub: String(user.id),
     name: user.display_name,
     nbf: nowS - 10,
-    exp: nowS + (mod.isMuted(user.id) ? 3600 : 6 * 3600),
+    exp: nowS + (mod.isVoiceMuted(user.id) ? 3600 : 6 * 3600),
     video: {
       room: voice.lkIssue(user.id), roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false,
       // Silenciado por un admin: puede ver y oír, pero no publicar micrófono
-      ...(mod.isMuted(user.id) ? { canPublishSources: ['camera', 'screen_share'] } : {}),
+      ...(mod.isVoiceMuted(user.id) ? { canPublishSources: ['camera', 'screen_share'] } : {}),
     },
   };
   const data = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;

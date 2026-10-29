@@ -14,6 +14,7 @@ import {
 } from './moderation.js';
 import { banUserIps, liftUserIpBans, ipBanList, liftIpBan, userIps, sharedIpCount } from './ipBans.js';
 import { hubEmit } from './hubEvents.js';
+import { onMute as voiceOnMute } from './voiceGate.js'; // corta la voz ya conectada (P2P y LiveKit)
 
 export const MOD_ACTIONS = ['kick', 'mute', 'unmute', 'vmute', 'unvmute', 'move', 'ban', 'ipban', 'unban', 'dismiss'];
 const userRow = (id) => db.prepare('SELECT id, display_name, role, disabled FROM users WHERE id = ?').get(Number(id));
@@ -84,6 +85,7 @@ export function performModAction({ actor, targetId, action, minutes = null, reas
       const m = addSanction(t.id, 'mute', { minutes: minutes ?? 60, reason, by });
       text = log(`Silenció a ${who} ${durLabel(minutes ?? 60)}${reason ? ` (${reason})` : ''}`);
       emitToUser(t.id, 'moderation', { kind: 'mute', until: m.until, reason });
+      voiceOnMute(t.id, true);
       emitToUser(t.id, 'moderation:mic-off', {});
       extra = { until: m.until };
       break;
@@ -94,12 +96,13 @@ export function performModAction({ actor, targetId, action, minutes = null, reas
       const p = presence.get(t.id);
       if (p) p.mic = false;
       emitToUser(t.id, 'moderation', { kind: 'vmute', until: m.until, reason });
+      voiceOnMute(t.id, true);
       emitToUser(t.id, 'moderation:mic-off', {});
       extra = { until: m.until };
       break;
     }
-    case 'unmute': liftSanction(t.id, 'mute', by); text = log(`Quitó el silencio a ${who}`); emitToUser(t.id, 'moderation', { kind: 'unmute' }); break;
-    case 'unvmute': liftSanction(t.id, 'vmute', by); text = log(`Quitó el silencio de voz a ${who}`); emitToUser(t.id, 'moderation', { kind: 'unvmute' }); break;
+    case 'unmute': liftSanction(t.id, 'mute', by); text = log(`Quitó el silencio a ${who}`); emitToUser(t.id, 'moderation', { kind: 'unmute' }); voiceOnMute(t.id, false); break;
+    case 'unvmute': liftSanction(t.id, 'vmute', by); text = log(`Quitó el silencio de voz a ${who}`); emitToUser(t.id, 'moderation', { kind: 'unvmute' }); voiceOnMute(t.id, false); break;
     case 'move': {
       const was = whereIs(t.id);
       if (!moveOut(t.id)) return { error: `${who} no está conectado`, status: 409 };
