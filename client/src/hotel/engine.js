@@ -4,6 +4,7 @@
 // piso → resaltado → furnis y personajes ordenados por profundidad (orden topológico de cajas) → etiquetas → globitos.
 import { TILE_W, TILE_H, Z_PX, WALL_H, toScreen, fromScreen } from '@shared/hotel.js';
 import { drawSocialFx } from './social/fx.js'; // B: respeto y lema
+import { drawLiveTag } from '../lib/badges.js'; // placas: etiqueta LIVE de streamers
 import { FURNI_BY_ID, footprint } from '@shared/hotelCatalog.js';
 import { buildRoom, canPlace, canPlaceWall, tileInfo, wallTiles, wallBase, maxFloorHeight, floorAt, ROT_VEC, WALL_ITEM_MAX_H } from '@shared/hotelRoom.js';
 import { drawFurni, furniBounds, drawWallItem, wallBounds } from './furniArt.js';
@@ -705,11 +706,13 @@ export class HotelEngine {
       ctx.fillStyle = me ? '#FFCC00' : '#fff';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(U.name, s.x, s.y - 10.5);
+      drawLiveTag(ctx, U.id, s.x + w / 2 + 3, s.y - 10.5);
     } else if (me && !hotel.live.bubbles.length) {
       // Flechita sobre tu personaje para ubicarte
       const bob = Math.sin(t / 300) * 2;
       poly(ctx, [[s.x - 5, s.y - 12 + bob], [s.x + 5, s.y - 12 + bob], [s.x, s.y - 5 + bob]], '#FFCC00', 'rgba(0,0,0,.5)', 1);
     }
+    if (!(hov || sel)) drawLiveTag(ctx, U.id, s.x - 17, s.y - (me ? 26 : 12));
     // Escribiendo…
     const ty = hotel.live.typing.get(U.id);
     const typing = ty && Date.now() - ty < 6000;

@@ -25,6 +25,7 @@ import { registerStatsRoutes } from './stats.js';
 import { registerAchievementRoutes } from './achievements.js';
 import { registerHotelRoutes } from './hotel.js';
 import { THEME_IDS, officeTheme, userTheme, registerThemeRoutes } from './themes.js';
+import { registerBadgeRoutes } from './badges.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
@@ -1018,6 +1019,7 @@ registerPushRoutes(api); // /push/key, /push/subscribe, /push/unsubscribe, /push
 registerSantaRoutes(api, { fail, notify, requireAdmin, wrap }); // /santa… (amigo secreto)
 registerHotelRoutes(api, { fail, wrap, notify }); // /hotel… (salas isométricas)
 registerThemeRoutes(api, { fail }); // /themes y /me/theme (tema de cada persona)
+registerBadgeRoutes(api, { fail, notify, requireAdmin, wrap }); // /badges… y /admin/badges… (placas)
 
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);

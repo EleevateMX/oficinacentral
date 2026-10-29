@@ -12,6 +12,7 @@ import { EMOTES, PAIR_RANGE, EMOTE_VARIANTS, cleanVariant } from '@shared/emotes
 import { DANCES } from './emoteFx.js';
 import { bindNotes } from './notes.js';
 import { onAchievementNotification, forgetBadges } from './achievements.js';
+import { initBadges, onBadgeNotification } from './badges.js';
 import { initPetSocket } from './petFx.js';
 
 export const DEFAULT_PREFS = {
@@ -345,6 +346,7 @@ class Office {
         this.toast({ title: `🎂 ${actor?.displayName || 'Alguien'}: ${n.data.text || '¡Feliz cumpleaños!'}`, action: { label: 'Ver', run: () => this.set({ modal: { type: 'birthdays' } }) }, duration: 9000 });
         playSound('wave', this.state.prefs.audio.notifVolume);
       } else if (n.type === 'achievement') onAchievementNotification(this, n);
+      else if (n.type === 'badge') onBadgeNotification(this, n); // placas
       else if (n.type === 'hotel_gift') this.toast({ title: n.data.text || '🎁 Te regalaron un furni', action: { label: 'Ver', run: () => this.set({ view: 'hotel' }) }, duration: 9000 }); // Hotel
       else if (n.type === 'santa') {
         this.toast({ title: n.data.text || '🎁 Amigo secreto', action: { label: 'Ver', run: () => this.set({ modal: { type: 'santa' } }) }, duration: 9000 });
@@ -352,6 +354,7 @@ class Office {
       }
     });
     s.on('achievement', (m) => forgetBadges(m.userId));
+    initBadges(this, s); // placas y "en vivo" (lib/badges.js)
   }
 
   applyMediaPrefs() {

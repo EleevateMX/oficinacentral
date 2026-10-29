@@ -4,6 +4,7 @@ import Birthdays, { checkBirthdays } from './Birthdays.jsx';
 import Notices from './Notices.jsx';
 import Feedback from './Feedback.jsx';
 import Achievements from './Achievements.jsx';
+import MyBadges from './badges/MyBadges.jsx'; // placas
 import JukeboxModal from './Jukebox.jsx';
 import SecretSanta from './SecretSanta.jsx';
 import { AnniversaryPhoto } from './SeasonExtras.jsx';
@@ -97,6 +98,7 @@ export default function Shell({ session, onLogout }) {
       {modal?.type === 'game' && <GameModal key={modal.objectId} objectId={modal.objectId} game={modal.game} />}
       {modal?.type === 'feedback' && <Feedback />}
       {modal?.type === 'achievements' && <Achievements userId={modal.userId} tab={modal.tab} />}
+      {modal?.type === 'badges' && <MyBadges userId={modal.userId} tab={modal.tab} />}
       {modal?.type === 'jukebox' && <JukeboxModal objectId={modal.objectId} />}
       {modal?.type === 'santa' && <SecretSanta />}
       {modal?.type === 'anniversaryPhoto' && <AnniversaryPhoto />}

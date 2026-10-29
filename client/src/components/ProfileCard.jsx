@@ -10,6 +10,7 @@ import { Avatar, STATUS, AvatarCanvas } from './ui.jsx';
 import { fmtTime, sameDay, tzDiffLabel } from '../lib/time.js';
 import { api } from '../lib/api.js';
 import { BadgeRow } from './Achievements.jsx';
+import { PlacasSection, LiveTag } from './badges/Badge.jsx'; // placas y "en vivo"
 
 export default function ProfileCard({ userId }) {
   const u = useOffice((s) => s.users[userId]);
@@ -45,6 +46,7 @@ export default function ProfileCard({ userId }) {
           <div className="pc-sub">
             <span className="dot" style={{ background: u.online ? STATUS[u.status || 'active'].color : 'var(--gray-dot)' }} />
             {u.online ? STATUS[u.status || 'active'].label : 'Desconectado'}
+            <LiveTag userId={u.id} />
           </div>
         </div>
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><X size={16} /></button>
@@ -127,6 +129,7 @@ export default function ProfileCard({ userId }) {
       {!isMe && u.online && (room || desk) && (
         <div className="pc-sub pc-where"><MapPin size={12} /> {room ? `${room.name}${room.closed ? ' · cerrada 🔒' : ''}` : 'En su escritorio'}</div>
       )}
+      <PlacasSection userId={u.id} />
       <BadgeRow userId={u.id} />
       <div className="pc-section">
         <div className="pc-label">Avatar</div>

@@ -8,7 +8,7 @@ import { hotelCtx, ensureOfficialRooms, ensureStarter } from './hotel.js';
 import { MAX_ROOMS_PER_USER } from '../shared/hotel.js';
 import { presence } from './realtime.js';
 import { localParts } from './stats.js';
-import { ACHIEVEMENT_BY_ID } from '../shared/achievements.js';
+import { wornIds, wornBadges, ownedBadges, setWorn, onWornChange } from './badges.js'; // placas (server/badges.js)
 import {
   CATEGORY_BY_ID, DEFAULT_CATEGORY, cleanTags, parseSearch, popularScore, eventActive,
   MOTTO_MAX, MAX_BADGES, RESPECTS_PER_DAY, EVENT_HOURS, EVENT_TITLE_MAX, EVENT_DESC_MAX,
@@ -93,7 +93,7 @@ export function profileOf(uid) {
   let p = profCache.get(uid);
   if (!p) {
     const r = db.prepare('SELECT motto, badges, respects FROM hotel_social_profiles WHERE user_id = ?').get(uid);
-    p = { motto: r?.motto || '', badges: parse(r?.badges, []).slice(0, MAX_BADGES), respects: r?.respects || 0 };
+    p = { motto: r?.motto || '', badges: wornIds(uid).slice(0, MAX_BADGES), respects: r?.respects || 0 };
     profCache.set(uid, p);
   }
   return p;
@@ -104,9 +104,8 @@ export function userSocialOut(uid) {
   const p = profileOf(uid);
   return { motto: p.motto, badges: p.badges, respects: p.respects };
 }
-// Insignias ganadas en la oficina (server/achievements.js) que se pueden mostrar en el hotel
-const earnedBadges = (uid) => db.prepare('SELECT badge, tier FROM achievements WHERE user_id = ? AND tier > 0').all(uid)
-  .filter((r) => ACHIEVEMENT_BY_ID[r.badge]).map((r) => ({ id: r.badge, tier: r.tier }));
+// Placas que tiene (logros, roles, streamer, fan…: server/badges.js)
+const earnedBadges = (uid) => ownedBadges(uid).map((b) => ({ id: b.id, tier: b.tier }));
 const respectsLeft = (uid) => RESPECTS_PER_DAY - db.prepare('SELECT COUNT(*) AS n FROM hotel_respects WHERE from_id = ? AND day = ?').get(uid, localParts().day).n;
 
 // Avisar a la sala donde está la persona (si está en una) que cambió su perfil
@@ -114,6 +113,7 @@ function pushProfile(uid) {
   const w = hotelCtx.where.get(uid);
   if (w) IO?.to(hotelCtx.key(w.roomId)).emit('hotel:social:user', { id: uid, ...userSocialOut(uid) });
 }
+onWornChange((uid) => { profCache.delete(uid); pushProfile(uid); }); // cambió sus placas puestas
 
 // ---------- Salas: categoría, etiquetas, likes, favoritas, eventos ----------
 const roomInfo = (id) => db.prepare('SELECT category, tags FROM hotel_room_info WHERE room_id = ?').get(id);
@@ -323,11 +323,10 @@ export function registerHotelSocialRoutes(api, { fail, wrap }) {
     if (!u) return fail(res, 404, 'Esa persona no existe');
     const p = profileOf(id);
     const earned = earnedBadges(id);
-    const tierOf = Object.fromEntries(earned.map((b) => [b.id, b.tier]));
     const w = hotelCtx.where.get(id);
     const out = {
       ...personOut(u), respects: p.respects, online: online(id),
-      badges: p.badges.filter((b) => tierOf[b]).map((b) => ({ id: b, tier: tierOf[b] })),
+      badges: wornBadges(id),
       friend: areFriends(uid, id),
       sent: !!db.prepare('SELECT 1 FROM hotel_friend_requests WHERE from_id = ? AND to_id = ?').get(uid, id),
       received: !!db.prepare('SELECT 1 FROM hotel_friend_requests WHERE from_id = ? AND to_id = ?').get(id, uid),
@@ -345,9 +344,7 @@ export function registerHotelSocialRoutes(api, { fail, wrap }) {
     if (b.motto !== undefined) db.prepare('UPDATE hotel_social_profiles SET motto = ? WHERE user_id = ?').run(clean(b.motto, MOTTO_MAX), uid);
     if (b.badges !== undefined) {
       if (!Array.isArray(b.badges)) return fail(res, 400, 'Insignias inválidas');
-      const mine = new Set(earnedBadges(uid).map((x) => x.id));
-      const list = [...new Set(b.badges.map(String))].filter((x) => mine.has(x)).slice(0, MAX_BADGES);
-      db.prepare('UPDATE hotel_social_profiles SET badges = ? WHERE user_id = ?').run(JSON.stringify(list), uid);
+      setWorn(uid, b.badges.slice(0, MAX_BADGES)); // se guardan en server/badges.js
     }
     profCache.delete(uid);
     pushProfile(uid);
