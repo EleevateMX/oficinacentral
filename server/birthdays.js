@@ -1,6 +1,7 @@
 // Aviso diario de cumpleaños a Discord (o Slack) si se configura BIRTHDAY_WEBHOOK_URL.
 // Sale una vez al día, a partir de las 9:00 en la zona de la oficina (OFFICE_TIMEZONE, por defecto Ciudad de México).
 import { db, getSetting, setSetting } from './db.js';
+import { hooks } from './hubEvents.js'; // bot de Discord (opcional; el webhook queda de respaldo)
 
 const URL_ = () => process.env.BIRTHDAY_WEBHOOK_URL || '';
 const TZ = () => process.env.OFFICE_TIMEZONE || 'America/Mexico_City';
@@ -16,12 +17,14 @@ export function birthdaysOn(md) {
 
 export async function announceBirthdays(now = new Date()) {
   const url = URL_();
-  if (!url) return false;
+  if (!url && !hooks.birthdayChannel?.()) return false;
   const { date, md, hour } = localParts(TZ(), now);
   if (hour < 9 || getSetting('bday_announced') === date) return false;
   setSetting('bday_announced', date);
   const people = birthdaysOn(md);
   if (!people.length) return false;
+  try { if (await hooks.postBirthdays?.(people)) return true; } catch { /* Discord caído: se intenta con el webhook */ }
+  if (!url) return false;
   const names = people.map((p) => `**${p.name}**`);
   const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
   const office = getSetting('office_name') || process.env.OFFICE_NAME || 'la oficina';
@@ -38,7 +41,7 @@ export async function announceBirthdays(now = new Date()) {
 }
 
 export function startBirthdayAnnouncer() {
-  if (!URL_()) return;
+  if (!URL_() && !hooks.botEnabled?.()) return;
   const tick = () => announceBirthdays().catch(() => {});
   setTimeout(tick, 30e3).unref();
   setInterval(tick, 10 * 60e3).unref();

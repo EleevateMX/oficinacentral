@@ -60,3 +60,12 @@ services:
         sync: false
       - key: DISCORD_CLIENT_SECRET
         sync: false
+      # Bot de Discord (opcional: roles → placas y avisos a canales; ver README "Bot de Discord")
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_GUILD_ID
+        sync: false
+      - key: DISCORD_PUBLIC_KEY
+        sync: false
+      - key: MOD_WEBHOOK_URL
+        sync: false

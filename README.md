@@ -86,6 +86,11 @@ Variables de entorno:
 | `BIRTHDAY_WEBHOOK_URL` | Webhook de Discord o Slack donde se anuncia cada mañana (9:00) quién cumple años |
 | `OFFICE_TIMEZONE` | Zona horaria de la oficina para el aviso de cumpleaños (por defecto `America/Mexico_City`) |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `PUBLIC_URL` | Entrar con Discord (vincular cuenta, entrar o aceptar invitación) |
+| `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` | Bot de Discord (opcional): roles de Discord → placas/admin/VIP en el HUB y avisos a canales. Sin estas dos, la integración no hace nada. Ver [Bot de Discord](#bot-de-discord) |
+| `DISCORD_PUBLIC_KEY` | Llave pública de la app de Discord: activa los botones del canal de moderación (endpoint `/api/discord/interactions`) |
+| `DISCORD_GATEWAY` | `1` = roles al instante por el Gateway (requiere *Server Members Intent*). Sin esto se sincroniza cada `DISCORD_SYNC_MINUTES` (15) |
+| `MOD_WEBHOOK_URL` | Webhook de un canal privado de moderación: reportes y sanciones cuando no hay bot (sin botones) |
+| `IP_HASH_SALT` | Opcional: sal para el hash de IPs (baneo por IP). Si falta, se genera una y se guarda en la base de datos |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Notificaciones push (Web Push). Si faltan las llaves, se generan solas la primera vez y se guardan en la base de datos. `VAPID_SUBJECT` es un contacto `mailto:` o `https://` (por omisión `mailto:` + `ADMIN_EMAIL`) |
 | `ANTHROPIC_API_KEY` | Llave de la API de Claude para el resumen de reuniones con IA ("📝 Tomar notas" en las salas). Vacío = función desactivada. El admin también puede apagarla en Preferencias → Marca de la oficina |
 | `AI_MODEL` | Opcional: modelo de Claude para los resúmenes (por defecto `claude-sonnet-5-5`) |
@@ -189,6 +194,38 @@ GitHub Actions corre ambas en cada push y pull request (`.github/workflows/ci.ym
   Configura en Discord Developer Portal → OAuth2 la redirección `https://TU-DOMINIO/api/auth/discord/callback`.
 - **Reporte de turnos** (Marca de la oficina → Reporte de turnos): horas por persona y turno (esta semana, la pasada, este mes, el pasado),
   número de veces y días, exportable a CSV. Cuenta el tiempo "En turno" mientras la persona está conectada.
+
+## Bot de Discord
+
+Opcional y apagado mientras no existan `DISCORD_BOT_TOKEN` y `DISCORD_GUILD_ID`. Se configura en **Preferencias → Discord** (solo admins).
+
+- **Roles de Discord → HUB.** Cada rol (y el boost del servidor) puede dar placas, rol de admin, un tema, VIP del Hotel o
+  "Moderador de HUB" (modera a miembros desde Discord y el HUB, nunca a admins ni la configuración). Se leen al entrar,
+  cada 15 min y, con `DISCORD_GATEWAY=1`, al momento. Lo que da Discord queda marcado: si quitan el rol, solo se quita eso.
+  Dar admin por un rol pide confirmar con tu código de verificación en dos pasos, y Discord nunca le quita el admin al primer admin.
+  Opción "Solo miembros del Discord pueden entrar" (apagada por defecto).
+- **Avisos a canales.** Streamer en vivo, bienvenidas, cumpleaños (el webhook queda de respaldo), eventos del calendario,
+  eventos del Hotel, logros (apagado por defecto) y registro de moderación. Todo sale **sin menciones** (`allowed_mentions` vacío).
+- **Personalizar canal.** Pone el tema de un canal y publica y fija un mensaje de bienvenida (reglas, enlaces al HUB y a MeDed Friends,
+  cómo vincular Discord). Revisa los permisos del bot y dice cuáles faltan. No crea ni borra canales o roles.
+- **Moderación desde Discord.** Cada reporte llega al canal privado con dónde está la persona y botones: *Sacar*, *Silenciar 15 min*,
+  *Silenciar voz*, *Banear 1 día*, *Banear + IP* y *Descartar*. Solo funcionan para admins del HUB con Discord vinculado o el rol mapeado
+  como "Moderador de HUB". Todo queda en el registro de actividad.
+- **Baneo por IP y silencio de voz.** Desde la tarjeta de la persona: "Silenciar en voz" (sin micrófono, el chat sigue),
+  "Sacar de la sala/voz" y "Banear también su IP". Las IPs se guardan como hash con sal; nunca se muestran completas.
+
+Cómo crear el bot (Discord Developer Portal, `discord.com/developers/applications`):
+
+1. Abre la misma aplicación de "Entrar con Discord" (o crea una). En **Bot** → *Reset Token* → cópialo en `DISCORD_BOT_TOKEN`.
+   Para roles al instante activa **Server Members Intent** (Privileged Gateway Intents) y pon `DISCORD_GATEWAY=1`.
+2. Invítalo con scope `bot` y permisos: Ver canales, Enviar mensajes, Insertar enlaces, Leer el historial, Gestionar mensajes (para fijar)
+   y, opcional, Gestionar canales (para el tema). Enlace:
+   `https://discord.com/oauth2/authorize?client_id=TU_CLIENT_ID&scope=bot&permissions=2251799813778448`
+   (Preferencias → Discord lo arma por ti).
+3. Modo desarrollador en Discord → clic derecho al servidor → *Copiar ID* → `DISCORD_GUILD_ID`.
+4. Botones de moderación: en *General Information* copia la **Public Key** en `DISCORD_PUBLIC_KEY` y en
+   **Interactions Endpoint URL** pon `https://TU-DOMINIO/api/discord/interactions` (Discord lo valida al guardar).
+5. Reinicia el servicio y entra a Preferencias → Discord.
 
 ## App de escritorio
 

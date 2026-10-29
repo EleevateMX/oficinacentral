@@ -79,6 +79,7 @@ export const ROLE_BADGES = [
   r('organizador', 'Organizador de eventos', 'Arma los eventos de la comunidad', { shape: 'square', bg: '#E0B15A', bg2: '#9A5A26', frame: '#ECE8DA', glyph: 'calendar', color: '#ECE8DA' }),
   r('campeon', 'Ganador de torneo', 'Ganó un torneo oficial del HUB', { shape: 'seal', bg: '#E0B15A', bg2: '#8A5A1E', frame: '#FFE38A', glyph: 'trophy', color: '#FFE38A' }),
   r('veterano', 'Veterano', 'Lleva mucho tiempo en la comunidad', { shape: 'shield', bg: '#6B5A3A', bg2: '#2E2416', frame: '#C07A3E', glyph: 'chevrons', color: '#E0B15A' }),
+  r('booster', 'Booster', 'Le da boost al servidor de Discord de la comunidad', { shape: 'diamond', bg: '#F47FFF', bg2: '#5B2A86', frame: '#ECE8DA', glyph: 'rocket', color: '#FFFFFF' }),
 ];
 
 // ---------- Streamers (marca simple con el color de cada plataforma; no son sus logos) ----------

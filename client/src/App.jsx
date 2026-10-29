@@ -17,6 +17,8 @@ const DISCORD_MSG = {
   invite: 'La invitación no es válida o ya expiró.',
   disabled: 'Tu cuenta está desactivada. Habla con un administrador.',
   cancel: 'Se canceló el inicio con Discord.',
+  notmember: 'Solo pueden entrar miembros del servidor de Discord de la comunidad. Únete y vuelve a intentarlo.',
+  ipbanned: 'Tu conexión está bloqueada por un administrador. Si crees que es un error, habla con el equipo en Discord.',
   error: 'No se pudo completar el inicio con Discord. Inténtalo de nuevo.',
 };
 const params = new URLSearchParams(window.location.search);

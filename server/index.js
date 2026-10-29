@@ -12,6 +12,7 @@ import { scheduleBackups } from './backup.js';
 import { alert, watchProcess } from './alerts.js';
 import { startPushScheduler } from './push.js';
 import { securityHeaders, setPageCsp } from './security.js';
+import { interactionsHandler, startDiscordBot } from './discordBot.js'; // bot de Discord (opcional)
 
 watchProcess();
 
@@ -38,6 +39,8 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : false);
 app.use(securityHeaders); // nosniff, frame, permisos, HSTS (server/security.js)
+// Botones de Discord: la firma Ed25519 se revisa sobre el cuerpo crudo (antes del parser JSON de /api)
+app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '64kb' }), interactionsHandler);
 app.use('/api', api);
 
 const dist = path.resolve('dist');
@@ -107,6 +110,7 @@ if (fs.existsSync(dist)) {
 const server = http.createServer(app);
 initRealtime(server);
 startBirthdayAnnouncer();
+startDiscordBot();
 scheduleBackups();
 startPushScheduler();
 
