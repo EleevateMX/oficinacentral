@@ -1,0 +1,62 @@
+/* Menú "Mi perfil" (MeMenu.jsx) */
+.popover.me-menu {
+  width: 340px; max-width: calc(100vw - 24px); max-height: min(78vh, 680px); overflow-y: auto;
+  padding: 0; border-radius: 16px; overscroll-behavior: contain;
+}
+.mm-hero {
+  position: relative; display: grid; grid-template-columns: auto 1fr; gap: 10px 12px; align-items: center;
+  padding: 16px 14px 12px;
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 38%, transparent), transparent 70%),
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 18%, var(--panel)), var(--panel));
+  border-bottom: 1px solid var(--border);
+}
+.mm-close {
+  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center; color: var(--text-2);
+}
+.mm-close:hover { background: var(--hover); color: var(--text); }
+.mm-avatar { border-radius: 50%; padding: 3px; background: color-mix(in srgb, var(--accent) 55%, transparent); line-height: 0; }
+.mm-id { min-width: 0; }
+.mm-name { font-weight: 800; font-size: 17px; line-height: 1.2; display: flex; align-items: center; gap: 6px; padding-right: 22px; overflow-wrap: anywhere; }
+.mm-user { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+.mm-now { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); margin-top: 5px; min-width: 0; }
+.mm-now-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-hero-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.mm-hero-actions .btn { flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 6px; }
+
+.mm-body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.mm-label {
+  display: flex; align-items: center; gap: 5px; margin-top: 4px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3);
+}
+.mm-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 3px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; }
+.mm-seg button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 4px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.mm-seg button:hover { color: var(--text); background: var(--hover); }
+.mm-seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+
+.mm-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.mm-chip {
+  padding: 5px 9px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-2);
+}
+.mm-chip:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.mm-chip.on { background: color-mix(in srgb, var(--accent) 20%, var(--panel)); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.mm-chip.danger { color: var(--red, #e5484d); }
+.mm-input { display: flex; align-items: center; gap: 8px; }
+.mm-input input {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: 13px;
+}
+.mm-input input:focus { outline: none; border-color: var(--accent); }
+
+.mm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.mm-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 9px 4px; border-radius: 10px; text-align: center;
+  background: var(--panel-2); border: 1px solid var(--border); font-size: 11.5px; font-weight: 600; line-height: 1.15;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+.mm-tile svg { color: var(--accent); flex-shrink: 0; }
+.mm-tile:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); transform: translateY(-1px); }
+
+@media (max-width: 520px) {
+  .popover.me-menu { position: fixed; left: 12px; right: 12px; bottom: 76px; width: auto; }
+}

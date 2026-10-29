@@ -1,14 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, MonitorCheck, PictureInPicture2, Ear } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Smile, MonitorUp, LogOut, Settings, ChevronUp, Hand, PictureInPicture2, Ear } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { since } from '../lib/time.js';
 import { office, useOffice } from '../lib/store.js';
-import { Avatar, STATUS } from './ui.jsx';
+import { Avatar } from './ui.jsx';
 import { openPip, pipSupported } from '../lib/pip.js';
 import { handButton } from '../lib/stage.js';
+import MeMenu from './MeMenu.jsx';
 
-const QUICK_STATUS = ['🎧 Concentrado', '📞 En llamada', '🍔 Comiendo', '☕ En pausa', '🚗 En camino', '🏠 Desde casa', '🤒 Enfermo', '🎮 Jugando'];
-const setStatusText = (statusText) => api.patch('/me', { statusText }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
 import { EMOTES, SOLO_EMOTES } from '@shared/emotes.js';
 
 const EMOJIS = ['👋', '👍', '❤️', '😂', '🎉', '🔥', '👏', '🤔', '☕', '✅'];
@@ -31,8 +29,6 @@ export default function ControlBar({ compact = false }) {
   const ref = useRef(null);
   useClickOutside(ref, () => setMenu(null));
   const meU = users[me.id] || me;
-  const shifts = useOffice((s) => s.config.shifts) || [];
-  const setShift = (shift) => api.put('/me/shift', { shift }).catch((e) => office.toast({ title: e.message, kind: 'error' }));
 
   return (
     <div className={`control-bar ${compact ? 'compact' : ''}`} ref={ref}>
@@ -40,45 +36,7 @@ export default function ControlBar({ compact = false }) {
         <button className="cb-avatar" onClick={() => setMenu(menu === 'me' ? null : 'me')} title="Tu estado">
           <Avatar user={{ ...meU, online: true }} size={compact ? 30 : 34} />
         </button>
-        {menu === 'me' && (
-          <div className="popover up left">
-            <div className="pop-title">{meU.displayName}</div>
-            {Object.entries(STATUS).map(([k, s]) => (
-              <button key={k} className={`pop-item ${meU.status === k ? 'on' : ''}`} onClick={() => { office.setStatus(k); setMenu(null); }}>
-                <span className="dot" style={{ background: s.color }} /> {s.label}
-              </button>
-            ))}
-            <div className="pop-sep" />
-            <div className="pop-label">Estado personalizado</div>
-            <div className="shift-chips">
-              {QUICK_STATUS.map((st) => (
-                <button key={st} className={`chip-btn ${meU.statusText === st ? 'on' : ''}`} onClick={() => setStatusText(meU.statusText === st ? '' : st)}>{st}</button>
-              ))}
-            </div>
-            <input className="status-input" placeholder="Escribe tu estado y presiona Enter" defaultValue={QUICK_STATUS.includes(meU.statusText) ? '' : meU.statusText || ''} maxLength={80}
-              onKeyDown={(e) => { if (e.key === 'Enter') { setStatusText(e.currentTarget.value.trim()); setMenu(null); } }} />
-            {meU.statusText && <button className="pop-item" onClick={() => setStatusText('')}>Quitar estado</button>}
-            {shifts.length > 0 && (
-              <>
-                <div className="pop-sep" />
-                <div className="pop-label"><MonitorCheck size={13} /> {meU.shift ? `En turno · ${meU.shift} · ${since(meU.shiftAt)}` : 'Turno'}</div>
-                <div className="shift-chips">
-                  {shifts.map((sh) => (
-                    <button key={sh} className={`chip-btn ${meU.shift === sh ? 'on' : ''}`} onClick={() => setShift(meU.shift === sh ? null : sh)}>{sh}</button>
-                  ))}
-                </div>
-                {meU.shift && <button className="pop-item" onClick={() => { setShift(null); setMenu(null); }}>Salir de turno</button>}
-              </>
-            )}
-            <div className="pop-sep" />
-            <button className="pop-item" onClick={() => { office.set({ profileCard: me.id }); setMenu(null); }}>Ver mi perfil</button>
-            <button className="pop-item" onClick={() => { office.set({ modal: { type: 'profile' } }); setMenu(null); }}>Editar perfil</button>
-            <button className="pop-item" onClick={() => { office.set({ modal: { type: 'profile', step: 'avatar', tab: 'pet' } }); setMenu(null); }}>🐾 Mi mascota</button>
-            <button className="pop-item" onClick={() => { office.set({ modal: { type: 'achievements' } }); setMenu(null); }}>🏅 Mis logros</button>
-            {meU?.avatar?.pet && meU.avatar.pet !== 'none' && <button className="pop-item" onClick={() => { office.set({ petPanel: me.id }); setMenu(null); }}>🎾 Jugar con mi mascota</button>}
-            <button className="pop-item" onClick={() => { office.set({ onboarding: true }); setMenu(null); }}>✨ Primeros pasos</button>
-          </div>
-        )}
+        {menu === 'me' && <MeMenu onClose={() => setMenu(null)} />}
       </div>
       <div className="cb-sep" />
       <button className={`cb-btn ${media.mic ? 'on' : 'off'}`} onClick={() => office.toggleMic()} title={media.mic ? 'Silenciar micrófono' : 'Activar micrófono'}>
