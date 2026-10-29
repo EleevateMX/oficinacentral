@@ -9,6 +9,7 @@ import { createSession, sessionCookie, hashPassword, defaultAvatar, randomToken,
 import { newLoginTicket, audit } from './security.js';
 import { hubEmit } from './hubEvents.js';
 import { guildGateAllows } from './discordBot.js'; // "solo miembros del Discord" (opcional)
+import { slugProblem, joinPrecheck, resolveJoin } from './publicJoin.js'; // enlace público /unete (con Discord)
 
 const API = () => process.env.DISCORD_API_BASE || 'https://discord.com/api';
 const AUTHORIZE = () => process.env.DISCORD_AUTHORIZE_URL || 'https://discord.com/oauth2/authorize';
@@ -22,6 +23,12 @@ function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 const redirectUri = (req) => `${baseUrl(req)}/api/auth/discord/callback`;
+
+// Sesión y, en el enlace público, la cookie de la pantalla de espera
+function setCookies(res, r) {
+  const list = [r.session && sessionCookie(createSession(r.session)), r.cookie].filter(Boolean);
+  if (list.length) res.setHeader('Set-Cookie', list);
+}
 
 function back(res, query) {
   res.redirect(`/?${new URLSearchParams(query)}`);
@@ -45,7 +52,7 @@ async function exchange(req, code) {
 }
 
 // Nombre de usuario libre a partir del de Discord
-function freeUsername(base) {
+export function freeUsername(base) {
   let u = String(base || 'usuario').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9_.-]/g, '').slice(0, 20) || 'usuario';
   if (u.length < 3) u = `${u}usr`;
   let cand = u;
@@ -78,9 +85,9 @@ button{width:100%;border:0;border-radius:12px;padding:14px;font:700 16px system-
 
 export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUser, broadcastUser }) {
   // Crea el "state" de OAuth y la URL de Discord
-  function begin(req, res, { mode, invite, handoff }) {
+  function begin(req, res, { mode, invite, handoff, slug }) {
     sweep();
-    mode = ['login', 'link', 'invite'].includes(mode) ? mode : 'login';
+    mode = ['login', 'link', 'invite', 'join'].includes(mode) ? mode : 'login';
     const st = { mode, exp: Date.now() + HANDOFF_TTL };
     if (mode === 'link') {
       const u = userFromReq(req);
@@ -90,6 +97,10 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
     if (mode === 'invite') {
       if (!validInvite(invite)) return { error: 'invite' };
       st.invite = String(invite);
+    }
+    if (mode === 'join') {
+      if (slugProblem(slug)) return { error: 'joinlink' };
+      st.slug = String(slug || '').toLowerCase();
     }
     const out = {};
     if (handoff) {
@@ -110,7 +121,8 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
   // Inicio (navegador): mode = login | link | invite
   api.get('/auth/discord', (req, res) => {
     if (!discordEnabled()) return res.status(404).send('Discord no está configurado');
-    const r = begin(req, res, { mode: req.query.mode, invite: req.query.invite });
+    const r = begin(req, res, { mode: req.query.mode, invite: req.query.invite, slug: req.query.slug });
+    if (r.error === 'joinlink') return back(res, { join: 'error', reason: 'slug' });
     if (r.error) return back(res, { discord: r.error });
     res.redirect(r.url);
   });
@@ -119,7 +131,7 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
   api.post('/auth/discord/start', (req, res) => {
     if (!discordEnabled()) return res.status(404).json({ error: 'Discord no está configurado' });
     const b = req.body || {};
-    const r = begin(req, res, { mode: b.mode, invite: b.invite, handoff: !!b.handoff });
+    const r = begin(req, res, { mode: b.mode, invite: b.invite, handoff: !!b.handoff, slug: b.slug });
     if (r.error) return res.status(400).json({ error: r.error });
     res.json(r);
   });
@@ -156,8 +168,15 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
       return { query: { discord: 'welcome' }, session: id };
     }
 
+    // Enlace público: crea la cuenta (o la deja en espera) o, si ya existe, entra como login
+    if (st.mode === 'join') {
+      const j = resolveJoin(st, profile, req, { freeUsername, broadcastUser });
+      if (!j.login) return j;
+    }
+
     // login
     if (!linked) return { query: { discord: 'nolink' } };
+    if (linked.disabled && db.prepare("SELECT 1 FROM public_joins WHERE user_id = ? AND status = 'pending'").get(linked.id)) return { query: { discord: 'pending' } };
     if (linked.disabled || isBanned(linked.id)) return { query: { discord: 'disabled' } };
     if (linked.totp_enabled) return { query: { login2fa: newLoginTicket(linked.id) } };
     if (linked.role === 'admin') audit({ actor: linked.id, action: 'Inició sesión con Discord (admin)', ip: req.ip });
@@ -187,11 +206,20 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
       if (ho) Object.assign(ho, { ready: true, result: { query: { discord: 'notmember' } } });
       return cookieOk ? back(res, { discord: 'notmember' }) : page(res, 'Sin acceso', '<h1>Solo miembros del Discord</h1><p>Únete al servidor de Discord de la comunidad y vuelve a intentarlo.</p>');
     }
+    // Enlace público: solo miembros del servidor (si el admin lo pide)
+    if (st.mode === 'join') {
+      const why = await joinPrecheck(profile);
+      if (why) {
+        const q = { join: 'error', reason: why, ...(st.slug ? { s: st.slug } : {}) };
+        if (ho) Object.assign(ho, { ready: true, result: { query: q } });
+        return cookieOk ? back(res, q) : page(res, 'Sin acceso', '<h1>No se pudo crear tu cuenta</h1><p>Vuelve a la app para ver el motivo.</p>');
+      }
+    }
 
     if (cookieOk) {
       // Mismo navegador: se entra aquí y, si la app instalada está esperando, también allá
       const r = resolve(st, profile, req);
-      if (r.session) res.setHeader('Set-Cookie', sessionCookie(createSession(r.session)));
+      setCookies(res, r);
       if (ho) Object.assign(ho, { ready: true, result: r });
       return back(res, r.query);
     }
@@ -228,7 +256,7 @@ export function registerDiscordRoutes(api, { validInvite, userFromReq, publicUse
     if (!ho.ready) return res.json({ status: 'pending' });
     handoffs.delete(String(req.params.hid));
     const r = ho.result || { query: { discord: 'error' } };
-    if (r.session) res.setHeader('Set-Cookie', sessionCookie(createSession(r.session)));
+    setCookies(res, r);
     res.json({ status: 'done', query: new URLSearchParams(r.query).toString() });
   });
 

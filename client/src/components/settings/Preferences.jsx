@@ -24,6 +24,7 @@ import { Coins, Award, Gavel, Bot } from 'lucide-react';
 import BadgesAdmin from '../badges/BadgesAdmin.jsx'; // placas
 import { ModerationAdmin } from '../Moderation.jsx';
 import DiscordAdmin from './DiscordAdmin.jsx'; // bot de Discord: roles, avisos y canal
+import PublicJoinAdmin, { JoinIcon } from './PublicJoinAdmin.jsx'; // registro abierto con Discord (/unete)
 
 const SECTIONS = [
   { group: 'Preferencias' },
@@ -41,6 +42,7 @@ const SECTIONS = [
   { group: 'Oficina' },
   { id: 'brand', label: 'Marca de la oficina', icon: Palette, admin: true },
   { id: 'members', label: 'Miembros', icon: UserCog },
+  { id: 'join', label: 'Registro abierto', icon: JoinIcon, admin: true },
   { id: 'office', label: 'Pisos y áreas', icon: Building2, admin: true },
   { id: 'characters', label: 'Personajes', icon: Smile, admin: true },
   { id: 'security', label: 'Seguridad', icon: Shield, admin: true },
@@ -104,6 +106,7 @@ export default function Preferences({ section = 'general' }) {
             {cur === 'hotel-economy' && <EconomyAdmin />}
             {cur === 'badges' && <BadgesAdmin />}
             {cur === 'discord' && <DiscordAdmin />}
+            {cur === 'join' && <PublicJoinAdmin />}
           </div>
         </section>
       </div>

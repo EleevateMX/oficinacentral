@@ -4,6 +4,7 @@ import { office } from './lib/store.js';
 import { applyBrand, setUserTheme } from './lib/themes.js';
 import Login from './components/Login.jsx';
 import InviteAccept from './components/InviteAccept.jsx';
+import PublicJoin, { joinRoute } from './components/PublicJoin.jsx'; // enlace público /unete (con Discord)
 import Shell from './components/Shell.jsx';
 import { Boot } from './components/brand.jsx';
 import { unsubscribePush } from './lib/push.js';
@@ -19,6 +20,7 @@ const DISCORD_MSG = {
   cancel: 'Se canceló el inicio con Discord.',
   notmember: 'Solo pueden entrar miembros del servidor de Discord de la comunidad. Únete y vuelve a intentarlo.',
   ipbanned: 'Tu conexión está bloqueada por un administrador. Si crees que es un error, habla con el equipo en Discord.',
+  pending: 'Tu cuenta está esperando la aprobación de un administrador. Te avisamos al entrar.',
   error: 'No se pudo completar el inicio con Discord. Inténtalo de nuevo.',
 };
 const params = new URLSearchParams(window.location.search);
@@ -54,6 +56,7 @@ export default function App() {
 
   if (!config) return <Boot />;
   if (invite && !session) return <InviteAccept token={invite} config={config} onDone={onLogin} />;
+  if (joinRoute && session === null) return <PublicJoin route={joinRoute} config={config} />;
   if (session === undefined) return <Boot />;
   if (!session) return <Login config={config} onLogin={onLogin} />;
   return <Shell session={session} onLogout={onLogout} />;
