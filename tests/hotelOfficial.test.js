@@ -1,4 +1,4 @@
-// Hotel: salas oficiales (Oficina Central y compañía). Modelos propios válidos, acomodo válido,
+// Hotel: salas oficiales (Charla General, Roleplay, League of Legends…). Modelos propios válidos, acomodo válido,
 // siembra idempotente, permisos (solo admins decoran; nadie borra), listado primero y toggles para todos.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,15 +8,15 @@ import { startServer, adminClient, createMember } from './helpers/server.js';
 import { ROOM_MODELS, PUBLIC_MODELS, validateModel, parseModel, OFFICIAL_CAPACITY } from '../shared/hotel.js';
 import { FURNI_BY_ID } from '../shared/hotelCatalog.js';
 import { buildRoom, canPlace, canPlaceWall, findPath, tileInfo } from '../shared/hotelRoom.js';
-import { OFFICIAL_ROOMS, planOfficialRoom } from '../shared/hotelOfficialRooms.js';
+import { OFFICIAL_ROOMS, FLAGSHIP_KEY, LEGACY_OFFICIAL_KEYS, planOfficialRoom } from '../shared/hotelOfficialRooms.js';
 
 // ---------- Lógica pura ----------
 test('hotel oficiales: modelos válidos (a–f intactos) y acomodo sin errores', () => {
   for (const [k, m] of Object.entries(ROOM_MODELS)) assert.equal(validateModel(m), null, `modelo ${k}`);
   assert.deepEqual(PUBLIC_MODELS, ['a', 'b', 'c', 'd', 'e', 'f']);
   assert.equal(parseModel('a').W, 7);
-  const hq = parseModel('hq');
-  assert.ok(hq.W >= 25 && hq.H >= 21, 'Oficina Central es grande');
+  const hq = parseModel('charla');
+  assert.ok(hq.W >= 25 && hq.H >= 21, 'Charla General es grande');
   assert.ok(hq.heights.flat().some((h) => h === 2) && hq.heights.flat().some((h) => h === 0), 'tarima y lounge hundido');
   // Validación de modelos inválidos
   assert.ok(validateModel({ map: ['xxx', 'x00', 'x00'], door: { x: 1, y: 1, rot: 2 } }));
@@ -77,7 +77,8 @@ test('hotel oficiales: listado primero, sembradas válidas y fuera de inventario
   await ana.post('/hotel/rooms', { name: 'Cuarto de Ana', model: 'b' });
   const off = (await ana.get('/hotel/rooms?tab=official')).data.rooms;
   assert.deepEqual(off.map((r) => r.officialKey), OFFICIAL_ROOMS.map((r) => r.key));
-  assert.equal(off[0].name, 'Oficina Central');
+  assert.equal(off[0].name, 'Charla General');
+  assert.equal(off[0].officialKey, FLAGSHIP_KEY);
   assert.ok(off.every((r) => r.official && r.access === 'open' && r.capacity === OFFICIAL_CAPACITY));
   for (const tab of ['popular', 'all']) {
     const rooms = (await ana.get(`/hotel/rooms?tab=${tab}`)).data.rooms;
@@ -91,7 +92,7 @@ test('hotel oficiales: listado primero, sembradas válidas y fuera de inventario
   assert.equal(am.rooms.length, 0);
   // Nadie crea salas con modelos oficiales
   await new Promise((r) => setTimeout(r, 1600)); // límite de una sala nueva cada 1.5 s
-  assert.equal((await ana.post('/hotel/rooms', { name: 'Copia', model: 'hq' })).status, 400);
+  assert.equal((await ana.post('/hotel/rooms', { name: 'Copia', model: 'charla' })).status, 400);
   // Los furnis sembrados no están en el inventario del admin
   const inv = (await admin.get('/hotel/inventory')).data.items;
   assert.ok(inv.every((i) => !i.extra?.official));
@@ -109,7 +110,7 @@ test('hotel oficiales: listado primero, sembradas válidas y fuera de inventario
 test('hotel oficiales: solo admins editan; nadie borra; todos usan toggles', async () => {
   const admin = await adminClient(srv.url);
   const beto = await createMember(srv.url, admin, 'BetoOf');
-  const hq = (await beto.get('/hotel/rooms?tab=official')).data.rooms.find((r) => r.officialKey === 'hq');
+  const hq = (await beto.get('/hotel/rooms?tab=official')).data.rooms.find((r) => r.officialKey === 'charla');
   // REST
   assert.equal((await beto.patch(`/hotel/rooms/${hq.id}`, { name: 'Mía' })).status, 403);
   assert.equal((await beto.del(`/hotel/rooms/${hq.id}`)).status, 403);

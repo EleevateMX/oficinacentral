@@ -43,7 +43,7 @@ export default function HotelView() {
   useEffect(() => {
     hotel.attach();
     hotel.loadInventory();
-    // Primero la vista del Hotel con el elevador (o directo a la Oficina Central si así lo eligió)
+    // Primero la vista del Hotel con el elevador (o directo a Charla General si así lo eligió)
     if (getSkip()) hotel.enterOfficial();
     else elevator.set({ landing: true });
     elevator.refresh();
@@ -130,7 +130,7 @@ function RoomView({ onExit }) {
         <button className="ht-btn dark ht-elev-btn" onClick={() => elevator.set({ panel: !elevator.state.panel })} title="Elevador: cambiar de piso"><ArrowUpDown size={16} /> <span className="ht-hide-sm">Elevador</span></button>
         <div className="ht-roomname">
           <b>{room.name}</b>
-          <span>{room.official ? 'Sala oficial GTAHUB' : `de ${owner?.displayName || room.ownerName}`}</span>
+          <span>{room.official ? 'Sala oficial MeDed Friends' : `de ${owner?.displayName || room.ownerName}`}</span>
         </div>
         <RoomSocialBar />
         <WalletBadge />

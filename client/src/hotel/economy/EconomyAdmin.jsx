@@ -47,13 +47,13 @@ function Wallets() {
   };
   return (
     <Block title="Saldos">
-      <p className="muted small">Cada persona empieza con 500, gana 50 al día y 10 cada 15 minutos dentro del Hotel. Lo que des o quites queda en el registro de actividad.</p>
+      <p className="muted small">Cada persona empieza con 500, gana 50 al día y 10 cada 15 minutos dentro de MeDed Friends. Lo que des o quites queda en el registro de actividad.</p>
       <input className="search-input" placeholder="Buscar persona…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="eco-adm-list">
         {users.map((u) => (
           <button key={u.id} className={`eco-adm-row ${sel?.id === u.id ? 'on' : ''}`} onClick={() => setSel(u)}>
             <span className="ellipsis">{u.displayName} <i className="muted">@{u.username}</i></span>
-            <b>{u.credits == null ? <i className="muted">sin abrir el Hotel</i> : <><Coin size={12} /> {fmtC(u.credits)}</>}</b>
+            <b>{u.credits == null ? <i className="muted">sin entrar a MeDed Friends</i> : <><Coin size={12} /> {fmtC(u.credits)}</>}</b>
           </button>
         ))}
         {!users.length && <span className="muted small">Nadie con ese nombre</span>}
@@ -105,7 +105,7 @@ function Vouchers() {
   const copy = (code) => { navigator.clipboard?.writeText(code); office.toast({ title: `Copiado: ${code}` }); };
   return (
     <Block title="Códigos de canje">
-      <p className="muted small">Se canjean en el Catálogo del Hotel o en el monedero. Cada persona usa un código una sola vez.</p>
+      <p className="muted small">Se canjean en el Catálogo de MeDed Friends o en el monedero. Cada persona usa un código una sola vez.</p>
       <form className="eco-adm-form" onSubmit={create}>
         <label><span>Código</span><input className="search-input" placeholder="Automático" maxLength={24} value={f.code} onChange={(e) => setF((x) => ({ ...x, code: e.target.value.toUpperCase() }))} /></label>
         <label><span>Créditos</span><input className="search-input" inputMode="numeric" value={f.credits} onChange={set('credits')} /></label>

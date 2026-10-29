@@ -4,7 +4,7 @@ const F = (id, name, cat, o) => ({ id, name, cat, kind: 'floor', w: 1, l: 1, h: 
 const W = (id, name, cat, o) => ({ id, name, cat, kind: 'wall', w: 1, l: 1, h: 0, rots: [2, 4], states: 1, line: 'hub', exclusive: true, ...o });
 
 export default [
-  F('hub_throne', 'Trono dorado del logo', 'gtahub', { h: 2.6, sit: 0.8, price: 1200 }),
+  F('hub_throne', 'Trono dorado HUB', 'gtahub', { h: 2.6, sit: 0.8, price: 1200 }),
   F('hub_sofa_vip', 'Sofá VIP de terciopelo', 'gtahub', { w: 2, h: 1.2, sit: 0.6, price: 600, colors: ['#FE3377', '#141414', '#7b2cbf'] }),
   F('hub_arch', 'Arco de neón HUB', 'gtahub', { w: 3, h: 3, interact: 'toggle', states: 2, price: 900 }),
   F('hub_holo', 'Pedestal holográfico', 'gtahub', { h: 1.9, rots: [0], interact: 'toggle', states: 2, price: 1000 }),

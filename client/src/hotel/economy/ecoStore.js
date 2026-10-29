@@ -9,10 +9,10 @@ import { hotel } from '../hotelStore.js';
 
 export const fmtC = (n) => Number(n || 0).toLocaleString('es-MX');
 export const REASON = {
-  start: 'Regalo de bienvenida', daily: 'Premio diario', online: 'Tiempo en el Hotel', buy: 'Compra', gift: 'Regalo enviado',
+  start: 'Regalo de bienvenida', daily: 'Premio diario', online: 'Tiempo en MeDed Friends', buy: 'Compra', gift: 'Regalo enviado',
   trade: 'Intercambio', coin: 'Canje de monedas', voucher: 'Código canjeado', admin: 'Ajuste de admin',
 };
-const TOAST = { daily: '☀️ Premio diario', online: '⏱️ Por estar en el Hotel', coin: '🪙 Canjeaste monedas', voucher: '🎟️ Código canjeado', admin: '💰 Un admin te dio créditos' };
+const TOAST = { daily: '☀️ Premio diario', online: '⏱️ Por estar en MeDed Friends', coin: '🪙 Canjeaste monedas', voucher: '🎟️ Código canjeado', admin: '💰 Un admin te dio créditos' };
 
 class Eco {
   state = { credits: null, log: [], daily: 0, onlineEveryMs: 15 * 60e3, onlineCredits: 10, trade: null, invites: [], reveal: null, fx: [], bump: 0, shop: null };

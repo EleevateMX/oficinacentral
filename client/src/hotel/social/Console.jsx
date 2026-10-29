@@ -74,7 +74,7 @@ function Friends() {
         {!friends.length && (
           <div className="ht-con-empty">
             <Users size={30} />
-            <b>Aún no tienes amigos en el Hotel</b>
+            <b>Aún no tienes amigos en MeDed Friends</b>
             <span>Búscalos por nombre o haz clic en alguien de la sala y elige <i>Agregar amigo</i>.</span>
             <button className="ht-btn primary sm" onClick={() => social.set({ tab: 'search' })}><Search size={14} /> Buscar gente</button>
           </div>
@@ -143,7 +143,7 @@ function People() {
   return (
     <div className="ht-con-body">
       <div className="ht-search-wrap"><Search size={14} /><input className="ht-input" autoFocus placeholder="Nombre o usuario…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-      {list == null && <p className="ht-muted small">Escribe para buscar a alguien de GTAHUB.</p>}
+      {list == null && <p className="ht-muted small">Escribe para buscar a alguien de la comunidad.</p>}
       {list?.length === 0 && <p className="ht-muted small">Nadie con ese nombre.</p>}
       {list?.map((u) => (
         <div key={u.id} className="ht-friend">

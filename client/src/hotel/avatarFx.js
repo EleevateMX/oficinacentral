@@ -7,7 +7,7 @@ export const EFFECTS = {
   brillos: { label: 'Brillos', emoji: '✨' },
   fuego: { label: 'Aura de fuego', emoji: '🔥' },
   fantasma: { label: 'Fantasma', emoji: '👻' },
-  neon: { label: 'Neón GTAHUB', emoji: '💗' },
+  neon: { label: 'Neón HUB', emoji: '💗' },
   reflector: { label: 'Reflector', emoji: '🔦' },
 };
 

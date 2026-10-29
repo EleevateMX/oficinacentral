@@ -5,13 +5,14 @@ import { api } from '../lib/api.js';
 import { office } from '../lib/store.js';
 import { playSound } from '../lib/sounds.js';
 import { hotel } from './hotelStore.js';
+import { FLAGSHIP_KEY } from '@shared/hotelOfficialRooms.js';
 
 const SKIP_KEY = 'hotel:skipLanding';
 export const getSkip = () => { try { return localStorage.getItem(SKIP_KEY) === '1'; } catch { return false; } };
 export const setSkip = (on) => { try { if (on) localStorage.setItem(SKIP_KEY, '1'); else localStorage.removeItem(SKIP_KEY); } catch { /* sin almacenamiento */ } };
 
 // Nombre en el panel (la principal es el lobby)
-export const floorName = (r) => (r?.officialKey === 'hq' ? 'Lobby · Oficina Central' : r?.name || 'Sala');
+export const floorName = (r) => (r?.officialKey === FLAGSHIP_KEY ? `Lobby · ${r.name || 'Charla General'}` : r?.name || 'Sala');
 export const floorLabel = (i) => (i <= 0 ? 'PB' : String(i));
 
 const vol = () => (office.state.prefs?.audio?.notifVolume ?? 0.6) * 0.7;
@@ -67,7 +68,7 @@ class Elevator {
     this.open(ride.id);
   }
   // Al llegar desde la oficina: las puertas ya cerradas se abren
-  async arrive(label = 'Hotel GTAHUB') {
+  async arrive(label = 'MeDed Friends') {
     const ride = { id: Date.now(), from: 0, to: 0, floor: 0, label, phase: 'moving', arrive: true };
     this.set({ ride });
     await wait(900);

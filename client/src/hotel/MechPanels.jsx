@@ -162,7 +162,7 @@ function wiredSummary(type, cfg) {
 
 // ---------- Bots ----------
 const BOT_INFO = {
-  reception: { role: 'Recepción de la Oficina Central', hint: 'Pregúntale por: ayuda, hotel, juegos o salas', quick: [['Ayuda', 'ayuda'], ['Salas', '¿qué salas hay?'], ['Juegos', 'juegos']] },
+  reception: { role: 'Recepción de Charla General', hint: 'Pregúntale por: ayuda, salas, juegos o roleplay', quick: [['Ayuda', 'ayuda'], ['Salas', '¿qué salas hay?'], ['Juegos', 'juegos'], ['Roleplay', 'roleplay']] },
   bartender: { role: 'Barra', hint: 'Pídele algo: “un café”, “un refresco”…', quick: [['☕ Café', 'un café'], ['🥤 Refresco', 'un refresco'], ['🍦 Helado', 'un helado'], ['💧 Agua', 'un vaso de agua']] },
 };
 export function BotCard({ U }) {
@@ -172,7 +172,7 @@ export function BotCard({ U }) {
       <button className="ht-x" onClick={() => hotel.set({ selected: null })} aria-label="Cerrar"><X size={14} /></button>
       <div className="ht-card-top">
         <span className="ht-bot-badge"><Bot size={22} /></span>
-        <div><b>{U.name}</b><span className="ht-muted">{info.role} · bot de GTAHUB</span><span className="ht-muted">{info.hint}</span></div>
+        <div><b>{U.name}</b><span className="ht-muted">{info.role} · bot de MeDed Friends</span><span className="ht-muted">{info.hint}</span></div>
       </div>
       <div className="ht-card-actions">
         {info.quick.map(([label, text]) => <button key={label} className="ht-btn" onClick={() => hotel.say(text)}>{label}</button>)}

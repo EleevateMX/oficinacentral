@@ -1,4 +1,4 @@
-// Letras vectoriales (solo las que usamos) y el logo hexagonal de GTAHUB, dibujados en plano.
+// Letras vectoriales (solo las que usamos) y el emblema hexagonal genérico, dibujados en plano.
 import { PINK, YELLOW, rgba } from './iso.js';
 
 // Rejilla de 4 × 6: cada letra es una lista de trazos (polilíneas)
@@ -71,20 +71,21 @@ export function hexPath(ctx, cx, cy, r) {
   const p = hexPts(cx, cy, r);
   ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
 }
-// Logo: hexágono con un cubo isométrico (arriba amarillo, izquierda rosa, derecha rosa profundo)
+// Emblema genérico: hexágono de dos tonos (arriba `left`, abajo `right`) con un hexágono interior de `top`.
+// Es un adorno abstracto (no copia ningún logo).
+//   o.ring: aro exterior · o.outline: contorno · o.inner === false: sin el hexágono interior
 export function hexLogo(ctx, cx, cy, r, o = {}) {
   const top = o.top || YELLOW, left = o.left || PINK, right = o.right || '#b8195a';
-  const p = hexPts(cx, cy, r);
+  const p = hexPts(cx, cy, r), k = r * 0.866;
   const poly = (pts, c) => { ctx.fillStyle = c; ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill(); };
   if (o.ring) { hexPath(ctx, cx, cy, r * 1.22); ctx.strokeStyle = o.ring; ctx.lineWidth = Math.max(1, r * 0.16); ctx.lineJoin = 'round'; ctx.stroke(); }
-  const C = [cx, cy];
-  poly([C, p[5], p[0], p[1]], top);
-  poly([C, p[5], p[4], p[3]], left);
-  poly([C, p[1], p[2], p[3]], right);
+  poly(p, left);
+  poly([[cx + k, cy], p[2], p[3], p[4], [cx - k, cy]], right);
   if (o.inner !== false) {
-    // ranura en "Y" que marca las aristas del cubo
-    ctx.strokeStyle = o.edge || 'rgba(20,20,20,0.55)'; ctx.lineWidth = Math.max(0.5, r * 0.09);
-    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p[5][0], p[5][1]); ctx.moveTo(cx, cy); ctx.lineTo(p[1][0], p[1][1]); ctx.moveTo(cx, cy); ctx.lineTo(p[3][0], p[3][1]); ctx.stroke();
+    poly(hexPts(cx, cy, r * 0.5), top);
+    hexPath(ctx, cx, cy, r * 0.5); ctx.strokeStyle = o.edge || 'rgba(20,20,20,0.35)'; ctx.lineWidth = Math.max(0.4, r * 0.07); ctx.stroke();
+  } else {
+    ctx.fillStyle = top; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0.5, r * 0.28), 0, Math.PI * 2); ctx.fill();
   }
   if (o.outline) { hexPath(ctx, cx, cy, r); ctx.strokeStyle = o.outline; ctx.lineWidth = Math.max(0.6, r * 0.1); ctx.stroke(); }
 }

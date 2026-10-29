@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 import { ROOM_MODELS } from '@shared/hotel.js';
 import { FURNI_BY_ID } from '@shared/hotelCatalog.js';
 import { buildRoom } from '@shared/hotelRoom.js';
+import { FLAGSHIP_KEY } from '@shared/hotelOfficialRooms.js';
 import { walkAt, toDir8, dirToward } from '@shared/hotelWalk.js';
 import { playSound } from '../lib/sounds.js';
 import { mechOnItem } from './mechanics.js';
@@ -115,12 +116,12 @@ class Hotel {
     this.set({ entering: { roomId }, waiting: null });
     this.socket?.emit('hotel:enter', { roomId, password });
   }
-  // Al subir al Hotel: directo a la sala oficial principal (Oficina Central)
+  // Al subir al Hotel: directo a la sala oficial principal (Charla General)
   async enterOfficial() {
     try {
       const r = await api.get('/hotel/rooms?tab=official');
       this.set({ rooms: r.rooms, navTab: 'official', myRooms: r.mine, maxRooms: r.maxRooms });
-      const hq = r.rooms.find((x) => x.officialKey === 'hq') || r.rooms[0];
+      const hq = r.rooms.find((x) => x.officialKey === FLAGSHIP_KEY) || r.rooms[0];
       if (hq && !this.state.roomId && !this.state.entering) this.enter(hq.id);
     } catch { /* se queda en el navegador */ }
   }

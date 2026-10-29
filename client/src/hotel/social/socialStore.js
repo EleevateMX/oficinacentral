@@ -73,7 +73,7 @@ class Social {
     if (m.type === 'request') {
       playSound('message', vol());
       this.set((st) => ({ requests: [m.user, ...st.requests.filter((r) => r.id !== m.user.id)] }));
-      office.toast({ title: `🤝 ${m.user.name} quiere ser tu amigo en el Hotel`, actions: [
+      office.toast({ title: `🤝 ${m.user.name} quiere ser tu amigo en MeDed Friends`, actions: [
         { label: 'Aceptar', run: () => this.accept(m.user.id) },
         { label: 'Ver', run: () => this.openConsole('requests') },
       ], duration: 9000 });

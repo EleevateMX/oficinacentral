@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS hotel_profiles (
   starter_at INTEGER
 );
 `);
-// Salas oficiales de GTAHUB: official = orden en el navegador (0 = sala normal), official_key = cuál es
+// Salas oficiales del Hotel: official = orden en el navegador (0 = sala normal), official_key = cuál es
 addColumn('hotel_rooms', 'official', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('hotel_rooms', 'official_key', 'TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_hotel_rooms_official ON hotel_rooms(official_key) WHERE official_key IS NOT NULL');

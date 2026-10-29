@@ -51,7 +51,7 @@ export default function Rail() {
       <div className="rail-kbd"><Kbd>⌘</Kbd><Kbd>K</Kbd></div>
       <div className="rail-gap" />
       {item('map', Map, 'Mapa')}
-      {item('hotel', Building2, 'Hotel')}
+      {item('hotel', Building2, 'MeDed')}
       {item('chat', MessageCircle, 'Chat', unreadChat)}
       {item('calendar', Calendar, 'Calendario')}
       {item('activity', Bell, 'Actividad', unreadNotif)}

@@ -177,14 +177,14 @@ function FrontPage({ go, pick }) {
     <div className="eco-front">
       <div className="eco-banner hero" style={{ '--c': '#FE3377' }}>
         <div className="eco-banner-text">
-          <small>Catálogo GTAHUB</small>
+          <small>Catálogo MeDed Friends</small>
           <h3>¡Decora a tu manera!</h3>
           <p>Compra con créditos HUB, regala a tu crew e intercambia rarezas.</p>
         </div>
         <div className="eco-hero-coin"><Coin size={64} /><b>{credits == null ? '…' : fmtC(credits)}</b></div>
       </div>
       <div className="eco-earn">
-        <div><b><Coin size={13} /> +{DAILY_CREDITS}</b><span>cada día que entras al Hotel</span></div>
+        <div><b><Coin size={13} /> +{DAILY_CREDITS}</b><span>cada día que entras a MeDed Friends</span></div>
         <div><b><Coin size={13} /> +{ONLINE_CREDITS}</b><span>cada 15 minutos dentro de una sala</span></div>
         <div><b><Ticket size={13} /> Códigos</b><span><button className="ht-link" onClick={() => go({ kind: 'codes' })}>Canjea un código</button> de eventos</span></div>
       </div>

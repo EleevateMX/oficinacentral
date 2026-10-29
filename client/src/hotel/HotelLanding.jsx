@@ -134,7 +134,7 @@ export function HotelLanding({ onExit }) {
       <div className="ht-landing-shade" />
       <div className="ht-landing-top">
         <button className="ht-btn dark" onClick={onExit}><ArrowLeft size={16} /> <span className="ht-hide-sm">Volver a la oficina</span></button>
-        <div className="ht-landing-brand"><b>Hotel</b> <span>GTAHUB</span></div>
+        <div className="ht-landing-brand"><b>MeDed</b> <span>Friends</span></div>
       </div>
       <div className="ht-landing-body">
         <div className="ht-landing-left">
@@ -148,7 +148,7 @@ export function HotelLanding({ onExit }) {
           <ElevatorPanel />
           <label className="ht-skip">
             <input type="checkbox" checked={skip} onChange={(e) => { setSkip(e.target.checked); setSkipState(e.target.checked); }} />
-            Entrar directo a la Oficina Central la próxima vez
+            Entrar directo a Charla General la próxima vez
           </label>
         </div>
       </div>
@@ -169,7 +169,7 @@ export function ElevatorRide() {
           <i className={ride.phase === 'moving' && ride.from !== ride.to ? 'go' : ''}>{up ? <ChevronUp size={22} /> : <ChevronDown size={22} />}</i>
           <b key={ride.floor}>{ride.arrive ? 'H' : floorLabel(ride.floor)}</b>
         </div>
-        <div className="ht-ride-label">{ride.phase === 'opening' ? <><Bell size={14} className="ht-ring" /> {ride.label}</> : ride.arrive ? 'Llegando al Hotel…' : `${up ? 'Subiendo' : 'Bajando'} a ${ride.label}…`}</div>
+        <div className="ht-ride-label">{ride.phase === 'opening' ? <><Bell size={14} className="ht-ring" /> {ride.label}</> : ride.arrive ? 'Llegando a MeDed Friends…' : `${up ? 'Subiendo' : 'Bajando'} a ${ride.label}…`}</div>
       </div>
     </div>
   );

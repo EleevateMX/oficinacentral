@@ -1,4 +1,4 @@
-// Hotel: modelos (mapas de alturas) de las salas OFICIALES de GTAHUB.
+// Hotel: modelos (mapas de alturas) de las salas OFICIALES del Hotel (MeDed Friends).
 // Se suman a ROOM_MODELS (shared/hotel.js) con `official: true`, así servidor, motor y parseModel
 // usan exactamente la misma fuente. No se pueden elegir al crear una sala normal.
 // Sin imports a propósito (shared/hotel.js lo importa).
@@ -20,48 +20,62 @@ const chamfer = (W, H, n) => {
   return out;
 };
 
-const HQ_DOOR = { x: 0, y: 19, rot: 2 };
-const JUNTAS_DOOR = { x: 0, y: 9, rot: 2 };
-const JUEGOS_DOOR = { x: 0, y: 11, rot: 2 };
-const JARDIN_DOOR = { x: 0, y: 13, rot: 2 };
-const COMEDOR_DOOR = { x: 0, y: 8, rot: 2 };
+const CHARLA_DOOR = { x: 0, y: 19, rot: 2 };
+const ROLEPLAY_DOOR = { x: 0, y: 13, rot: 2 };
+const LOL_DOOR = { x: 0, y: 10, rot: 2 };
+const FPS_DOOR = { x: 0, y: 12, rot: 2 };
+const MINECRAFT_DOOR = { x: 0, y: 14, rot: 2 };
+const MUSICA_DOOR = { x: 0, y: 11, rot: 2 };
+const CINE_DOOR = { x: 0, y: 14, rot: 2 };
 const VIP_DOOR = { x: 0, y: 11, rot: 2 };
 
 export const OFFICIAL_MODELS = {
-  // Oficina Central: 29×23. Piso general a 1, tarima de juntas a 2 (atrás a la izquierda),
+  // Charla General: 29×23 (el lobby grande). Piso general a 1, escenario a 2 (atrás a la izquierda),
   // lounge hundido a 0 (adelante al centro) y esquina recortada.
-  hq: {
-    name: 'Oficina Central', size: '29×23', official: true,
-    map: makeMap(30, 24, 1, HQ_DOOR, [
-      [1, 1, 7, 5, '2'], // tarima / escenario
+  charla: {
+    name: 'Charla General', size: '29×23', official: true,
+    map: makeMap(30, 24, 1, CHARLA_DOOR, [
+      [1, 1, 7, 5, '2'], // escenario
       [10, 17, 18, 22, '0'], // lounge hundido
       ...chamfer(30, 24, 3),
     ]),
-    door: HQ_DOOR,
+    door: CHARLA_DOOR,
   },
-  // Sala de juntas: 15×13 con tarima para quien presenta
-  juntas: {
-    name: 'Sala de juntas', size: '15×13', official: true,
-    map: makeMap(16, 14, 0, JUNTAS_DOOR, [[1, 1, 15, 2, '1']]),
-    door: JUNTAS_DOOR,
+  // Roleplay: 22×18. Taberna elevada atrás a la izquierda y plaza del pueblo al frente
+  roleplay: {
+    name: 'Roleplay', size: '22×18', official: true,
+    map: makeMap(23, 19, 0, ROLEPLAY_DOOR, [[1, 1, 14, 7, '1'], ...chamfer(23, 19, 2)]),
+    door: ROLEPLAY_DOOR,
   },
-  // Sala de juegos: 18×16 con escenario del DJ
-  juegos: {
-    name: 'Sala de juegos', size: '18×16', official: true,
-    map: makeMap(19, 17, 0, JUEGOS_DOOR, [[11, 1, 18, 3, '1'], ...chamfer(19, 17, 2)]),
-    door: JUEGOS_DOOR,
+  // League of Legends: 24×20. Escenario a 2 con escalón a 1 frente a la pantalla gigante
+  lol: {
+    name: 'League of Legends', size: '24×20', official: true,
+    map: makeMap(25, 21, 0, LOL_DOOR, [[6, 1, 18, 3, '2'], [6, 4, 18, 4, '1']]),
+    door: LOL_DOOR,
   },
-  // Jardín: 20×18 con terraza elevada
-  jardin: {
-    name: 'Jardín GTAHUB', size: '20×18', official: true,
-    map: makeMap(21, 19, 0, JARDIN_DOOR, [[1, 1, 7, 6, '1'], [15, 1, 20, 3, 'x'], [17, 4, 20, 4, 'x'], ...chamfer(21, 19, 3)]),
-    door: JARDIN_DOOR,
+  // Valorant y FPS: 20×16 con galería de tiro elevada a la derecha
+  fps: {
+    name: 'Valorant y FPS', size: '20×16', official: true,
+    map: makeMap(21, 17, 0, FPS_DOOR, [[14, 1, 20, 7, '1'], ...chamfer(21, 17, 2)]),
+    door: FPS_DOOR,
   },
-  // Comedor: 14×12
-  comedor: {
-    name: 'Comedor', size: '14×12', official: true,
-    map: makeMap(15, 13, 0, COMEDOR_DOOR, []),
-    door: COMEDOR_DOOR,
+  // Minecraft: 20×18 con terrenos en escalones (colina de dos niveles atrás)
+  minecraft: {
+    name: 'Minecraft', size: '20×18', official: true,
+    map: makeMap(21, 19, 0, MINECRAFT_DOOR, [[1, 1, 8, 7, '1'], [1, 1, 4, 3, '2'], [16, 1, 20, 3, 'x'], ...chamfer(21, 19, 3)]),
+    door: MINECRAFT_DOOR,
+  },
+  // Música y Karaoke: 18×16 con escenario del DJ
+  musica: {
+    name: 'Música y Karaoke', size: '18×16', official: true,
+    map: makeMap(19, 17, 0, MUSICA_DOOR, [[11, 1, 18, 3, '1'], ...chamfer(19, 17, 2)]),
+    door: MUSICA_DOOR,
+  },
+  // Cine y Anime: 18×16 con gradas (dos niveles) frente a la pantalla
+  cine: {
+    name: 'Cine y Anime', size: '18×16', official: true,
+    map: makeMap(19, 17, 0, CINE_DOOR, [[1, 8, 14, 10, '1'], [1, 11, 14, 16, '2']]),
+    door: CINE_DOOR,
   },
   // Lobby VIP: 17×16 con tarima del trono (dos escalones) en la pared del fondo
   vip: {

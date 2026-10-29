@@ -144,7 +144,7 @@ export const ROOM_MODELS = {
   },
 };
 
-// Salas oficiales (Oficina Central, Sala de juntas…): mapas propios con official: true
+// Salas oficiales (Charla General, Roleplay, League of Legends…): mapas propios con official: true
 Object.assign(ROOM_MODELS, OFFICIAL_MODELS);
 // Modelos que cualquiera puede elegir al crear su sala (a–f)
 export const PUBLIC_MODELS = Object.keys(ROOM_MODELS).filter((k) => !ROOM_MODELS[k].official);

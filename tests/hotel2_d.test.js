@@ -176,9 +176,12 @@ test('servidor: aviso de la vista del Hotel (solo el staff lo cambia)', async ()
   assert.equal(r0.status, 200);
   assert.ok(r0.data.promo.title);
   assert.equal((await beto.put('/hotel/promo', { title: 'X' })).status, 403);
-  const r = await admin.put('/hotel/promo', { title: '  Noche de karaoke  ', text: 'Hoy a las 9 en la Sala de juegos', button: 'Ir', roomKey: 'juegos' });
+  const r = await admin.put('/hotel/promo', { title: '  Noche de karaoke  ', text: 'Hoy a las 9 en Música y Karaoke', button: 'Ir', roomKey: 'musica' });
   assert.equal(r.status, 200);
   assert.equal(r.data.promo.title, 'Noche de karaoke');
-  assert.equal((await beto.get('/hotel/promo')).data.promo.roomKey, 'juegos');
+  assert.equal((await beto.get('/hotel/promo')).data.promo.roomKey, 'musica');
+  // Un aviso guardado con la clave vieja de una sala oficial apunta a la sala nueva
+  await admin.put('/hotel/promo', { title: 'Viejo', roomKey: 'juegos' });
+  assert.equal((await beto.get('/hotel/promo')).data.promo.roomKey, 'musica');
   assert.equal((await admin.put('/hotel/promo', { title: '' })).status, 400);
 });
