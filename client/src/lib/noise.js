@@ -7,6 +7,7 @@
 import workletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
 import wasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
 import simdUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
+import { getMedia } from './getMedia.js';
 
 export function aiNoiseSupported() {
   return typeof window !== 'undefined' && typeof AudioWorkletNode !== 'undefined' && typeof WebAssembly === 'object' && !!window.AudioContext;
@@ -76,16 +77,14 @@ export async function rnnoiseTrack(raw) {
 // `track` es lo que se envía; `stop()` apaga todo (micrófono y procesado).
 export async function openMic(settings) {
   const wantAi = settings.aiNoise === 'rnnoise' && aiNoiseSupported();
-  const s = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      // Con RNNoise se apaga el filtro del navegador para no procesar dos veces
-      noiseSuppression: wantAi ? false : settings.noiseSuppression,
-      echoCancellation: settings.echoCancellation,
-      autoGainControl: settings.autoGainControl,
-      channelCount: { ideal: 1 },
-      ...(settings.micId ? { deviceId: { exact: settings.micId } } : {}),
-    },
-  });
+  const s = await getMedia('audio', (id) => ({
+    // Con RNNoise se apaga el filtro del navegador para no procesar dos veces
+    noiseSuppression: wantAi ? false : !!settings.noiseSuppression,
+    echoCancellation: !!settings.echoCancellation,
+    autoGainControl: !!settings.autoGainControl,
+    channelCount: { ideal: 1 },
+    ...(id ? { deviceId: { exact: id } } : {}),
+  }), settings.micId);
   const raw = s.getAudioTracks()[0];
   if (wantAi) {
     try {

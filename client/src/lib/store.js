@@ -18,6 +18,7 @@ import { initBadges, onBadgeNotification } from './badges.js';
 import { initPetSocket } from './petFx.js';
 import { initModeration, hideMessage } from './moderation.js'; // bloqueos, silencio, expulsión y reportes
 import { acceptsPeer, closedApart } from './voiceGate.js'; // de quién se aceptan conexiones de voz
+import { onStaleDevice, isConstraintError } from './getMedia.js';
 
 export const DEFAULT_PREFS = {
   v: 2,
@@ -34,6 +35,14 @@ export const DEFAULT_PREFS = {
   ambience: { dayNight: false, music: false, musicVolume: 0.5, steps: true, stepsVolume: 0.5 },
   devices: { micId: '', camId: '', speakerId: '' },
 };
+
+// Micrófono, cámara y bocinas son de cada computadora (sus ids no sirven en otra): se guardan en
+// este navegador y no se sincronizan con la cuenta.
+const DEV_KEY = 'hub:devices';
+function localDevices() {
+  try { const d = JSON.parse(localStorage.getItem(DEV_KEY) || 'null'); return d && typeof d === 'object' ? d : {}; } catch { return {}; }
+}
+function saveLocalDevices(d) { try { localStorage.setItem(DEV_KEY, JSON.stringify(d)); } catch { /* sin almacenamiento */ } }
 
 function mergePrefs(p = {}) {
   const out = { ...DEFAULT_PREFS, ...p };
@@ -112,7 +121,7 @@ class Office {
 
   // ---------- Arranque ----------
   async start(me, prefs) {
-    this.set({ me, prefs: mergePrefs(prefs) });
+    this.set({ me, prefs: mergePrefs({ ...prefs, devices: localDevices() }) });
     setUserTheme(me.uiTheme || null); // tema propio (si eligió uno)
     applyTheme(this.state.prefs.colorMode);
     const [config, ice, users, floors, chat, notifications] = await Promise.all([
@@ -750,6 +759,7 @@ class Office {
         : !window.isSecureContext ? 'El micrófono y la cámara requieren HTTPS (o localhost).'
           : e?.voiceServer ? e.message
           : /engine not connected|not connected within timeout|could not establish/i.test(e?.message || '') ? 'No se pudo conectar con el servidor de voz. Revisa tu conexión e inténtalo de nuevo.'
+          : isConstraintError(e) ? 'Tu micrófono o cámara no aceptó la configuración. Elige otro en Preferencias → Audio y video.'
           : `No se pudo acceder al dispositivo: ${e?.message || e}`;
     this.toast({ title: msg, kind: 'error' });
   }
@@ -875,7 +885,9 @@ class Office {
     applyTheme(prefs.colorMode);
     this.applyMediaPrefs();
     clearTimeout(this.prefsTimer);
-    this.prefsTimer = setTimeout(() => api.put('/me/prefs', prefs).catch(() => {}), 500);
+    saveLocalDevices(prefs.devices);
+    const { devices, ...shared } = prefs;
+    this.prefsTimer = setTimeout(() => api.put('/me/prefs', shared).catch(() => {}), 500);
   }
 
   // ---------- Utilidades UI ----------
@@ -925,6 +937,11 @@ export function applyTheme(mode) {
 }
 
 export const office = new Office();
+// Si un micrófono o cámara guardado ya no existe en esta computadora, se olvida y se usa el predeterminado
+onStaleDevice((k) => {
+  const d = office.state.prefs.devices || {};
+  if (d[k]) office.updatePrefs({ devices: { ...d, [k]: '' } });
+});
 // Acceso desde la consola y las pruebas en navegador (solo la sesión propia)
 if (typeof window !== 'undefined') window.__office = office;
 
