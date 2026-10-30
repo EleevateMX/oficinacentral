@@ -49,9 +49,9 @@ const INTERACT_LABELS = { board: 'Abrir pizarrón', notices: 'Ver anuncios', scr
 const CRISP = new Set(['cubeLogo', 'hexBadge', 'hexNeon', 'hexLamp']);
 // Hay un juego abierto (o el mouse está capturado por uno): la oficina ignora mouse y teclado
 const gameOpen = () => office.state.modal?.type === 'game' || (typeof document !== 'undefined' && !!document.pointerLockElement);
-const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade', zombieArcade: 'Jugar Zombies en la oficina', kartArcade: 'Jugar Karts de oficina' };
+const GAME_LABELS = { pingPong: 'Jugar ping pong', poolTable: 'Jugar billar', foosball: 'Jugar futbolito', arcade: 'Jugar arcade', zombieArcade: 'Jugar Zombies en la oficina', kartArcade: 'Jugar Karts de oficina', arenaArcade: 'Jugar Arena HUB' };
 // Zombies: si ya hay una partida en esa máquina, la pista invita a unirse
-const zombieLabel = (o) => { const m = (o.type === 'zombieArcade' || o.type === 'kartArcade') && office.state.liveGames?.find((g) => g.objectId === o.id); return m ? `Unirse a ${o.type === 'kartArcade' ? 'Karts' : 'Zombies'} (${m.players.length}/${m.max})` : null; };
+const zombieLabel = (o) => { const m = (o.type === 'zombieArcade' || o.type === 'kartArcade' || o.type === 'arenaArcade') && office.state.liveGames?.find((g) => g.objectId === o.id); return m ? `Unirse a ${o.type === 'kartArcade' ? 'Karts' : o.type === 'arenaArcade' ? 'la Arena' : 'Zombies'} (${m.players.length}/${m.max})` : null; };
 
 // Tamaño de un objeto (los de temporada traen el suyo)
 const sizeOf = (o) => (o.season ? { w: o.w, h: o.h } : objSize(o));

@@ -8,15 +8,18 @@
 //    Quien entra a jugar "sale de la sala": deja de verse en el mapa y de oírse (ver hooks).
 import { db, now } from './db.js';
 
-export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies', kartArcade: 'karts' };
-export const MAX_SEATS = { arcade: 1, zombies: 4, karts: 8 };
+export const GAME_OF = { pingPong: 'pong', poolTable: 'pool', foosball: 'foosball', arcade: 'arcade', zombieArcade: 'zombies', kartArcade: 'karts', arenaArcade: 'arena' };
+export const MAX_SEATS = { arcade: 1, zombies: 4, karts: 8, arena: 8 };
 // Juegos "de sala" (Zombies y Karts): asientos fijos, anfitrión que pasa al siguiente y quien juega sale de la oficina
-export const SQUAD_GAMES = new Set(['zombies', 'karts']);
+export const SQUAD_GAMES = new Set(['zombies', 'karts', 'arena']);
 const seatsFor = (game) => MAX_SEATS[game] || 2;
 const rooms = new Map(); // objectId -> { game, seats: [uid|null…], host, members: Set<uid>, floorId }
 
 // realtime.js engancha aquí la presencia: quien se sienta en Zombies sale de la sala y vuelve al irse
-export const gameHooks = { seated: (uid, info) => {}, unseated: (uid) => {}, live: (list) => {} }; // eslint-disable-line no-unused-vars
+export const gameHooks = { seated: (uid, info) => {}, unseated: (uid) => {}, live: (list) => {}, team: (uid, team) => {} }; // eslint-disable-line no-unused-vars
+
+// Arena por equipos: cada equipo se oye solo a sí mismo (null = sin equipo, oye a toda la partida)
+export const sameTeam = (ga, gb) => ga?.team == null || gb?.team == null || ga.team === gb.team;
 
 function objectInfo(id) {
   const r = db.prepare('SELECT type, floor_id FROM objects WHERE id = ?').get(id);
@@ -164,7 +167,9 @@ CREATE INDEX IF NOT EXISTS idx_game_scores ON game_scores(game, score DESC);
 
 // Karts: mejor vuelta (en milisegundos, menos es mejor) de cada pista
 export const TIME_GAMES = ['karts_oficina', 'karts_juegos', 'karts_torre'];
-export const SCORE_GAMES = ['arcade', 'pong', 'pool', 'foosball', 'zombies', ...TIME_GAMES];
+// Arena HUB: 'arena' cuenta partidas ganadas (contra personas) y 'arena_kills' suma las bajas
+export const SUM_GAMES = ['arena_kills'];
+export const SCORE_GAMES = ['arcade', 'pong', 'pool', 'foosball', 'zombies', ...TIME_GAMES, 'arena', ...SUM_GAMES];
 // Juegos de puntuación (mejor marca de cada persona); los demás cuentan partidas ganadas
 export const POINT_GAMES = ['arcade', 'zombies'];
 
@@ -174,7 +179,9 @@ export function addScore(userId, game, score) {
 
 // Arcade y Zombies: mejor puntuación de cada persona. Mesas: partidas ganadas.
 export function topScores(game, limit = 10) {
-  const sql = TIME_GAMES.includes(game)
+  const sql = SUM_GAMES.includes(game)
+    ? 'SELECT user_id AS userId, SUM(score) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score DESC LIMIT ?'
+    : TIME_GAMES.includes(game)
     ? 'SELECT user_id AS userId, MIN(score) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score ASC LIMIT ?'
     : POINT_GAMES.includes(game)
     ? 'SELECT user_id AS userId, MAX(score) AS score FROM game_scores WHERE game = ? GROUP BY user_id ORDER BY score DESC LIMIT ?'

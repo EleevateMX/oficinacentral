@@ -185,6 +185,7 @@ export const FURNITURE = {
   vending: (m, w, d, c) => { m.box(w * 0.92, 1.9, d * 0.8, 0, 0, -d * 0.05, c); m.box(w * 0.6, 1.3, 0.02, -w * 0.1, 0.45, d * 0.36, '#bfe3f2', { mat: 'glow' }); for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) m.box(0.12, 0.14, 0.02, -w * 0.3 + k * 0.17, 0.6 + r * 0.3, d * 0.37, ['#ffd23f', '#e63946', '#2bb673', '#3a86ff'][(r + k) % 4], { mat: 'glow' }); },
   arcade: (m, w, d, c) => arcadeModel(m, w, d, c),
   zombieArcade: (m, w, d, c) => arcadeModel(m, w, d, c || '#1f3b24', { marquee: '#7CFF4F', screen: '#2c8a3c', zombie: true }),
+  arenaArcade: (m, w, d, c) => arcadeModel(m, w, d, c || '#22163a', { marquee: '#FE3377', screen: '#3a2a6a' }),
   jukebox: (m, w, d, c) => { m.box(w * 0.8, 1.45, d * 0.6, 0, 0, -d * 0.1, c); m.cyl(w * 0.4, d * 0.6, 0, 1.25, -d * 0.1, shade(c, 0.1), { rx: Math.PI / 2 }); m.box(w * 0.6, 0.5, 0.02, 0, 0.75, d * 0.21, '#ffd23f', { mat: 'glow' }); },
   poolTable: (m, w, d, c) => { m.box(w, 0.18, d, 0, 0.62, 0, '#6b3f22'); m.box(w - 0.24, 0.02, d - 0.24, 0, 0.8, 0, c); legs(m, w * 0.9, d * 0.8, 0.62, '#4a2b17', 0.14); for (let k = 0; k < 6; k++) m.ball(0.035, -0.6 + k * 0.17, 0.85, (k % 2) * 0.12 - 0.06, ['#ffd23f', '#3a86ff', '#e63946', '#9b5de5', '#f4a261', '#fff'][k]); return 0; },
   pingPong: (m, w, d, c) => { m.box(w, 0.05, d, 0, 0.74, 0, c); m.box(w, 0.006, 0.03, 0, 0.79, 0, '#fff'); m.box(0.03, 0.006, d, 0, 0.79, 0, '#fff'); m.box(0.02, 0.15, d, 0, 0.79, 0, '#e8e8ee', { mat: 'glass' }); legs(m, w * 0.9, d * 0.8, 0.74); },

@@ -55,8 +55,8 @@ export default function ProfileCard({ userId }) {
       {u.statusText && <div className="pc-status">{u.statusText}</div>}
       {u.online && u.game && (
         <div className="pc-status pc-game">
-          {u.game.type === 'karts' ? '🏎️ Corriendo karts' : '🧟 Jugando Zombies en la oficina'}
-          {!isMe && <button className="btn primary small" onClick={() => office.set({ modal: { type: 'game', objectId: u.game.objectId, game: u.game.type === 'karts' ? 'karts' : 'zombies', floorId: u.game.floorId }, profileCard: null })}>Unirse</button>}
+          {u.game.type === 'karts' ? '🏎️ Corriendo karts' : u.game.type === 'arena' ? '🎯 En la Arena' : '🧟 Jugando Zombies en la oficina'}
+          {!isMe && <button className="btn primary small" onClick={() => office.set({ modal: { type: 'game', objectId: u.game.objectId, game: ['karts', 'arena'].includes(u.game.type) ? u.game.type : 'zombies', floorId: u.game.floorId }, profileCard: null })}>Unirse</button>}
         </div>
       )}
       {u.birthday && (isBirthday(u) ? (

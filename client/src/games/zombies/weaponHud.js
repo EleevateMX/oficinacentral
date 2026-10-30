@@ -410,3 +410,6 @@ export function slowMoTint(g, W, H, s) {
   if (!s.wheel?.open) return;
   g.fillStyle = 'rgba(40,60,90,.12)'; g.fillRect(0, 0, W, H);
 }
+
+// Para la Arena HUB (y quien quiera): piezas de dibujo del HUD
+export { panel, txt, keycap, icon, font, PANEL, PANEL2, LINE, DISPLAY, BODY };

@@ -3,9 +3,10 @@ import { db, now } from './db.js';
 import { parseCookies, userFromToken, SESSION_COOKIE } from './auth.js';
 import { getFloor, defaultFloorId, setAreaClosed, isAreaClosed, closedAreaIds, floorPayload, floorOfArea, listFloors, isFloorAdminOnly } from './world.js';
 import { isWalkable, nearestWalkable, canTalk, areaAt, closedRoomAt } from '../shared/map.js';
-import { initGames, gameHooks } from './games.js';
+import { initGames, gameHooks, sameTeam } from './games.js';
 import { EMOTES, PAIR_RANGE, cleanVariant } from '../shared/emotes.js';
 import { initBoards } from './boards.js';
+import { initArena } from './arena.js'; // Arena HUB: voz por equipo
 import { initNotes, startNotesTimer } from './notes.js';
 import { initPets } from './pets.js';
 import { initJukebox } from './jukebox.js';
@@ -36,7 +37,7 @@ export function publicPresence(userId) {
 
 // Zombies: quien juega sale de la sala (no se ve en el mapa ni se oye) y regresa al mismo lugar al salir.
 // Dos personas solo "se oyen" si están en la misma partida, o si ninguna está jugando.
-export const sameGame = (a, b) => (a?.game?.objectId ?? null) === (b?.game?.objectId ?? null);
+export const sameGame = (a, b) => (a?.game?.objectId ?? null) === (b?.game?.objectId ?? null) && sameTeam(a?.game, b?.game);
 function setGame(userId, game) {
   const p = presence.get(userId);
   if (!p || (!p.game && !game)) return;
@@ -151,6 +152,7 @@ export function initRealtime(httpServer) {
   initVoiceGate({ presence, emitToUser });
   gameHooks.seated = (uid, info) => setGame(uid, { type: info.game, objectId: info.objectId, floorId: info.floorId });
   gameHooks.unseated = (uid) => setGame(uid, null);
+  gameHooks.team = (uid, team) => { const g = presence.get(uid)?.game; if (g && g.team !== team) setGame(uid, { ...g, team }); };
   gameHooks.live = (list) => io?.emit('games:live', list);
 
   io.use((socket, next) => {
@@ -314,6 +316,7 @@ export function initRealtime(httpServer) {
 
     initBoards(io, socket, userId);
     initGames(io, socket, userId);
+    initArena(io, socket, userId);
     initNotes(io, socket, userId);
     initStage(socket, userId);
     initPets(io, socket, userId, presence);

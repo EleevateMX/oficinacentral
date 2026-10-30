@@ -614,7 +614,8 @@ class Office {
     // Zombies: en una partida solo se oye al equipo; a quien está jugando no se le oye en la sala
     const gid = me.game?.objectId ?? null;
     if (gid != null) {
-      const squad = Object.entries(this.players).filter(([id, p]) => Number(id) !== this.state.me.id && p.game?.objectId === gid).map(([id]) => Number(id)).sort((a, b) => a - b);
+      const team = me.game?.team ?? null; // Arena por equipos: solo tu equipo
+      const squad = Object.entries(this.players).filter(([id, p]) => Number(id) !== this.state.me.id && p.game?.objectId === gid && (team == null || p.game?.team == null || p.game.team === team)).map(([id]) => Number(id)).sort((a, b) => a - b);
       this.media.setPeers(squad, []);
       const prev = this.state.talkingWith;
       if (prev.length !== squad.length || prev.some((v, i) => v !== squad[i])) this.set({ talkingWith: squad });

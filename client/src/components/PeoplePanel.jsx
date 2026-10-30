@@ -52,7 +52,7 @@ export default function PeoplePanel() {
   }, [users, q]);
 
   const sub = (u) => {
-    if (u.online && u.game) return u.game.type === 'karts' ? '🏎️ Corriendo karts' : '🧟 Jugando Zombies';
+    if (u.online && u.game) return u.game.type === 'karts' ? '🏎️ Corriendo karts' : u.game.type === 'arena' ? '🎯 En la Arena' : '🧟 Jugando Zombies';
     if (u.online && u.screen) return `🔴 En vivo${u.shift ? ` · ${u.shift}` : ''}`;
     if (u.shift) return `🖥️ En turno ${u.shift} · ${since(u.shiftAt)}`;
     const status = STATUS[u.status || 'active'].label;
