@@ -17,14 +17,17 @@ import { createViewModel } from './viewModel.js';
 import { SwordTrail, Slashes, Beams, TechFx, BurnZones } from './vfx.js';
 import { speedLines } from './weaponHud.js';
 import * as sim from './sim.js';
-import { buildWorld } from './world.js';
-import { GEO, mat, Horde, bossModel, animateBoss, rememberBossMaterials, voxelAvatar, animateAvatar } from './models.js';
-import { Particles, Splats, Rings, Tracers, Projectiles, Pickups } from './fx.js';
+import { buildWorld, WORLD_Q } from './world.js';
+import { GEO, mat, Horde, bossModel, animateBoss, rememberBossMaterials, voxelAvatar, animateAvatar, compactModel } from './models.js';
+import { Particles, Splats, Rings, Tracers, Projectiles, Pickups, Blobs } from './fx.js';
 import { Hud } from './hud.js';
 import { ZMenu } from './menu.js';
 import { MenuScene } from './menuScene.js';
 import { loadOpts, saveOpts } from './options.js';
-import { SnapBuffer, gameLoop, stamp } from '../netSync.js';
+import { SnapBuffer, gameLoop, stamp, NetStats } from '../netSync.js';
+import { AdaptiveQuality, pixelRatio, isQualityMode } from '../quality.js';
+import { SnapEncoder, SnapDecoder } from './snapDelta.js';
+import { ShadowCache, DYN_LAYER } from './shadowCache.js';
 import { playSound } from '../../lib/sounds.js';
 import { ZAudio } from './audio.js';
 
@@ -38,13 +41,43 @@ const SEAT_COLORS = ['#FE3377', '#3a86ff', '#FFCC00', '#2bb673'];
 const DROP_NAMES = { ammo: '+ Munición', health: '+30 de vida', points: '+150 puntos', box: '¡Caja misteriosa!' };
 const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } return null; };
 
+// Ajustes de cada calidad. prCap/prScale: densidad de pixeles (tope del dpr × factor) · shadow:
+// 'cached' (sombra del edificio guardada + personajes encima en cada cuadro: se ve igual que rehacerla
+// toda, ver shadowCache.js), 'dynamic' (se rehace toda; shadowEvery = cada cuántos cuadros; solo si
+// la anterior no funciona en el navegador), 'static' (sombra fija del edificio + sombras redondas
+// bajo los personajes) u 'off' · fx: cantidad de partículas · hudHz: veces por segundo que se
+// redibuja el HUD · lod: metros desde los que los zombis van simplificados.
+const PRESET = {
+  alta: { prCap: 1.5, prScale: 1, shadow: 'cached', shadowEvery: 1, fx: 1, hudHz: 60, lod: 30 },
+  media: { prCap: 1, prScale: 1, shadow: 'static', shadowEvery: 0, fx: 0.7, hudHz: 30, lod: 18 },
+  baja: { prCap: 1, prScale: 0.6, shadow: 'off', shadowEvery: 0, fx: 0.45, hudHz: 30, lod: 14, pixelated: true },
+};
+// Calidad automática: escalones de mejor (0) a más ligero. Primero baja la resolución, luego las
+// sombras y al final los efectos. Nada de esto recompila sombreadores (no hay congelones al cambiar).
+const AUTO_STEPS = [
+  { prCap: 1.5, prScale: 1, shadow: 'cached', shadowEvery: 1, fx: 1, hudHz: 60, lod: 30 },
+  { prCap: 1.25, prScale: 1, shadow: 'cached', shadowEvery: 1, fx: 1, hudHz: 60, lod: 26 },
+  { prCap: 1, prScale: 1, shadow: 'cached', shadowEvery: 2, fx: 1, hudHz: 60, lod: 22 },
+  { prCap: 1, prScale: 0.85, shadow: 'cached', shadowEvery: 2, fx: 1, hudHz: 30, lod: 20 },
+  { prCap: 1, prScale: 0.75, shadow: 'static', shadowEvery: 0, fx: 0.8, hudHz: 30, lod: 18 },
+  { prCap: 1, prScale: 0.65, shadow: 'static', shadowEvery: 0, fx: 0.6, hudHz: 30, lod: 16 },
+  { prCap: 1, prScale: 0.55, shadow: 'static', shadowEvery: 0, fx: 0.4, hudHz: 30, lod: 14 },
+];
+const FOG = { alta: [9, 40], auto: [9, 40], media: [8, 34], baja: [6, 28] };
+
 export function create(canvas, ctx) {
   let destroyed = false;
   const cleanups = [];
   const on = (el, ev, fn, opts) => { el.addEventListener(ev, fn, opts); cleanups.push(() => el.removeEventListener(ev, fn, opts)); };
   const touchDevice = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
-  let quality = store('zombies.quality') || (touchDevice ? 'baja' : 'alta');
+  // calidad: auto (por omisión), alta, media o baja
+  let quality = store('zombies.quality');
+  if (!isQualityMode(quality)) quality = 'auto';
   const opts = loadOpts();
+  // automática: empieza un escalón abajo de lo mejor (en celular, más abajo) y solo sube si sobra
+  const aq = new AdaptiveQuality({ levels: AUTO_STEPS.length, start: touchDevice ? 3 : 1 });
+  const cfg = () => (quality === 'auto' ? AUTO_STEPS[aq.level] : PRESET[quality]);
+  let applied = null; // ajustes ya aplicados (para no repetir trabajo)
 
   // HUD encima del 3D
   const stage = canvas.parentElement;
@@ -55,6 +88,9 @@ export function create(canvas, ctx) {
   cleanups.push(() => hudCanvas.remove());
   const hg = hudCanvas.getContext('2d');
   const hud = new Hud();
+  // la oficina de abajo no se ve mientras juegas: que no se dibuje (eran dos juegos dibujando a la vez)
+  office.mapPaused = true;
+  cleanups.push(() => { office.mapPaused = false; });
   const prevTouch = canvas.style.touchAction;
   canvas.style.touchAction = 'none';
   cleanups.push(() => { canvas.style.touchAction = prevTouch; canvas.style.width = ''; canvas.style.height = ''; canvas.style.imageRendering = ''; });
@@ -71,6 +107,7 @@ export function create(canvas, ctx) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.autoClear = false;
+  renderer.info.autoReset = false; // se cuenta el cuadro entero (mundo + arma + sombras)
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#14161d');
@@ -84,7 +121,7 @@ export function create(canvas, ctx) {
   const worldFlash = new THREE.PointLight('#ffcf70', 0, 9, 1.6); scene.add(worldFlash);
 
   // Tamaño
-  let cssW = 1280, cssH = 720;
+  let cssW = 1280, cssH = 720, hudDpr = 1;
   // El juego ocupa toda la ventana: el lienzo llena el escenario (cualquier proporción)
   function fit() {
     const head = stage.parentElement?.querySelector('.game-head')?.offsetHeight ?? 44;
@@ -93,11 +130,14 @@ export function create(canvas, ctx) {
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
     const dpr = window.devicePixelRatio || 1;
-    const pr = quality === 'alta' ? Math.min(dpr, 1.5) : Math.min(dpr, 1) * 0.5;
-    renderer.setPixelRatio(pr);
+    const C = cfg();
+    // densidad de pixeles con tope (en Mac retina 2× ya no se dibuja a 2×) y resolución dinámica
+    renderer.setPixelRatio(pixelRatio(dpr, C.prCap, C.prScale));
     renderer.setSize(cssW, cssH, false);
-    canvas.style.imageRendering = quality === 'alta' ? '' : 'pixelated';
-    hudCanvas.width = Math.round(cssW * dpr); hudCanvas.height = Math.round(cssH * dpr);
+    canvas.style.imageRendering = C.pixelated ? 'pixelated' : '';
+    // el HUD (texto) sí va nítido, pero sin pasar de 2× (1.5× en las calidades ligeras)
+    hudDpr = Math.min(dpr, C.hudHz >= 60 ? 2 : 1.5);
+    hudCanvas.width = Math.round(cssW * hudDpr); hudCanvas.height = Math.round(cssH * hudDpr);
     hudCanvas.style.width = `${cssW}px`; hudCanvas.style.height = `${cssH}px`;
     hudCanvas.style.left = `${canvas.offsetLeft}px`; hudCanvas.style.top = `${canvas.offsetTop}px`;
     ui.layout(canvas.offsetLeft, canvas.offsetTop, cssW, cssH);
@@ -142,7 +182,13 @@ export function create(canvas, ctx) {
   let isHost = room.host === myId && mySeat >= 0;
   let level = null, floor = null, world = null, horde = null;
   let Sim = null; // solo el anfitrión
-  const buf = new SnapBuffer({ delay: 100 });
+  let shadowCache = null;
+  const buf = new SnapBuffer({ delay: 90, maxDelay: 350, adaptive: true }); // retraso que se adapta al vaivén de la red
+  const enc = new SnapEncoder({ every: 20, maxMs: 1000 }), dec = new SnapDecoder();
+  const net = new NetStats();
+  let pingT = 1, frameMs = 16.7, lastFrameAt = 0, hudAcc = 1, shadowN = 0, staticDirty = true, netDiag = { level: 'ok', text: '' }, diagT = 0;
+  const predicted = []; // mis disparos que le pegaron a un zombi (antes de que lo confirme el anfitrión)
+  const predFlash = new Map(); // id → hasta cuándo se ve blanco (golpe adelantado)
   let latest = null; // último estado recibido (o empacado)
   let lastPhase = null;
   const pendingEv = [];
@@ -167,7 +213,6 @@ export function create(canvas, ctx) {
   const keys = new Set();
   let firing = false;
   const touch = touchDevice ? { sx: 0, sy: 0, stickId: null, lookId: null, lx: 0, ly: 0, fire: false } : null;
-  const walkPh = new Map();
   const lastPos = new Map();
   const avatars = new Map(); // seat -> { uid, g, fireT, last }
   let bossObj = null;
@@ -213,18 +258,24 @@ export function create(canvas, ctx) {
     me.x = P0.x; me.y = P0.y; me.a = P0.a;
     world = buildWorld(level, floor, { quality });
     scene.add(world.group);
-    scene.fog = new THREE.Fog('#14161d', quality === 'alta' ? 9 : 6, quality === 'alta' ? 40 : 28);
-    renderer.shadowMap.enabled = quality === 'alta';
+    scene.fog = new THREE.Fog('#14161d', FOG[quality][0], FOG[quality][1]);
+    renderer.shadowMap.enabled = WORLD_Q[quality].shadows;
+    renderer.shadowMap.autoUpdate = false; // se rehace solo cuando toca (ver shadowsThisFrame)
+    shadowCache = new ShadowCache(renderer, world.sun);
     horde = new Horde(scene);
-    menuScene = new MenuScene(scene, level, avatarOf(myId));
+    horde.body.layers.enable(DYN_LAYER);
+    menuScene = new MenuScene(scene, level, avatarOf(myId), { rim: worldFlash, exit: world.alarm, warm: world.lamps[0] });
     camera.fov = opts.fov; camera.updateProjectionMatrix();
     fx.particles = new Particles(scene); fx.splats = new Splats(scene); fx.rings = new Rings(scene); fx.tracers = new Tracers(scene);
     fx.proj = new Projectiles(scene); fx.drops = new Pickups(scene);
     fx.slashes = new Slashes(scene); fx.beams = new Beams(scene); fx.tech = new TechFx(scene, fx.particles); fx.zones = new BurnZones(scene, fx.particles);
+    fx.blobs = new Blobs(scene);
     vm.trail = new SwordTrail(vmScene);
     if (isHost) startSim();
-    fit();
-    loop = gameLoop({ step: hostStep, frame, hz: 60 });
+    applyQuality(true);
+    // paso fijo de 60 Hz con tope: como mucho 5 pasos y 12 ms por cuadro (si la compu no da, la
+    // simulación va un poco más lenta un momento en vez de trabarse cada vez más)
+    loop = gameLoop({ step: hostStep, frame, hz: 60, maxSteps: 5, budgetMs: 12 });
   })();
 
   function seatsBool() { return [0, 1, 2, 3].map((i) => !!room.seats[i]); }
@@ -251,7 +302,7 @@ export function create(canvas, ctx) {
   }
   function myReadyNow() {
     if (isHost && Sim) return !!Sim.players[mySeat]?.ready;
-    const p = latest && sim.unpackPlayers(latest)[mySeat];
+    const p = playersOf(latest)[mySeat];
     return !!p?.ready;
   }
 
@@ -268,8 +319,12 @@ export function create(canvas, ctx) {
       inputBufs[seat].push(d);
     }
   });
-  ctx.onState((d) => {
-    if (isHost || !d) return;
+  ctx.onState((raw) => {
+    if (isHost || !raw) return;
+    net.addSeq(raw.sq);
+    // estados por diferencias: se arma el estado completo (si falta la llave, se espera la siguiente)
+    const d = dec.decode(raw);
+    if (!d) return;
     if (!buf.push(d)) return;
     latest = d;
     if (d.ev?.length) handleEvents(d.ev);
@@ -305,6 +360,7 @@ export function create(canvas, ctx) {
   });
   ctx.onRoom?.((r) => {
     room = r;
+    enc.forceKey(); // alguien entró o salió: que le llegue un estado completo ya
     // al reconectar puede tocar otro asiento
     const ns = r.seats.indexOf(myId);
     if (ns >= 0 && mySeat >= 0 && ns !== mySeat) mySeat = ns;
@@ -375,15 +431,21 @@ export function create(canvas, ctx) {
     phaseWatch(Sim.phase, Sim.wave);
     sendSnap(dt);
   }
+  // Estados a los demás: 20 por segundo en plena horda; menos cuando no pasa nada (sala, descanso)
+  function snapEvery() {
+    if (lobby) return 0.2;
+    if (Sim.phase === 'fight') return 0.05;
+    return Sim.zombies.length || Sim.shots.length ? 0.05 : 0.1;
+  }
   function sendSnap(dt) {
     snapAcc += dt;
-    if (snapAcc < 0.05) return;
+    if (snapAcc < snapEvery() && !(pendingEv.length && snapAcc >= 0.05)) return;
     snapAcc = 0;
     const d = sim.pack(Sim);
     d.ev = pendingEv.splice(0).slice(-80);
     if (lobby) { d.lb = 1; if (lobbyT != null) d.lt = Math.round(lobbyT * 10) / 10; }
     latest = d;
-    if (room.seats.filter(Boolean).length > 1 || room.watchers?.length) ctx.sendState(stamp(d));
+    if (room.seats.filter(Boolean).length > 1 || room.watchers?.length) ctx.sendState(enc.encode(stamp(d)));
   }
 
   function applyGrant(g) {
@@ -416,7 +478,9 @@ export function create(canvas, ctx) {
         case 'fire': if (e.s !== mySeat) { const a = avatars.get(e.s); if (a) a.fireT = 0.07; const P = seatPos(e.s); spatial(WEAPONS[e.w]?.sound || 'stapler', P?.x, P?.y, 0.6); } break;
         case 'hit': {
           if (e.s === mySeat && opts.dmgNums && e.d > 0) addDmgNum(e);
-          if (e.s === mySeat && !isHost) break; // ya se dibujó al disparar
+          // mis disparos: si ya lo adelanté al disparar, no se repite; si no (el anfitrión vio un golpe
+          // que aquí no), se dibuja ahora
+          if (e.s === mySeat && !isHost && confirmPredicted(e.id)) break;
           fx.particles?.burst(e.x * S, e.h, e.y * S, e.hd ? 10 : 6, { colors: ['#7CFF4F', '#4fbf3a', '#b6ff6a'], speed: 2.5, size: 0.035 });
           if (e.s === mySeat) { hitT = 0.22; hitHead = !!e.hd; hitKill = false; snd('hitmark', vol() * 0.8); }
           break;
@@ -509,21 +573,39 @@ export function create(canvas, ctx) {
       }
     }
   }
+  // Golpes adelantados (invitado): se ven al instante; el anfitrión los confirma con su 'hit'
+  function predictHit(id) {
+    predicted.push({ id, t: time });
+    if (predicted.length > 40) predicted.shift();
+    predFlash.set(id, time + 0.12);
+  }
+  function confirmPredicted(id) {
+    for (let i = 0; i < predicted.length; i++) if (predicted[i].id === id) { predicted.splice(i, 1); netStats.confirmed++; return true; }
+    netStats.late++;
+    return false;
+  }
+  function expirePredicted() {
+    while (predicted.length && time - predicted[0].t > 0.8) { predicted.shift(); netStats.missed++; }
+    if (predFlash.size) for (const [id, t] of predFlash) if (t < time) predFlash.delete(id);
+  }
+  const netStats = { confirmed: 0, late: 0, missed: 0 };
+  const _ip = new THREE.Vector3(), _mz = new THREE.Vector3();
   function impactFx(r, seat, mine, W = null) {
-    const p = new THREE.Vector3(r.x * S, r.h, r.y * S);
+    const p = _ip.set(r.x * S, r.h, r.y * S);
     if (mine && W?.scope) fx.beams?.add(muzzleWorld(), p, '#ff2d55');
     else if (mine) fx.tracers?.add(muzzleWorld(), p, W?.splash ? 0.16 : 0.06);
     if (r.hit) {
       if (mine && !isHost) {
         fx.particles?.burst(p.x, p.y, p.z, r.head ? 10 : 6, { colors: ['#7CFF4F', '#4fbf3a', '#b6ff6a'], speed: 2.5, size: 0.035 });
         hitT = 0.22; hitHead = r.head; hitKill = false;
+        if (r.hit?.id != null) predictHit(r.hit.id);
       }
     } else {
       fx.particles?.burst(p.x, p.y, p.z, 5, { colors: r.h <= 0.01 ? ['#9a8a7a', '#c9bba3'] : ['#ffe27a', '#fff', '#9aa3ad'], speed: 1.6, up: 1.5, size: 0.035, life: 0.4 });
     }
   }
   function muzzleWorld() {
-    const v = WEAPONS[L.cur]?.scope && L.adsK > 0.85 ? new THREE.Vector3(0.02, -0.08, -0.5) : new THREE.Vector3(0.18 * (1 - L.adsK), -0.14 + 0.06 * L.adsK, -0.6);
+    const v = WEAPONS[L.cur]?.scope && L.adsK > 0.85 ? _mz.set(0.02, -0.08, -0.5) : _mz.set(0.18 * (1 - L.adsK), -0.14 + 0.06 * L.adsK, -0.6);
     v.applyEuler(camera.rotation);
     return v.add(camera.position);
   }
@@ -745,7 +827,7 @@ export function create(canvas, ctx) {
     if (k === 'KeyB' && latestPhase() === 'break' && mySeat >= 0) toggleShop();
     if ((k === 'Enter' || k === 'KeyG') && latestPhase() === 'break') setReady(!ready);
     if (k === 'Escape') { if (L.wheel) closeWheel(false); else if (shopOpen) toggleShop(false); else menu = !menu; }
-    if (k === 'KeyC') setQuality(quality === 'alta' ? 'baja' : 'alta');
+    if (k === 'KeyC') setQuality(nextQuality());
     if (k === 'Space' && mySeat >= 0 && !menu && !shopOpen) { if (curSword()) swordDown(); else firing = firing || { used: false }; }
   });
   on(window, 'keyup', (e) => {
@@ -763,7 +845,7 @@ export function create(canvas, ctx) {
       me.a += e.movementX * sens;
       me.p = Math.max(-1.35, Math.min(1.35, me.p - e.movementY * sens * (opts.invertY ? -1 : 1)));
     }
-    const p = rectPt(e); const k = (window.devicePixelRatio || 1) * (hud.k || 1); hud.hover = { x: p.x / k, y: p.y / k };
+    const p = rectPt(e); const k = hudDpr * (hud.k || 1); hud.hover = { x: p.x / k, y: p.y / k };
   });
   on(canvas, 'mousedown', (e) => {
     if (e.button === 2) { if (document.pointerLockElement === canvas || touchDevice) L.ads = true; return; }
@@ -819,22 +901,68 @@ export function create(canvas, ctx) {
     if (k === 'fov') { camera.fov = v; camera.updateProjectionMatrix(); }
   }
   function setQuality(q) {
+    if (!isQualityMode(q)) q = 'auto';
+    const prev = quality;
     quality = q; store('zombies.quality', q);
     if (!level) return;
-    scene.remove(world.group); world.dispose();
-    world = buildWorld(level, floor, { quality });
-    scene.add(world.group);
-    renderer.shadowMap.enabled = q === 'alta';
-    scene.fog.near = q === 'alta' ? 9 : 6; scene.fog.far = q === 'alta' ? 40 : 28;
-    scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
-    warmed = false; // se vuelve a preparar con la calidad nueva
-    fit();
+    if (WORLD_Q[q] !== WORLD_Q[prev] && JSON.stringify(WORLD_Q[q]) !== JSON.stringify(WORLD_Q[prev])) {
+      // otras luces o sombras: se rearma el mundo y se vuelve a preparar todo (una vez, al elegir)
+      scene.remove(world.group); world.dispose();
+      world = buildWorld(level, floor, { quality });
+      scene.add(world.group);
+      menuScene?.share({ rim: worldFlash, exit: world.alarm, warm: world.lamps[0] });
+      shadowCache?.setLight(world.sun);
+      renderer.shadowMap.enabled = WORLD_Q[q].shadows;
+      scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
+      warmed = false; // se vuelve a preparar con la calidad nueva
+    }
+    nightOn = null; // que la niebla se vuelva a poner
+    applyQuality(true);
   }
+  // Aplica los ajustes de la calidad del momento (sin recompilar nada): resolución, sombras,
+  // partículas y cada cuánto se redibuja el HUD.
+  function applyQuality(force = false) {
+    const C = cfg();
+    if (!force && applied === C) return;
+    const prev = applied;
+    applied = C;
+    if (fx.particles) fx.particles.scale = C.fx;
+    const mode = shadowMode(C);
+    const chars = mode === 'dynamic';
+    if (horde) horde.castShadow = chars;
+    for (const [, a] of avatars) castShadows(a.g, chars);
+    if (bossObj) castShadows(bossObj.g, chars);
+    if (fx.blobs) fx.blobs.on = mode === 'static' || mode === 'off';
+    if (!prev || prev.shadow !== C.shadow || force) invalidateShadows();
+    if (!prev || force || prev.prCap !== C.prCap || prev.prScale !== C.prScale || prev.hudHz !== C.hudHz || prev.pixelated !== C.pixelated) fit();
+  }
+  function castShadows(g, v) { g.traverse((o) => { if (o.isMesh && !o.material?.isMeshBasicMaterial) { o.castShadow = v; o.layers.enable(DYN_LAYER); } }); }
+  function shadowMode(C) {
+    if (!WORLD_Q[quality].shadows) return 'off';
+    if (C.shadow === 'cached' && !(shadowCache?.ok ?? true)) return 'dynamic';
+    return C.shadow;
+  }
+  function invalidateShadows() { staticDirty = true; shadowCache?.invalidate(); }
+  // ¿se rehace la sombra del sol en este cuadro? Devuelve 'bake' si después hay que guardar la fija.
+  function shadowsThisFrame() {
+    if (!renderer.shadowMap.enabled) return null;
+    const C = applied || cfg();
+    const mode = shadowMode(C);
+    if (mode === 'cached') {
+      const r = shadowCache.before(scene);
+      if (r === 'fail') { applyQuality(true); renderer.shadowMap.needsUpdate = true; return null; }
+      return r;
+    }
+    if (mode === 'dynamic') { if (++shadowN >= (C.shadowEvery || 1)) { shadowN = 0; renderer.shadowMap.needsUpdate = true; } }
+    else if (staticDirty) { staticDirty = false; renderer.shadowMap.needsUpdate = true; }
+    return null;
+  }
+  const nextQuality = () => ({ auto: 'alta', alta: 'media', media: 'baja', baja: 'auto' })[quality] || 'auto';
   function uiAction(id) {
     audioUnlock();
     if (id === 'resume') resumePlay();
     else if (id === 'leave') ctx.close?.();
-    else if (id === 'quality') setQuality(quality === 'alta' ? 'baja' : 'alta');
+    else if (id === 'quality') setQuality(nextQuality());
     else if (id === 'restart') restartGame();
     else if (id === 'closeShop') toggleShop(false);
     else if (id === 'ready') setReady(!ready);
@@ -885,8 +1013,7 @@ export function create(canvas, ctx) {
   const latestPhase = () => (isHost && Sim ? Sim.phase : latest?.ph || 'intro');
   function myState() {
     if (isHost && Sim) return Sim.players[mySeat];
-    const p = latest && sim.unpackPlayers(latest)[mySeat];
-    return p || null;
+    return playersOf(latest)[mySeat] || null;
   }
   const myAlive = () => { const P = myState(); return P ? P.alive : true; };
   function seatPos(seat) {
@@ -894,53 +1021,96 @@ export function create(canvas, ctx) {
     if (isHost && Sim) return Sim.players[seat];
     return viewPlayers[seat];
   }
+  // Lo que se dibuja, sin crear objetos en cada cuadro: se reciclan (pool) y lo que viene de la red
+  // se desempaca una sola vez por estado (no en cada cuadro).
+  const vPlayers = [{}, {}, {}, {}], vShots = [], vZombies = [], vBoss = { id: null, name: '', hp: 0, max: 1 };
+  const unpackCache = new WeakMap();
+  function unpacked(d) {
+    let u = unpackCache.get(d);
+    if (!u) {
+      const zs = (d.Z || []).map(sim.unpackZombie);
+      u = { zs, byId: new Map(zs.map((z) => [z.id, z])), players: sim.unpackPlayers(d) };
+      unpackCache.set(d, u);
+    }
+    return u;
+  }
+  const playersOf = (d) => (d ? unpacked(d).players : []);
   function buildView() {
     if (isHost && Sim) {
       viewZombies = Sim.zombies;
-      viewPlayers = Sim.players.map((p, i) => {
-        if (!p || i === mySeat) return p;
+      viewPlayers.length = 4;
+      for (let i = 0; i < 4; i++) {
+        const p = Sim.players[i];
+        if (!p || i === mySeat) { viewPlayers[i] = p; continue; }
         const st = inputBufs[i].state({ keys: ['x', 'y', 'a', 'p'], angles: ['a'], jump: 3 });
-        return st ? { ...p, x: st.x, y: st.y, a: st.a, p: st.p } : p;
-      });
-      viewShots = Sim.shots.map((q) => ({ id: q.id, kind: q.kind, x: q.x, y: q.y, h: q.h }));
+        if (!st) { viewPlayers[i] = p; continue; }
+        const v = Object.assign(vPlayers[i], p);
+        v.x = st.x; v.y = st.y; v.a = st.a; v.p = st.p;
+        viewPlayers[i] = v;
+      }
+      vShots.length = Sim.shots.length;
+      for (let i = 0; i < Sim.shots.length; i++) { const q = Sim.shots[i], o = vShots[i] || (vShots[i] = {}); o.id = q.id; o.kind = q.kind; o.x = q.x; o.y = q.y; o.h = q.h; }
+      viewShots = vShots;
       viewDrops = Sim.drops;
       const b = Sim.bossId ? Sim.zombies.find((z) => z.id === Sim.bossId) : null;
-      viewBoss = b ? { id: b.boss, name: BOSSES[b.boss].name, hp: b.hp, max: b.max } : null;
+      if (b) { vBoss.id = b.boss; vBoss.name = BOSSES[b.boss].name; vBoss.hp = b.hp; vBoss.max = b.max; }
+      viewBoss = b ? vBoss : null;
       return;
     }
     const smp = buf.sample();
     if (!smp) return;
     const { a, b } = smp;
     const k = Math.max(0, Math.min(1.4, smp.k));
-    const za = new Map((a.Z || []).map((z) => [z[0], z]));
-    viewZombies = (b.Z || []).map((zb) => {
-      const z = sim.unpackZombie(zb);
-      const zaR = za.get(z.id);
-      if (zaR && k < 1.5) {
-        const A = sim.unpackZombie(zaR);
-        if (Math.hypot(z.x - A.x, z.y - A.y) < 3) { z.x = A.x + (z.x - A.x) * k; z.y = A.y + (z.y - A.y) * k; z.a = lerpAng(A.a, z.a, Math.min(1, k)); }
-        if (A.st === z.st) z.t = A.t + (z.t - A.t) * Math.min(1, k);
+    const ua = unpacked(a), ub = unpacked(b);
+    const dtAB = Math.max(1, (b._t ?? 0) - (a._t ?? 0)) / 1000;
+    vZombies.length = ub.zs.length;
+    for (let i = 0; i < ub.zs.length; i++) {
+      const zb = ub.zs[i];
+      const z = Object.assign(vZombies[i] || (vZombies[i] = {}), zb);
+      const A = ua.byId.get(z.id);
+      if (A) {
+        const dx = zb.x - A.x, dy = zb.y - A.y;
+        if (dx * dx + dy * dy < 9) {
+          // extrapolación con tope: como mucho 0.3 casillas más allá del último estado
+          let kk = k;
+          if (kk > 1) { const sp = Math.sqrt(dx * dx + dy * dy) / dtAB; if (sp > 0.01) kk = Math.min(kk, 1 + 0.3 / (sp * dtAB)); }
+          z.x = A.x + dx * kk; z.y = A.y + dy * kk; z.a = lerpAng(A.a, zb.a, Math.min(1, k));
+        }
+        if (A.st === zb.st) z.t = A.t + (zb.t - A.t) * Math.min(1, k);
       }
-      return z;
-    });
-    const pa = sim.unpackPlayers(a), pb = sim.unpackPlayers(b);
-    viewPlayers = pb.map((p, i) => {
-      if (!p) return null;
+    }
+    viewZombies = vZombies;
+    const pa = ua.players, pb = ub.players;
+    viewPlayers.length = pb.length;
+    for (let i = 0; i < pb.length; i++) {
+      const p = pb[i];
+      if (!p) { viewPlayers[i] = null; continue; }
       const q = pa[i];
-      if (q && Math.hypot(p.x - q.x, p.y - q.y) < 3) return { ...p, x: q.x + (p.x - q.x) * k, y: q.y + (p.y - q.y) * k, a: lerpAng(q.a, p.a, Math.min(1, k)), p: q.p + (p.p - q.p) * Math.min(1, k) };
-      return p;
-    });
-    const ja = new Map((a.J || []).map((j) => [j[0], j]));
-    viewShots = (b.J || []).map((j) => {
+      if (q && Math.hypot(p.x - q.x, p.y - q.y) < 3) {
+        const v = Object.assign(vPlayers[i], p);
+        v.x = q.x + (p.x - q.x) * k; v.y = q.y + (p.y - q.y) * k; v.a = lerpAng(q.a, p.a, Math.min(1, k)); v.p = q.p + (p.p - q.p) * Math.min(1, k);
+        viewPlayers[i] = v;
+      } else viewPlayers[i] = p;
+    }
+    const J = b.J || [];
+    vShots.length = J.length;
+    let ja = null;
+    for (let i = 0; i < J.length; i++) {
+      const j = J[i], o = vShots[i] || (vShots[i] = {});
+      if (!ja) { ja = new Map(); for (const r of a.J || []) ja.set(r[0], r); }
       const q = ja.get(j[0]);
       const x = j[2] / 100, y = j[3] / 100, h = j[4] / 100;
-      if (!q) return { id: j[0], kind: sim.PROJ[j[1]], x, y, h };
-      return { id: j[0], kind: sim.PROJ[j[1]], x: q[2] / 100 + (x - q[2] / 100) * k, y: q[3] / 100 + (y - q[3] / 100) * k, h: q[4] / 100 + (h - q[4] / 100) * k };
-    });
-    viewDrops = (latest?.K || []).map((d) => ({ id: d[0], kind: sim.DROP_KINDS[d[1]], x: d[2] / 100, y: d[3] / 100 }));
+      o.id = j[0]; o.kind = sim.PROJ[j[1]];
+      if (!q) { o.x = x; o.y = y; o.h = h; }
+      else { o.x = q[2] / 100 + (x - q[2] / 100) * k; o.y = q[3] / 100 + (y - q[3] / 100) * k; o.h = q[4] / 100 + (h - q[4] / 100) * k; }
+    }
+    viewShots = vShots;
+    if (latest !== dropsOf) { dropsOf = latest; viewDrops = (latest?.K || []).map((d) => ({ id: d[0], kind: sim.DROP_KINDS[d[1]], x: d[2] / 100, y: d[3] / 100 })); }
     const B = latest?.B;
-    viewBoss = B ? { id: BOSSES_ORDER[B[0]], name: BOSSES[BOSSES_ORDER[B[0]]]?.name, hp: B[1], max: B[2] } : null;
+    if (B) { vBoss.id = BOSSES_ORDER[B[0]]; vBoss.name = BOSSES[vBoss.id]?.name; vBoss.hp = B[1]; vBoss.max = B[2]; }
+    viewBoss = B ? vBoss : null;
   }
+  let dropsOf = null;
   const BOSSES_ORDER = Object.keys(BOSSES);
   function lerpAng(a, b, k) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * k; }
 
@@ -952,6 +1122,12 @@ export function create(canvas, ctx) {
     fpsN++;
     if (!fpsAcc) fpsAcc = nowT;
     if (nowT - fpsAcc >= 1000) { fps = Math.round((fpsN * 1000) / (nowT - fpsAcc)); fpsAcc = nowT; fpsN = 0; }
+    // tiempo real por cuadro (para la calidad automática y el aviso de "tu equipo va lento")
+    const realMs = lastFrameAt ? nowT - lastFrameAt : 16.7;
+    lastFrameAt = nowT;
+    if (realMs < 500) frameMs += (Math.min(realMs, 100) - frameMs) * 0.05;
+    netTick(dt);
+    expirePredicted();
     buildView();
     const P = myState();
     me.alive = P ? P.alive : true;
@@ -959,6 +1135,7 @@ export function create(canvas, ctx) {
     const scr = uiScreen();
     const msOn = scr === 'main';
     const inLobby = lobbyNow();
+    if (menuScene.active !== msOn) invalidateShadows(); // la sombra fija no debe guardar al personaje del menú
     menuScene.setActive(msOn);
     // moverme
     if (mySeat >= 0 && level) {
@@ -986,7 +1163,7 @@ export function create(canvas, ctx) {
         inputAcc += dt;
         if (inputAcc >= 1 / 30) { inputAcc = 0; ctx.sendInput(stamp({ x: r3(me.x), y: r3(me.y), a: r3(me.a), p: r3(me.p), w: L.cur, mv: me.mv, rv: me.rv })); }
         else if (dash) { inputAcc = 0; ctx.sendInput(stamp({ x: r3(me.x), y: r3(me.y), a: r3(me.a), p: r3(me.p), w: L.cur, mv: me.mv, rv: me.rv })); }
-        if (pendingShots.length) ctx.sendEvent({ k: 'shots', list: pendingShots.splice(0).map((q) => ({ ...q, x: r3(q.x), y: r3(q.y), a: r3(q.a), p: r3(q.p) })) });
+        if (pendingShots.length) { for (const q of pendingShots) { q.x = r3(q.x); q.y = r3(q.y); q.a = r3(q.a); q.p = r3(q.p); } ctx.sendEvent({ k: 'shots', list: pendingShots.splice(0) }); }
       }
     }
     // espectador: la cámara sigue a un jugador
@@ -1004,13 +1181,16 @@ export function create(canvas, ctx) {
       let a = avatars.get(i);
       if (!a || a.uid !== uid) {
         if (a) scene.remove(a.g);
-        a = { uid, g: voxelAvatar(avatarOf(uid), nameOfSeat(i), SEAT_COLORS[i]), fireT: 0, last: null };
+        // piezas juntas en pocas mallas (menos llamadas de dibujo); la animación es la misma
+        a = { uid, g: compactModel(voxelAvatar(avatarOf(uid), nameOfSeat(i), SEAT_COLORS[i])), fireT: 0, last: null };
+        castShadows(a.g, shadowMode(applied || cfg()) === 'dynamic');
         avatars.set(i, a);
         scene.add(a.g);
       }
       const prev = a.last || p;
       const sp = Math.hypot(p.x - prev.x, p.y - prev.y) / Math.max(dt, 1e-3);
-      a.last = { x: p.x, y: p.y };
+      a.last ||= { x: 0, y: 0 };
+      a.last.x = p.x; a.last.y = p.y;
       a.g.position.set(p.x * S, 0, p.y * S);
       a.g.rotation.y = Math.PI / 2 - p.a;
       a.fireT = Math.max(0, a.fireT - dt);
@@ -1025,26 +1205,29 @@ export function create(canvas, ctx) {
       // en la sala todos están junto a la cámara del menú: no se dibujan
       a.g.visible = !(msOn && inLobby) && (p.alive || p.down);
     }
-    // zombis
-    const list = [];
+    // zombis (objetos reciclados: nada nuevo por cuadro)
+    const list = zList;
+    list.length = 0;
     let bossZ = null;
     for (const z of viewZombies) {
       if (z.kind === 'boss') { bossZ = z; continue; }
-      const lp = lastPos.get(z.id);
+      let lp = lastPos.get(z.id);
       const d = lp ? Math.hypot(z.x - lp.x, z.y - lp.y) : 0;
-      lastPos.set(z.id, { x: z.x, y: z.y });
-      const ph = (walkPh.get(z.id) || z.id) + d * 7;
-      walkPh.set(z.id, ph);
-      list.push({ id: z.id, kind: z.kind, x: z.x * S, z: z.y * S, a: z.a, st: z.st, t: z.t, flash: z.flash > 0 ? 1 : 0, walk: ph, h: z.h });
+      if (!lp) { lp = { x: 0, y: 0, ph: z.id }; lastPos.set(z.id, lp); }
+      lp.x = z.x; lp.y = z.y;
+      lp.ph += d * 7;
+      const o = zPool[list.length] || (zPool[list.length] = {});
+      o.id = z.id; o.kind = z.kind; o.x = z.x * S; o.z = z.y * S; o.a = z.a; o.st = z.st; o.t = z.t; o.flash = z.flash > 0 || predFlash.has(z.id) ? 1 : 0; o.walk = lp.ph; o.h = z.h; o.r = z.r;
+      list.push(o);
     }
-    if (walkPh.size > 300) { walkPh.clear(); lastPos.clear(); }
+    if (lastPos.size > 300) lastPos.clear();
     // menú principal: la cámara recorre la oficina de noche y unos zombis deambulan a lo lejos
-    if (msOn) { const deco = menuScene.update(dt, time, camera); if (inLobby) list.push(...deco); }
-    horde.update(list, time);
+    if (msOn) { const deco = menuScene.update(dt, time, camera); if (inLobby) for (const q of deco) list.push(q); }
     if (bossZ) {
       if (!bossObj || bossObj.zid !== bossZ.id) {
         if (bossObj) scene.remove(bossObj.g);
-        const g = bossModel(bossZ.boss);
+        const g = compactModel(bossModel(bossZ.boss));
+        castShadows(g, shadowMode(applied || cfg()) === 'dynamic');
         rememberBossMaterials(g);
         bossObj = { g, zid: bossZ.id };
         scene.add(g);
@@ -1054,20 +1237,22 @@ export function create(canvas, ctx) {
       bossObj.g.rotation.y = Math.PI / 2 - bossZ.a;
       animateBoss(bossObj.g, bossZ, time, dt);
     } else if (bossObj) { scene.remove(bossObj.g); bossObj = null; }
-    fx.proj.update(viewShots.map((q) => ({ ...q, x: q.x * S, z: q.y * S })), time);
-    fx.drops.update(viewDrops.map((d) => ({ ...d, x: d.x * S, z: d.y * S })), time);
+    fx.proj.update(toMeters(viewShots, projM), time);
+    fx.drops.update(toMeters(viewDrops, dropM), time);
     fx.particles.update(dt); fx.tracers.update(dt); fx.rings.update(dt);
     const fdt = dt * fxScale;
     fx.slashes.update(fdt); fx.beams.update(fdt); fx.tech.update(fdt, time);
     fx.zones.update(zoneView(), dt, time);
     const bossWave = isBossWave(isHost && Sim ? Sim.wave : latest?.w || 0) && latestPhase() === 'fight';
     const night = msOn && inLobby;
-    world.update(dt, time, bossWave, night);
+    world.update(dt, time, bossWave, night, msOn);
     if (night !== nightOn) {
       nightOn = night;
       const c = night ? '#05070b' : '#14161d';
       scene.background.set(c); scene.fog.color.set(c);
-      scene.fog.near = night ? 3 : quality === 'alta' ? 9 : 6; scene.fog.far = night ? 26 : quality === 'alta' ? 40 : 28;
+      scene.fog.near = night ? 3 : FOG[quality][0]; scene.fog.far = night ? 26 : FOG[quality][1];
+      // más allá de la niebla todo es del color del fondo: no hace falta dibujarlo
+      camera.far = scene.fog.far + 1; camera.updateProjectionMatrix();
     }
     // apuntar acerca la cámara (zoom real: se reduce el campo de visión) y las técnicas la abren de golpe
     const Wz = WEAPONS[L.cur];
@@ -1106,19 +1291,81 @@ export function create(canvas, ctx) {
       if (z) spatial('groan', z.x, z.y, 0.8);
       else if (msOn && inLobby) { const d = menuScene.zombies[(Math.random() * menuScene.zombies.length) | 0]; if (d) za.play('groan', { x: d.x0 * S, z: d.y0 * S, vol: volUi() * 0.5 }); }
     }
-    if (boomT > 0) { worldFlash.position.copy(boomPos); worldFlash.intensity = 60 * (boomT / 0.18); }
-    else { worldFlash.position.copy(camera.position); worldFlash.intensity = flashT > 0 && !msOn ? 25 : 0; }
+    // (en el menú esta luz la usa el menú: ver MenuScene)
+    if (!msOn) {
+      if (boomT > 0) { worldFlash.position.copy(boomPos); worldFlash.intensity = 60 * (boomT / 0.18); }
+      else { worldFlash.position.copy(camera.position); worldFlash.intensity = flashT > 0 ? 25 : 0; }
+    }
+    // zombis ya con la cámara de este cuadro: los que no se ven ni se animan ni se dibujan
+    camera.updateMatrixWorld();
+    _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_pm);
+    const C = applied || cfg();
+    hView.frustum = _frustum; hView.x = camera.position.x; hView.z = camera.position.z; hView.lod = C.lod;
+    horde.update(list, time, hView);
+    blobShadows(list, bossZ);
     // arma en primera persona
     updateViewModel(dt, eyeSeat, eye, eyeAlive);
 
+    renderer.info.reset();
+    const shPhase = shadowsThisFrame();
     renderer.clear();
     renderer.render(scene, camera);
+    if (shPhase === 'bake') shadowCache.after();
     renderer.clearDepth();
     if (eyeAlive && !msOn && scr !== 'over' && !(menu && mySeat >= 0 && latestPhase() === 'intro')) renderer.render(vmScene, vmCam);
     drawHud(dt, P, eye, eyeSeat, scr);
     ui.update(uiModel(scr));
+    // calidad automática: cuánto tardó de verdad el cuadro y cuánto trabajó este código
+    if (quality === 'auto' && !document.hidden) {
+      const ch = aq.sample(realMs, performance.now() - nowT);
+      if (ch != null) applyQuality();
+    }
   }
   let nightOn = false;
+  const zList = [], zPool = [], projM = [], dropM = [];
+  const _pm = new THREE.Matrix4(), _frustum = new THREE.Frustum(), hView = { frustum: null, x: 0, z: 0, lod: 30 };
+  // casillas → metros para proyectiles y botín (objetos reciclados)
+  function toMeters(src, pool) {
+    pool.length = src.length;
+    for (let i = 0; i < src.length; i++) { const q = src[i], o = pool[i] || (pool[i] = {}); o.id = q.id; o.kind = q.kind; o.x = q.x * S; o.z = q.y * S; o.h = q.h; }
+    return pool;
+  }
+  // sombras redondas (con sombra fija o sin sombras)
+  function blobShadows(list, bossZ) {
+    const B = fx.blobs;
+    if (!B) return;
+    B.begin();
+    if (B.on) {
+      for (const z of list) if (z.st !== 'dead' && !(z.st === 'rise' && z.t < 0.5)) B.add(z.x, z.z, (z.r || 0.3) * S * 1.35);
+      for (const [, a] of avatars) if (a.g.visible) B.add(a.g.position.x, a.g.position.z, 0.42);
+      if (bossZ && bossObj && bossZ.st !== 'dead') B.add(bossObj.g.position.x, bossObj.g.position.z, (bossZ.r || 0.6) * S * 1.3);
+    }
+    B.end();
+  }
+  // Red: ping al servidor cada 2 s y diagnóstico (¿la red o la compu?) cada segundo
+  function netTick(dt) {
+    pingT -= dt;
+    const sock = office.socket;
+    if (pingT <= 0 && sock?.connected && room.seats.filter(Boolean).length + (room.watchers?.length || 0) > 1) {
+      pingT = 2;
+      const t0 = performance.now();
+      try { sock.timeout?.(4000).emit('game:ping', 0, (err) => { if (!err && !destroyed) net.addPing(performance.now() - t0); }); } catch { /* sin ping */ }
+    }
+    diagT -= dt;
+    if (diagT <= 0) {
+      diagT = 1;
+      const st = buf.stats;
+      const holds = !isHost && st.samples > 30 ? (st.holds - (diagHolds || 0)) / Math.max(1, st.samples - (diagSamples || 0)) : 0;
+      diagHolds = st.holds; diagSamples = st.samples;
+      const d = net.diagnose({ frameMs, budgetMs: 1000 / 60, holds });
+      // "tu equipo va lento" solo si dura (5 s) y la calidad automática ya no puede bajar más
+      slowFor = d.level === 'device' ? slowFor + 1 : 0;
+      if (d.level === 'device' && (slowFor < 5 || (quality === 'auto' && aq.level < AUTO_STEPS.length - 1))) netDiag = { level: 'ok', text: '' };
+      else netDiag = d;
+    }
+  }
+  let diagHolds = 0, diagSamples = 0, slowFor = 0;
 
   // Qué pantalla de menú toca: sala/menú principal, fin, tienda, pausa o ninguna (jugando)
   function uiScreen() {
@@ -1134,7 +1381,7 @@ export function create(canvas, ctx) {
   // Lo que necesitan los menús para dibujarse
   function uiModel(scr) {
     if (!scr) return { screen: null };
-    const src = isHost && Sim ? Sim.players : latest ? sim.unpackPlayers(latest) : [];
+    const src = isHost && Sim ? Sim.players : playersOf(latest);
     const squad = [0, 1, 2, 3].map((i) => {
       const uid = room.seats[i];
       if (!uid) return null;
@@ -1190,14 +1437,19 @@ export function create(canvas, ctx) {
     const tmp = [];
     try {
       const at = new THREE.Vector3(camera.position.x, 1, camera.position.z - 2);
+      const fxk = fx.particles.scale; fx.particles.scale = 1;
       fx.particles.burst(at.x, at.y, at.z, 2, {}); fx.particles.update(0);
+      fx.particles.scale = fxk;
+      // sombras redondas y un zombi (por si la horda está vacía)
+      const blobOn = fx.blobs.on; fx.blobs.on = true; fx.blobs.begin(); fx.blobs.add(at.x, at.z, 0.4); fx.blobs.end(); fx.blobs.on = blobOn;
+      horde.update([{ id: 1, kind: 'normal', x: at.x, z: at.z, a: 0, st: 'walk', t: 0, flash: 0, walk: 0 }], 0);
       fx.tracers.add(at, at.clone().add(new THREE.Vector3(0, 0, -1)), 1); fx.tracers.update(0);
       fx.rings.add(at.x, at.z);
       fx.proj.update(sim.PROJ.map((kind, i) => ({ id: -1 - i, kind, x: at.x, z: at.z, h: 1 })), 0);
       fx.drops.update(Object.keys(DROPS).map((kind, i) => ({ id: -1 - i, kind, x: at.x, z: at.z })), 0);
       const white = new THREE.Mesh(GEO.box, mat('#ffffff')); white.position.copy(at); scene.add(white); tmp.push(white);
       // un compañero con espada (su etiqueta, su arma y su espada)
-      const mate = voxelAvatar({}, 'HUB', SEAT_COLORS[1]); mate.userData.armR.add(avatarSword()); mate.position.copy(at); scene.add(mate); tmp.push(mate);
+      const mate = compactModel(voxelAvatar({}, 'HUB', SEAT_COLORS[1])); mate.userData.armR.add(avatarSword()); mate.position.copy(at); scene.add(mate); tmp.push(mate);
       fx.slashes.warm(); fx.beams.warm(); fx.tech.warm(); fx.zones.warm(); vm.trail.warm();
       const shown = vm.weapons.map((w) => w.group.visible);
       vm.weapons.forEach((w) => { w.group.visible = true; });
@@ -1206,6 +1458,18 @@ export function create(canvas, ctx) {
       muzzle.visible = true;
       renderer.compile(scene, camera);
       renderer.compile(vmScene, vmCam);
+      // las sombras tienen sus propios sombreadores (de profundidad): se preparan dibujando una vez
+      // la sombra con todos los personajes (si no, se compilan al cambiar la calidad automática)
+      if (renderer.shadowMap.enabled) {
+        const hc = horde.castShadow;
+        horde.castShadow = true; castShadows(mate, true);
+        renderer.shadowMap.needsUpdate = true;
+        renderer.render(scene, camera);
+        horde.castShadow = hc;
+        // y la sombra en capas (guardar y dibujar personajes encima)
+        if (shadowCache?.ok) { shadowCache.after(); shadowCache.before(scene); renderer.render(scene, camera); }
+        invalidateShadows();
+      }
       vm.weapons.forEach((w, i) => { w.group.visible = shown[i]; });
       vm.root.visible = rootVis;
     } catch (e) { console.warn('Zombies: no se pudo precalentar', e); }
@@ -1216,6 +1480,7 @@ export function create(canvas, ctx) {
     fx.rings.update(99);
     fx.proj.update([], 0); fx.drops.update([], 0);
     fx.slashes.reset(); fx.beams.update(99); fx.tech.unwarm(); fx.zones.clear(); vm.trail.clear();
+    fx.blobs.begin(); fx.blobs.end(); horde.update([], 0);
   }
 
   function drawHud(dt, P, eye, eyeSeat, scr) {
@@ -1225,10 +1490,15 @@ export function create(canvas, ctx) {
     const hideHud = scr === 'main' || scr === 'over';
     const vis = hideHud ? 'hidden' : 'visible';
     if (hudCanvas.style.visibility !== vis) hudCanvas.style.visibility = vis;
-    if (hideHud) { hud.buttons = []; return; }
+    if (hideHud) { hud.buttons = []; hudAcc = 1; return; }
+    // el HUD se redibuja a 60 o a 30 por segundo según la calidad (el 3D sigue a todo lo que da)
+    hudAcc += dt;
+    const hz = (applied || cfg()).hudHz;
+    if (hz < 60 && hudAcc < 1 / hz - 0.004) return;
+    hudAcc = 0;
     const phase = latestPhase();
     const team = [];
-    const src = isHost && Sim ? Sim.players : latest ? sim.unpackPlayers(latest) : [];
+    const src = isHost && Sim ? Sim.players : playersOf(latest);
     for (let i = 0; i < 4; i++) {
       const p = src[i];
       if (!p || !room.seats[i]) continue;
@@ -1252,14 +1522,25 @@ export function create(canvas, ctx) {
       watching: mySeat < 0 ? nameOfSeat(eyeSeat) : null, joinable: mySeat < 0 && room.seats.filter(Boolean).length < 4 && !!ctx.sit,
       touch: touch ? { sx: touch.sx, sy: touch.sy } : null,
       arms: mySeat >= 0 ? armsHud(P) : null, crossGap: crossGap(), killFeed, dmgNums: projectDmg(), techFx, wheel: mySeat >= 0 ? L.wheel : null,
+      net: netHud(),
     };
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = hudDpr;
     hg.setTransform(dpr, 0, 0, dpr, 0, 0);
     hud.draw(hg, cssW, cssH, st);
     for (const b of hud.buttons) { b.x *= dpr; b.y *= dpr; b.w *= dpr; b.h *= dpr; }
     // texto bajo el juego
     const s = phase === 'over' ? 'Fin de la partida' : phase === 'break' ? `Descanso · horda ${st.wave + 1} en ${Math.ceil(st.pt)} s` : phase === 'fight' ? `Horda ${st.wave} · quedan ${st.left}` : 'Prepárate…';
     if (s !== lastStatus) { lastStatus = s; ctx.status(`${mySeat < 0 ? '👀 ' : ''}${s}`); }
+  }
+
+  // Indicador de red: fps y ping (si está en Opciones) y el aviso cuando algo va mal
+  function netHud() {
+    const multi = room.seats.filter(Boolean).length + (room.watchers?.length || 0) > 1;
+    return {
+      show: !!opts.netInfo, fps, ping: multi && net.ping != null ? Math.round(net.ping) : null, loss: !isHost && multi ? net.loss : null,
+      warn: netDiag.level === 'ok' || (netDiag.level === 'net' && !multi) ? null : netDiag.text, level: netDiag.level,
+      host: isHost && multi, q: quality === 'auto' ? `Auto ${AUTO_STEPS.length - aq.level}/${AUTO_STEPS.length}` : null,
+    };
   }
 
   // Datos del "dashboard" de armas para el HUD
@@ -1311,6 +1592,7 @@ export function create(canvas, ctx) {
     screen: () => uiScreen(),
     lobby: () => lobbyNow(),
     opts: () => ({ ...opts, quality }),
+    netHud: () => netHud(),
     // adelanta la simulación (las pruebas en navegador sin GPU van a pocos cuadros por segundo)
     advance: (sec) => { for (let i = 0; i < sec * 60; i++) hostStep(1 / 60); return latestPhase(); },
     skipTo: (n) => { if (!isHost || !Sim) return false; Sim.zombies = []; Sim.roster = []; Sim.bossPending = 0; Sim.bossId = 0; sim.startWave(Sim, n); return true; },
@@ -1357,6 +1639,16 @@ export function create(canvas, ctx) {
     walk: (f, s, sec) => new Promise((res) => { const t0 = performance.now(); const tick = () => { sim.movePlayer(level, me, { f, s }, 1 / 60, viewZombies); if (performance.now() - t0 < sec * 1000) setTimeout(tick, 16); else res({ x: me.x, y: me.y }); }; tick(); }),
     quality: setQuality,
     die: () => { const p = Sim?.players[mySeat]; if (p) { Sim.god = false; p.prot = 0; p.hp = 1; p.armor = 0; } },
+    // medición (tools/perf): llamadas de dibujo del último cuadro, memoria de la tarjeta y red
+    perf: () => { const I = renderer.info; return { calls: I.render.calls, triangles: I.render.triangles, geometries: I.memory.geometries, textures: I.memory.textures, programs: I.programs?.length || 0, pr: renderer.getPixelRatio(), w: canvas.width, h: canvas.height, hudW: hudCanvas.width, hudH: hudCanvas.height, zombies: viewZombies.length, host: isHost, quality, level: quality === 'auto' ? aq.level : null, shadow: shadowMode(applied || cfg()), shadowCache: shadowCache ? { ...shadowCache.stats, ok: shadowCache.ok } : null, horde: { ...horde.stats }, ping: net.ping == null ? null : Math.round(net.ping), loss: Math.round(net.loss * 1000) / 1000, warn: netDiag.text || null, pred: { ...netStats }, dec: { ...dec.stats }, loop: loop ? { ...loop.stats } : null, net: buf.stats ? { ...buf.stats, delay: Math.round(buf.delay), jitter: Math.round(buf.jitter), size: buf.size } : null }; },
+    // calidad automática: forzar un escalón (pruebas) y ver su historial
+    autoLevel: (n) => { if (n != null) { aq.set(n, 'prueba'); applyQuality(); } return { level: aq.level, history: aq.history, fps: Math.round(aq.fps) }; },
+    // más zombis para las pruebas de carga (salen de las puertas y del piso)
+    horde: (n = 10) => { if (!isHost || !Sim) return 0; let k = 0; for (let i = 0; i < n; i++) { const z = sim.spawnZombie(Sim, ['normal', 'runner', 'spitter', 'tank'][i % 4]); if (z) k++; } return k; },
+    three: () => ({ renderer, scene, camera, vmScene, world, horde }),
+    // dibuja una vez el mundo como en un cuadro normal (con la regla de sombras de la calidad): mediciones
+    renderOnce: () => { const sh = shadowsThisFrame(); renderer.render(scene, camera); if (sh === 'bake') shadowCache.after(); },
+    alive: () => (isHost && Sim ? Sim.zombies : viewZombies).filter((z) => z.st !== 'dead').length,
     level: () => level && { W: level.W, H: level.H, portals: level.portals.length, start: level.start },
   };
   window.__zombies = debug;
@@ -1373,6 +1665,7 @@ export function create(canvas, ctx) {
       for (const c of cleanups) c();
       world?.dispose();
       menuScene?.dispose();
+      shadowCache?.dispose();
       scene.traverse((o) => { o.geometry?.dispose?.(); });
       renderer.dispose();
       renderer.forceContextLoss?.();

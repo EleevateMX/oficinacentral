@@ -61,6 +61,7 @@ export class Hud {
       this.crosshair(g, W, H, s);
       this.miniBottom = 60;
       this.topBar(g, W, H, s);
+      if (s.net) this.netInfo(g, W, H, s.net);
       this.teamBottom = this.team(g, W, H, s);
       if (s.showMinimap !== false) this.minimap(g, W, H, s);
       if (s.me) { this.health(g, W, H, s); this.ammo(g, W, H, s); }
@@ -122,6 +123,34 @@ export class Hud {
     plate(g, W - 170, 12, 158, 40, 12);
     text(g, '💰', W - 158, 39, { size: 18 });
     text(g, fmt(s.me?.pts ?? s.watchPts ?? 0), W - 24, 39, { size: 21, weight: 900, align: 'right', color: YEL });
+  }
+
+  // Arriba a la izquierda: fps y ping (opcional) y el aviso de si lo trabado es la red o la compu
+  netInfo(g, W, H, n) {
+    let y = 12;
+    if (n.show) {
+      const parts = [`${n.fps || 0} fps`];
+      if (n.ping != null) parts.push(`${n.ping} ms`);
+      if (n.loss != null) parts.push(`${Math.round(n.loss * 100)}% pérdida`);
+      if (n.q) parts.push(n.q);
+      const t = parts.join(' · ');
+      g.font = '800 12px system-ui, sans-serif';
+      const w = g.measureText(t).width + 30;
+      plate(g, 12, y, w, 24, 8);
+      const bad = (n.fps && n.fps < 40) || (n.ping != null && n.ping > 180) || (n.loss != null && n.loss > 0.03);
+      const ok = (n.fps || 0) >= 55 && (n.ping == null || n.ping < 100);
+      g.fillStyle = bad ? '#ff5050' : ok ? '#4cd964' : '#ffb03b';
+      g.beginPath(); g.arc(23, y + 12, 4, 0, Math.PI * 2); g.fill();
+      text(g, t, 32, y + 16.5, { size: 12, weight: 800, color: '#e8e8ee' });
+      y += 28;
+    }
+    if (n.warn) {
+      const t = n.level === 'net' ? `⚠ ${n.warn}` : `🐢 ${n.warn}`;
+      g.font = '800 12.5px system-ui, sans-serif';
+      const w = g.measureText(t).width + 22;
+      plate(g, 12, y, w, 24, 8, n.level === 'net' ? 'rgba(120,10,20,.82)' : 'rgba(110,70,0,.82)');
+      text(g, t, 23, y + 16.5, { size: 12.5, weight: 800, color: n.level === 'net' ? '#ffd0d6' : '#ffe2a6' });
+    }
   }
 
   team(g, W, H, s) {

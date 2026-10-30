@@ -281,28 +281,32 @@ export function floodReach(grid, W, H, s) {
 }
 
 // Mapa de distancias (BFS desde varias casillas): los zombis bajan por él hacia el jugador más cercano
+// (sin crear arreglos por casilla: cola fija por nivel)
+const FIELD_DX = [1, -1, 0, 0], FIELD_DY = [0, 0, 1, -1];
 export function distanceField(level, sources, out) {
   const { W, H, grid } = level;
   const d = out || new Int16Array(W * H);
   d.fill(-1);
-  const q = [];
+  let q = level._fieldQ;
+  if (!q || q.length < W * H) { q = new Int32Array(W * H); try { Object.defineProperty(level, '_fieldQ', { value: q, writable: true, configurable: true, enumerable: false }); } catch { /* nivel congelado */ } }
+  let tail = 0;
   for (const s of sources) {
     const x = Math.floor(s.x), y = Math.floor(s.y);
     if (x < 0 || y < 0 || x >= W || y >= H) continue;
     const i = y * W + x;
     if (d[i] === 0) continue;
-    d[i] = 0; q.push(i);
+    d[i] = 0; q[tail++] = i;
   }
-  for (let h = 0; h < q.length; h++) {
+  for (let h = 0; h < tail; h++) {
     const i = q[h], x = i % W, y = (i / W) | 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + dx, ny = y + dy;
+    for (let k = 0; k < 4; k++) {
+      const nx = x + FIELD_DX[k], ny = y + FIELD_DY[k];
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const j = ny * W + nx;
       if (d[j] >= 0) continue;
       const c = grid[j];
       if (c !== CELL.EMPTY && c !== CELL.PORTAL) continue;
-      d[j] = d[i] + 1; q.push(j);
+      d[j] = d[i] + 1; q[tail++] = j;
     }
   }
   return d;
@@ -316,33 +320,35 @@ export function cellAt(level, x, y) {
 }
 
 // Mueve un círculo (x,y,r) por (dx,dy) chocando con las casillas que bloquean. Devuelve {x,y,hit}
+// (sin funciones nuevas por llamada: se llama por cada zombi en cada paso)
 export function moveCircle(level, x, y, r, dx, dy, passPortal = false) {
-  const solidAt = (i, j) => {
-    const c = cellAt(level, i, j);
-    return passPortal ? c !== CELL.EMPTY && c !== CELL.PORTAL : c !== CELL.EMPTY;
-  };
   let hit = false;
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 0.2));
   // Se acepta un paso si no choca, o si al menos se encaja menos (para poder salir de una esquina)
-  const ok = (ox, oy, nx, ny) => { const p = penetration(solidAt, nx, ny, r); return p <= 0 || p < penetration(solidAt, ox, oy, r) - 1e-6; };
   for (let s = 0; s < steps; s++) {
     const nx = x + dx / steps;
-    if (ok(x, y, nx, y)) x = nx; else hit = true;
+    if (stepOk(level, passPortal, r, x, y, nx, y)) x = nx; else hit = true;
     const ny = y + dy / steps;
-    if (ok(x, y, x, ny)) y = ny; else hit = true;
+    if (stepOk(level, passPortal, r, x, y, x, ny)) y = ny; else hit = true;
   }
   return { x, y, hit };
 }
+function stepOk(level, pp, r, ox, oy, nx, ny) {
+  const p = penetration(level, pp, nx, ny, r);
+  return p <= 0 || p < penetration(level, pp, ox, oy, r) - 1e-6;
+}
 
 // Cuánto se encaja un círculo en las casillas que bloquean (0 = nada)
-function penetration(solidAt, x, y, r) {
+function penetration(level, passPortal, x, y, r) {
   const i0 = Math.floor(x - r), i1 = Math.floor(x + r), j0 = Math.floor(y - r), j1 = Math.floor(y + r);
+  const { W, H, grid } = level;
   let p = 0;
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-    if (!solidAt(i, j)) continue;
+    const c = i < 0 || j < 0 || i >= W || j >= H ? CELL.WALL : grid[j * W + i];
+    if (c === CELL.EMPTY || (passPortal && c === CELL.PORTAL)) continue;
     const cx = Math.max(i, Math.min(x, i + 1)), cy = Math.max(j, Math.min(y, j + 1));
-    const d = Math.hypot(x - cx, y - cy);
-    if (d < r) p = Math.max(p, r - d);
+    const ex = x - cx, ey = y - cy, d2 = ex * ex + ey * ey;
+    if (d2 < r * r) p = Math.max(p, r - Math.sqrt(d2));
   }
   return p;
 }

@@ -17,7 +17,9 @@ function rayFree(L, x, y, a, max = 22) {
 }
 
 export class MenuScene {
-  constructor(scene, level, avatar = {}) {
+  // shared (opcional): { rim, exit } luces del juego que el menú usa prestadas mientras se ve (cada
+  // luz cuesta en cada pixel de todo el juego: así hay 2 menos). Se devuelven como estaban.
+  constructor(scene, level, avatar = {}, shared = null) {
     this.scene = scene;
     this.group = new THREE.Group();
     this.group.visible = false;
@@ -81,19 +83,23 @@ export class MenuScene {
     const lx = ax + px * 0.55 * side + fx * 0.15, ly = ay + py * 0.55 * side + fy * 0.15;
     lamp.position.set(lx * S, 0, ly * S);
     this.group.add(lamp);
-    this.warm = new THREE.PointLight('#ffb35c', 7, 6.5, 1.6);
-    this.warm.position.set(lx * S, 0.6, ly * S);
-    scene.add(this.warm); // las luces quedan siempre en la escena (ver setActive)
+    this.warmPos = new THREE.Vector3(lx * S, 0.6, ly * S);
     // Brillo verde de "salida" al fondo
     const gd = Math.max(4, far - 0.8);
-    this.exit = new THREE.PointLight('#38ff6a', 9, 14, 1.4);
-    this.exit.position.set((this.cx + fx * gd) * S, 2.1, (this.cy + fy * gd) * S);
-    scene.add(this.exit);
+    this.exitPos = new THREE.Vector3((this.cx + fx * gd) * S, 2.1, (this.cy + fy * gd) * S);
     // Luz fría muy tenue desde la cámara (para que se lean las siluetas)
-    this.rim = new THREE.PointLight('#7d8cff', 2.2, 10, 1.5);
-    scene.add(this.rim);
+    this.MENU = { exit: ['#38ff6a', 9, 14, 1.4], rim: ['#7d8cff', 2.2, 10, 1.5], warm: ['#ffb35c', 7, 6.5, 1.6] };
+    this.POS = { exit: this.exitPos, warm: this.warmPos };
+    this.own = !shared;
+    if (shared) this.share(shared);
+    else {
+      // las luces quedan siempre en la escena (ver setActive)
+      for (const k of ['exit', 'rim', 'warm']) { this[k] = new THREE.PointLight(...this.MENU[k]); scene.add(this[k]); }
+    }
+    this.exit.position.copy(this.exitPos);
+    this.warm.position.copy(this.warmPos);
     this.lights = [this.warm, this.exit, this.rim];
-    this.base = this.lights.map((l) => l.intensity);
+    this.base = [7, 9, 2.2];
     this.setActive(false);
     this.t = 0;
   }
@@ -101,8 +107,31 @@ export class MenuScene {
   // Las luces no se esconden: se apagan con intensidad 0. Si cambiara el número de luces,
   // three.js tendría que volver a compilar todos los materiales y el juego se congelaría.
   setActive(on) {
+    if (this._on === on) return;
+    this._on = on;
     this.group.visible = on;
-    this.lights.forEach((l, i) => { l.intensity = on ? this.base[i] : 0; });
+    if (!this.own) {
+      // luces prestadas: con el menú, su color y alcance de menú; sin él, los del juego
+      for (const k of ['exit', 'rim', 'warm']) {
+        const l = this[k], v = on ? this.MENU[k] : this.saved[k];
+        if (!l) continue;
+        l.color.set(v[0]); l.distance = v[2]; l.decay = v[3];
+        if (on && this.POS[k]) l.position.copy(this.POS[k]);
+        if (!on) { l.position.copy(this.saved[k][4]); l.intensity = this.saved[k][1]; }
+      }
+    }
+    if (on || this.own) this.lights.forEach((l, i) => { l.intensity = on ? this.base[i] : 0; });
+    else { this.exit.intensity = 0; this.rim.intensity = 0; } // la lámpara prestada vuelve a lo suyo
+  }
+  // Toma prestadas las luces del juego (otra vez si el mundo se rearmó)
+  share({ rim, exit, warm }) {
+    const was = this._on;
+    if (was && this.saved) this.setActive(false);
+    this.rim = rim; this.exit = exit; this.warm = warm;
+    const keep = (l) => ['#' + l.color.getHexString(), l.intensity, l.distance, l.decay, l.position.clone()];
+    this.saved = { rim: keep(rim), exit: keep(exit), warm: keep(warm) };
+    if (this.lights) this.lights = [this.warm, this.exit, this.rim];
+    if (was) { this._on = false; this.setActive(true); }
   }
   get active() { return this.group.visible; }
 
@@ -133,5 +162,5 @@ export class MenuScene {
     return out;
   }
 
-  dispose() { this.scene.remove(this.group); for (const l of this.lights) this.scene.remove(l); }
+  dispose() { this.scene.remove(this.group); if (this.own) { this.scene.remove(this.exit); this.scene.remove(this.rim); this.scene.remove(this.warm); } }
 }

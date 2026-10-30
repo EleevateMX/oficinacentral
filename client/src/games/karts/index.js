@@ -18,6 +18,7 @@ import { Hud } from './hud.js';
 import { KartsUI } from './ui.js';
 import { KartAudio } from './audio.js';
 import { SnapBuffer, gameLoop, stamp } from '../netSync.js';
+import { AdaptiveQuality, pixelRatio } from '../quality.js';
 
 export const meta = {
   w: 1280, h: 720, wide: true, persistent: true, maxSeats: K.MAX_RACERS, ownTop: true,
@@ -55,6 +56,14 @@ export function create(canvas, ctx) {
   Object.assign(hudCanvas.style, { position: 'absolute', pointerEvents: 'none', left: '0px', top: '0px', zIndex: 2 });
   stage.appendChild(hudCanvas);
   cleanups.push(() => hudCanvas.remove());
+  // la oficina de abajo no se ve mientras juegas: que no se dibuje
+  office.mapPaused = true;
+  cleanups.push(() => { office.mapPaused = false; });
+  // resolución dinámica (calidad alta): empieza con tope de 1.25× (no 1.5× en Mac retina), sube a
+  // 1.5× solo si sobra tiempo y baja hasta 0.7× si los cuadros van lentos (sin recompilar nada)
+  const PR_STEPS = [[1.5, 1], [1.25, 1], [1, 1], [1, 0.85], [1, 0.7]];
+  const aq = new AdaptiveQuality({ levels: PR_STEPS.length, start: 1 });
+  let lastFrameAt = 0;
   const hg = hudCanvas.getContext('2d');
   const hud = new Hud();
   const prevTouch = canvas.style.touchAction;
@@ -88,9 +97,11 @@ export function create(canvas, ctx) {
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
     const dpr = window.devicePixelRatio || 1;
-    renderer.setPixelRatio(quality === 'alta' ? Math.min(dpr, 1.5) : Math.min(dpr, 1) * 0.6);
+    const [cap, scale] = PR_STEPS[aq.level];
+    renderer.setPixelRatio(quality === 'alta' ? pixelRatio(dpr, cap, scale) : Math.min(dpr, 1) * 0.6);
     renderer.setSize(cssW, cssH, false);
-    hudCanvas.width = Math.round(cssW * dpr); hudCanvas.height = Math.round(cssH * dpr);
+    const hdpr = Math.min(dpr, 2);
+    hudCanvas.width = Math.round(cssW * hdpr); hudCanvas.height = Math.round(cssH * hdpr);
     hudCanvas.style.width = `${cssW}px`; hudCanvas.style.height = `${cssH}px`;
     hudCanvas.style.left = `${canvas.offsetLeft}px`; hudCanvas.style.top = `${canvas.offsetTop}px`;
     camera.aspect = cssW / cssH;
@@ -793,6 +804,7 @@ export function create(canvas, ctx) {
   // ---------- Cámara ----------
   let camInit = false, camPos = null, shakeT = 0;
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), yaw: 0, fov: 70, orbit: 0 };
+  const _want = new THREE.Vector3();
   function updateCamera(dt, target) {
     if (!T || !world) return;
     const B = world.bounds;
@@ -830,7 +842,7 @@ export function create(canvas, ctx) {
       const yawT = target.h + (f.drift ? -f.drift * 0.18 : 0);
       if (!camInit) { cam.yaw = target.h; }
       cam.yaw += wrapAng(yawT - cam.yaw) * Math.min(1, dt * (hood ? 14 : 5.5));
-      const want = new THREE.Vector3(target.x - Math.cos(cam.yaw) * dist, target.y + hgt, target.z - Math.sin(cam.yaw) * dist);
+      const want = _want.set(target.x - Math.cos(cam.yaw) * dist, target.y + hgt, target.z - Math.sin(cam.yaw) * dist);
       // no meter la cámara bajo la pista
       const L = K.locate(T, want.x, want.z, views.get(target.id)?.i ?? 0, 30);
       const gy = K.groundAt(T, L.s, Math.max(-6, Math.min(6, L.lat)));
@@ -901,6 +913,10 @@ export function create(canvas, ctx) {
     }
     updateCamera(dt, target);
     renderer.render(scene, camera);
+    // calidad alta: resolución dinámica según cuánto tardan los cuadros
+    const realMs = lastFrameAt ? nowT - lastFrameAt : 16.7;
+    lastFrameAt = nowT;
+    if (quality === 'alta' && !document.hidden && aq.sample(realMs, performance.now() - nowT) != null) fit();
     // sonido
     const mk = me.k;
     const active = race.ph !== 'lobby' && !!mk && me.inRace && race.ph !== 'done';
@@ -929,7 +945,7 @@ export function create(canvas, ctx) {
       hint: !me.inRace && mySeat >= 0 && (race.ph === 'race' || race.ph === 'count') ? 'Entras en la siguiente carrera' : (k && k.finished && race.ph === 'race' ? 'Esperando a que lleguen los demás…' : null),
       touch: !!touchState, fps, showFps: false,
     };
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2); // igual que el tamaño del lienzo del HUD
     hg.setTransform(dpr, 0, 0, dpr, 0, 0);
     hud.draw(hg, cssW, cssH, st);
     ui.showTouch(!!touchState && me.inRace && race.ph === 'race' && !menu);
@@ -966,7 +982,7 @@ export function create(canvas, ctx) {
   // ---------- Arranque ----------
   loadTrack(race.tr);
   fit();
-  const loop = gameLoop({ step: simStep, frame, hz: HZ });
+  const loop = gameLoop({ step: simStep, frame, hz: HZ, maxSteps: 10, budgetMs: 12 }); // con tope: no se espiralea
 
   // ---------- Pruebas automáticas (inofensivo en producción) ----------
   const debug = {

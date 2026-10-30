@@ -146,6 +146,8 @@ export function initGames(io, socket, userId) {
       io.to(roomKey(id)).emit('game:win', { objectId: id, game: r.game, winner: r.seats[w], loser: r.seats[1 - w], score: String(m.data.score || '').slice(0, 20) });
     }
   });
+  // Ping de los juegos (para el indicador de red): solo responde
+  socket.on('game:ping', (_x, cb) => { if (typeof cb === 'function') cb(); });
   socket.emit('games:live', liveMatches());
   socket.on('disconnect', () => { for (const id of joined) leave(io, id, userId); });
 }

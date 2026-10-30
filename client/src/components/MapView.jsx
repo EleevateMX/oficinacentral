@@ -314,7 +314,8 @@ export default function MapView({ active }) {
       raf = requestAnimationFrame(loop);
       const { floor: f, me: meU, users: us, editMode: em, ed: edS, active: on } = stateRef.current;
       const minFrame = perf === 'efficient' ? 33 : 0;
-      if (!on || !f || t - lastFrame < minFrame) { last = t; return; }
+      // con un juego a pantalla completa encima (Zombies, Karts) el mapa no se ve: no se dibuja
+      if (!on || !f || office.mapPaused || t - lastFrame < minFrame) { last = t; return; }
       lastFrame = t;
       const dt = Math.min(0.1, (t - last) / 1000);
       last = t;

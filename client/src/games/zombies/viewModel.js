@@ -140,9 +140,10 @@ export function createViewModel(vmScene) {
       if (L.charge >= HEAVY.charge) _hand.x += (Math.random() - 0.5) * 0.006, _hand.y += (Math.random() - 0.5) * 0.006;
     }
     // filo hacia donde se mueve la hoja (suavizado para que no gire de golpe)
-    const prev = vm.prevDir || _dir.clone();
-    const mv = _edge.copy(_dir).sub(prev);
-    vm.prevDir = _dir.clone();
+    // (sin vectores nuevos en cada cuadro)
+    if (!vm.prevDir) vm.prevDir = _dir.clone();
+    const mv = _edge.copy(_dir).sub(vm.prevDir);
+    vm.prevDir.copy(_dir);
     if (!vm.edgeV) vm.edgeV = new THREE.Vector3(0, 0, -1);
     if (mv.lengthSq() > 1e-6) vm.edgeV.lerp(mv.normalize(), 0.5);
     else vm.edgeV.lerp(_x.set(0, 0, -1), 0.1);

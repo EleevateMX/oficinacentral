@@ -61,6 +61,9 @@ export function create(canvas, ctx) {
   Object.assign(hudCanvas.style, { position: 'absolute', pointerEvents: 'none', left: '0px', top: '0px' });
   stage.appendChild(hudCanvas);
   cleanups.push(() => hudCanvas.remove());
+  // la oficina de abajo no se ve mientras juegas: que no se dibuje
+  office.mapPaused = true;
+  cleanups.push(() => { office.mapPaused = false; });
   const hg = hudCanvas.getContext('2d');
   const hud = new ArenaHud();
   const prevTouch = canvas.style.touchAction;
@@ -258,7 +261,7 @@ export function create(canvas, ctx) {
     useMap(isHost ? cfgNow().map : latest?.cfg?.map || 'bodega');
     if (isHost) startSim();
     fit();
-    loop = gameLoop({ step: hostStep, frame, hz: 60 });
+    loop = gameLoop({ step: hostStep, frame, hz: 60, maxSteps: 5, budgetMs: 12 }); // con tope: no se espiralea
   })();
 
   function levelFor(id) {

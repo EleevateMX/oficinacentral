@@ -55,24 +55,37 @@ function deep(a, b, k, jump, ang) {
   return k < 1 ? (a !== undefined ? a : b) : b;
 }
 
-// Búfer de estados con reloj adaptable.
+// Búfer de estados con reloj adaptable. (adaptive: true = el retraso nuevo que se adapta al vaivén;
+// por omisión se queda la fórmula de antes, que usan los demás juegos)
+// El retraso con el que se dibuja se adapta a la red: sube rápido cuando los estados llegan tarde
+// o con vaivén (para no quedarse sin estado y "congelarse") y baja despacio cuando la red mejora.
 export class SnapBuffer {
-  constructor({ delay = 100, maxDelay = 250, keep = 1500, extrapolate = 80 } = {}) {
+  constructor({ delay = 100, maxDelay = 250, keep = 1500, extrapolate = 80, adaptive = false } = {}) {
     this.base = delay;
     this.maxDelay = maxDelay;
     this.keep = keep;
     this.extra = extrapolate;
+    this.adaptive = adaptive;
     this.snaps = []; // { t (reloj del anfitrión), d }
     this.offset = null; // recibido - enviado (ms), se ajusta poco a poco
     this.interval = 33; // promedio entre estados (ms)
-    this.jitter = 0;
+    this.jitter = 0; // vaivén: qué tan tarde llegan los estados respecto al más puntual (p90, ms)
     this.lastRecv = 0;
     this.lastT = null;
+    this._delay = delay;
+    this.late = new Float32Array(120); // retrasos recientes respecto al mejor (ms, ~6 s)
+    this.lateN = 0;
+    this.stats = { samples: 0, holds: 0, extra: 0, late: 0 }; // cuadros: total, congelados (sin estado nuevo), extrapolados
   }
 
   get delay() {
-    // Si los estados llegan espaciados o con mucho vaivén, se dibuja un poco más en el pasado
-    return Math.min(this.maxDelay, Math.max(this.base, this.interval * 1.6 + this.jitter * 2));
+    if (!this.adaptive) return Math.min(this.maxDelay, Math.max(this.base, this.interval * 1.6 + this.jitter * 2));
+    return this._delay;
+  }
+
+  // Retraso que haría falta para tener casi siempre un estado más nuevo que el que se dibuja
+  target() {
+    return Math.min(this.maxDelay, Math.max(this.base, this.interval * 1.15 + this.jitter + 12));
   }
 
   push(d, recv = now()) {
@@ -85,12 +98,29 @@ export class SnapBuffer {
     const off = recv - t;
     if (this.offset == null || off < this.offset) this.offset = off; // baja rápido
     else this.offset += (off - this.offset) * 0.02; // sube despacio (red más lenta)
-    if (this.lastRecv) {
-      const gap = recv - this.lastRecv;
-      if (gap < 1000) {
-        this.jitter += (Math.abs(gap - this.interval) - this.jitter) * 0.1;
-        this.interval += (gap - this.interval) * 0.1;
+    if (!this.adaptive) {
+      // fórmula de siempre (la usan los demás juegos): intervalo y vaivén entre llegadas
+      if (this.lastRecv) {
+        const gap = recv - this.lastRecv;
+        if (gap < 1000) {
+          this.jitter += (Math.abs(gap - this.interval) - this.jitter) * 0.1;
+          this.interval += (gap - this.interval) * 0.1;
+        }
       }
+    } else {
+      // el intervalo es el del anfitrión (no el de llegada, que trae el vaivén)
+      if (this.lastT != null) { const sent = t - this.lastT; if (sent < 1000) this.interval += (sent - this.interval) * 0.1; }
+      // vaivén: qué tan tarde llegó este respecto al más puntual que hemos visto (p96 de ~6 s)
+      this.late[this.lateN++ % this.late.length] = Math.max(0, off - this.offset);
+      const n = Math.min(this.lateN, this.late.length);
+      if (n >= 4) {
+        const tmp = this._tmp || (this._tmp = new Float32Array(this.late.length));
+        for (let i = 0; i < n; i++) tmp[i] = this.late[i];
+        const view = tmp.subarray(0, n).sort();
+        this.jitter = view[Math.min(n - 1, Math.floor(n * 0.96))];
+      }
+      const tg = this.target();
+      this._delay += (tg - this._delay) * (tg > this._delay ? 0.3 : 0.015);
     }
     this.lastRecv = recv;
     this.lastT = t;
@@ -116,11 +146,16 @@ export class SnapBuffer {
     for (let i = 1; i < s.length; i++) {
       if (rt <= s[i].t) {
         const a = s[i - 1], b = s[i];
+        this.stats.samples++;
         return { a: a.d, b: b.d, k: (rt - a.t) / Math.max(1, b.t - a.t), rt };
       }
     }
     const a = s[s.length - 2], b = s[s.length - 1];
     const over = Math.min(this.extra, rt - b.t);
+    this.stats.samples++;
+    if (rt - b.t > this.extra) this.stats.holds++; else this.stats.extra++;
+    // nos quedamos sin estados: dibujar un poco más en el pasado (hasta el tope)
+    if (this.adaptive && rt - b.t > 0) this._delay = Math.min(this.maxDelay, this._delay + 2);
     return { a: a.d, b: b.d, k: 1 + over / Math.max(1, b.t - a.t), rt };
   }
 
@@ -134,11 +169,25 @@ export class SnapBuffer {
   }
 }
 
-// Bucle con paso fijo. step(dt) corre `hz` veces por segundo (con tope para no "espiralear");
-// frame(dt, alpha) dibuja una vez por cuadro. Se pausa con la pestaña oculta.
-export function gameLoop({ step, frame, hz = 120, maxSteps = 12, raf = globalThis.requestAnimationFrame?.bind(globalThis), caf = globalThis.cancelAnimationFrame?.bind(globalThis) }) {
+// Cuántos pasos fijos tocan con el tiempo acumulado `acc` (s), sin pasar de `maxSteps`.
+// Si aun así queda atraso (la compu no da), se tira: la simulación va más lenta un momento en vez
+// de "espiralear" (cada cuadro con más pasos, cada vez más lento). Devuelve { steps, acc, dropped }.
+export function catchUp(acc, dt, maxSteps) {
+  const want = Math.floor((acc + 1e-9) / dt);
+  const steps = Math.min(maxSteps, want);
+  acc -= steps * dt;
+  let dropped = 0;
+  if (want > maxSteps) { dropped = acc - (acc % dt); acc %= dt; }
+  return { steps, acc: Math.max(0, acc), dropped };
+}
+
+// Bucle con paso fijo. step(dt) corre `hz` veces por segundo (con tope de pasos por cuadro y de
+// milisegundos por cuadro, `budgetMs`, para no "espiralear"); frame(dt, alpha) dibuja una vez por
+// cuadro. Se pausa con la pestaña oculta.
+export function gameLoop({ step, frame, hz = 120, maxSteps = 12, budgetMs = Infinity, now: clock = now, raf = globalThis.requestAnimationFrame?.bind(globalThis), caf = globalThis.cancelAnimationFrame?.bind(globalThis) }) {
   const dt = 1 / hz;
   let acc = 0, last = null, id = 0, stopped = false, paused = false;
+  const stats = { steps: 0, dropped: 0, frames: 0 };
   const tick = (t) => {
     if (stopped) return;
     if (last == null) last = t;
@@ -146,10 +195,17 @@ export function gameLoop({ step, frame, hz = 120, maxSteps = 12, raf = globalThi
     last = t;
     if (step) {
       acc += real;
-      let n = 0;
-      while (acc >= dt && n < maxSteps) { step(dt); acc -= dt; n++; }
-      if (n >= maxSteps) acc = 0;
+      const plan = catchUp(acc, dt, maxSteps);
+      acc = plan.acc;
+      stats.dropped += plan.dropped;
+      const t0 = budgetMs < Infinity ? clock() : 0;
+      for (let n = 0; n < plan.steps; n++) {
+        step(dt); stats.steps++;
+        // se acabó el tiempo de este cuadro: lo que falta se tira (no se acumula)
+        if (budgetMs < Infinity && n < plan.steps - 1 && clock() - t0 > budgetMs) { stats.dropped += (plan.steps - 1 - n) * dt; break; }
+      }
     }
+    stats.frames++;
     frame?.(Math.min(0.05, real), step ? acc / dt : 1);
     id = raf(tick);
   };
@@ -162,12 +218,62 @@ export function gameLoop({ step, frame, hz = 120, maxSteps = 12, raf = globalThi
   id = raf(tick);
   return {
     get paused() { return paused; },
+    stats,
     stop() {
       stopped = true;
       caf(id);
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', vis);
     },
   };
+}
+
+// Salud de la conexión: ping (ida y vuelta al servidor), estados perdidos (por número de secuencia)
+// y si lo que se siente trabado es la red o la compu. Puro (se prueba en Node).
+export class NetStats {
+  constructor({ window = 4000 } = {}) {
+    this.win = window;
+    this.ping = null; // ms (promedio suave)
+    this.pingMax = 0;
+    this.lastSeq = null;
+    this.got = 0; this.lost = 0; // ventana actual
+    this.loss = 0; // 0..1 (última ventana completa, suavizado)
+    this.t0 = null;
+  }
+  addPing(ms) {
+    if (!Number.isFinite(ms) || ms < 0 || ms > 10000) return;
+    this.ping = this.ping == null ? ms : this.ping + (ms - this.ping) * 0.25;
+    this.pingMax = Math.max(this.pingMax * 0.9, ms);
+  }
+  // número de secuencia de cada estado que llega (los que faltan se cuentan como perdidos)
+  addSeq(sq, at = now()) {
+    if (!Number.isFinite(sq)) return;
+    if (this.t0 == null) this.t0 = at;
+    if (this.lastSeq != null) {
+      const gap = sq - this.lastSeq;
+      if (gap === 0) return; // repetido
+      // llegó tarde (desordenado): ya se había contado como perdido
+      if (gap < 0 && gap > -200) { if (this.lost > 0) this.lost--; this.got++; return; }
+      if (gap > 0 && gap < 200) this.lost += gap - 1;
+    }
+    this.lastSeq = sq;
+    this.got++;
+    if (at - this.t0 >= this.win) this.roll(at);
+  }
+  roll(at = now()) {
+    const tot = this.got + this.lost;
+    const l = tot ? this.lost / tot : 0;
+    this.loss = this.loss * 0.4 + l * 0.6;
+    this.got = 0; this.lost = 0; this.t0 = at;
+  }
+  // frameMs: tiempo por cuadro (promedio). holds: fracción de cuadros sin estado nuevo (invitado).
+  // → { level: 'ok'|'net'|'device', text }
+  diagnose({ frameMs = 16.7, budgetMs = 16.7, holds = 0 } = {}) {
+    const badNet = (this.ping != null && this.ping > 220) || this.loss > 0.05 || holds > 0.12;
+    const badDev = frameMs > budgetMs * 1.6;
+    if (badNet) return { level: 'net', text: 'Conexión inestable' };
+    if (badDev) return { level: 'device', text: 'Tu equipo va lento' };
+    return { level: 'ok', text: '' };
+  }
 }
 
 // Lienzo nítido: el tamaño interno sigue al tamaño en pantalla × devicePixelRatio, y el juego

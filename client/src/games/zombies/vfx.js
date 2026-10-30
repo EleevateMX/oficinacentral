@@ -7,6 +7,11 @@ import { GEO, mat } from './models.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _c = new THREE.Color(), _c2 = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
+// temporales para no crear vectores ni colores en cada cuadro
+const _fw = new THREE.Vector3(), _sd = new THREE.Vector3(), _t1 = new THREE.Vector3(), _t2 = new THREE.Vector3(), _t3 = new THREE.Vector3(), _t4 = new THREE.Vector3();
+const COLS = new Map();
+const col = (hex) => { let c = COLS.get(hex); if (!c) { c = new THREE.Color(hex); COLS.set(hex, c); } return c; };
+const colr = (hex) => col(hex);
 
 // Material aditivo con color por vértice (negro = invisible): uno solo para todas las cintas
 let ribbonMat = null;
@@ -66,12 +71,16 @@ export class SwordTrail {
   }
   sample(tip, base, on, dt, strong = 1) {
     for (const p of this.pts) p.age += dt;
-    while (this.pts.length && this.pts[0].age > 0.16) this.pts.shift();
+    this.free ||= [];
+    while (this.pts.length && this.pts[0].age > 0.16) this.free.push(this.pts.shift());
     const last = this.pts[this.pts.length - 1];
     // solo un punto nuevo si la punta se movió (así la estela cubre el arco aunque vaya lento)
-    if (on && (!last || last.t.distanceToSquared(tip) > 0.0001)) this.pts.push({ t: tip.clone(), b: base.clone(), age: 0, k: strong });
-    else if (on && last) last.age = 0;
-    if (this.pts.length > 38) this.pts.shift();
+    if (on && (!last || last.t.distanceToSquared(tip) > 0.0001)) {
+      const q = this.free.pop() || { t: new THREE.Vector3(), b: new THREE.Vector3() };
+      q.t.copy(tip); q.b.copy(base); q.age = 0; q.k = strong;
+      this.pts.push(q);
+    } else if (on && last) last.age = 0;
+    if (this.pts.length > 38) this.free.push(this.pts.shift());
     this.draw();
   }
   draw() {
@@ -87,7 +96,7 @@ export class SwordTrail {
     }
     this.rib.end(); this.core.end();
   }
-  clear() { this.pts.length = 0; this.rib.hide(); this.core.hide(); }
+  clear() { this.free ||= []; this.free.push(...this.pts); this.pts.length = 0; this.rib.hide(); this.core.hide(); }
   warm() { this.rib.warm(); this.core.warm(); }
 }
 
@@ -101,7 +110,8 @@ export class Slashes {
   // x, z (m) centro; h altura; a = hacia dónde mira (radianes del plano del mapa); o = { from, to, tilt, r, color, dur }
   add(x, h, z, a, { from = -1, to = 1, tilt = 0, r = 1.6, color = '#ffffff', dur = 0.22, arc = 1.9 } = {}) {
     const s = this.pool[this.i++ % this.pool.length];
-    Object.assign(s, { on: true, t: 0, x, h, z, a, from, to, tilt, r, dur, arc, color: new THREE.Color(color) });
+    Object.assign(s, { on: true, t: 0, x, h, z, a, from, to, tilt, r, dur, arc });
+    (s.color ||= new THREE.Color()).copy(col(color));
   }
   update(dt) {
     for (const s of this.pool) {
@@ -110,8 +120,8 @@ export class Slashes {
       const k = s.t / s.dur;
       if (k > 1.6) { s.on = false; s.rib.hide(); continue; }
       const head = Math.min(1, k), tail = Math.max(0, k - 0.6);
-      const fw = new THREE.Vector3(Math.cos(s.a), 0, Math.sin(s.a));
-      const side = new THREE.Vector3(-fw.z, 0, fw.x);
+      const fw = _fw.set(Math.cos(s.a), 0, Math.sin(s.a));
+      const side = _sd.set(-fw.z, 0, fw.x);
       const vertical = s.from === 0 && s.to === 0;
       s.rib.begin();
       const N = 24;
@@ -142,7 +152,9 @@ export class Beams {
   constructor(scene, n = 3) { this.pool = Array.from({ length: n }, () => ({ a: new Ribbon(scene, 2), b: new Ribbon(scene, 2), on: false })); this.i = 0; }
   add(from, to, color = '#ff2d55', life = 0.28) {
     const s = this.pool[this.i++ % this.pool.length];
-    Object.assign(s, { on: true, t: 0, life, from: from.clone(), to: to.clone(), color: new THREE.Color(color) });
+    Object.assign(s, { on: true, t: 0, life });
+    (s.from ||= new THREE.Vector3()).copy(from); (s.to ||= new THREE.Vector3()).copy(to);
+    (s.color ||= new THREE.Color()).copy(col(color));
   }
   update(dt) {
     for (const s of this.pool) {
@@ -154,8 +166,8 @@ export class Beams {
       const dir = _v.copy(s.to).sub(s.from).normalize();
       const side = _w.crossVectors(dir, UP).normalize().multiplyScalar(w);
       _c.copy(s.color).multiplyScalar(k * 1.2);
-      s.a.begin().push(_u.copy(s.from).sub(side), s.from.clone().add(side), _c).push(_u.copy(s.to).sub(side), s.to.clone().add(side), _c).end();
-      s.b.begin().push(_u.copy(s.from).add(new THREE.Vector3(0, -w, 0)), s.from.clone().add(new THREE.Vector3(0, w, 0)), _c).push(_u.copy(s.to).add(new THREE.Vector3(0, -w, 0)), s.to.clone().add(new THREE.Vector3(0, w, 0)), _c).end();
+      s.a.begin().push(_u.copy(s.from).sub(side), _t1.copy(s.from).add(side), _c).push(_u.copy(s.to).sub(side), _t1.copy(s.to).add(side), _c).end();
+      s.b.begin().push(_u.copy(s.from).setY(s.from.y - w), _t1.copy(s.from).setY(s.from.y + w), _c).push(_u.copy(s.to).setY(s.to.y - w), _t1.copy(s.to).setY(s.to.y + w), _c).end();
     }
   }
   warm() { this.pool[0].a.warm(); }
@@ -210,8 +222,8 @@ export class TechFx {
     const out = Math.max(0, (w.t - travel) / fade);
     if (out >= 1) { w.on = false; w.h.hide(); w.v.hide(); w.core.hide(); w.head.visible = false; return; }
     const p = w.path;
-    const fw = _u.set(p.bx - p.ax, 0, p.bz - p.az).normalize().clone();
-    const side = new THREE.Vector3(-fw.z, 0, fw.x);
+    const fw = _fw.set(p.bx - p.ax, 0, p.bz - p.az).normalize();
+    const side = _sd.set(-fw.z, 0, fw.x);
     const N = 56;
     const span = Math.max(0.05, head - Math.min(head - 0.05, tail * 0.6));
     const u0 = head - span;
@@ -223,14 +235,14 @@ export class TechFx {
       return o;
     };
     w.h.begin(); w.v.begin(); w.core.begin();
-    const c = new THREE.Vector3(), up = new THREE.Vector3();
+    const c = _t1, up = _t2;
     for (let i = 0; i <= N; i++) {
       const u = u0 + span * (i / N);
       const k = i / N; // 0 = cola, 1 = cabeza
       center(u, c);
       const thick = (0.12 + 0.42 * Math.sin(Math.min(1, k * 1.15) * Math.PI * 0.92)) * (1 - out * 0.7);
       const bright = (0.25 + 0.75 * k) * (1 - out);
-      _c.set('#1f8fff').lerp(_c2.set('#9ff0ff'), k).multiplyScalar(bright);
+      _c.copy(col('#1f8fff')).lerp(col('#9ff0ff'), k).multiplyScalar(bright);
       w.h.push(_v.copy(c).addScaledVector(side, -thick), _w.copy(c).addScaledVector(side, thick), _c);
       up.set(0, thick * 0.8, 0);
       w.v.push(_v.copy(c).sub(up), _w.copy(c).add(up), _c);
@@ -239,7 +251,7 @@ export class TechFx {
     w.h.end(); w.v.end(); w.core.end();
     // cabeza
     center(head, c);
-    const ahead = center(Math.min(1, head + 0.02), new THREE.Vector3());
+    const ahead = center(Math.min(1, head + 0.02), _t3);
     w.head.visible = out < 0.6;
     w.head.position.copy(c);
     w.head.lookAt(_v.copy(c).sub(ahead).add(c)); // la trompa (−Z local) apunta hacia adelante
@@ -254,8 +266,8 @@ export class TechFx {
     if (out >= 1) { f.on = false; f.a.hide(); f.b.hide(); f.c.hide(); return; }
     const p = f.path;
     const u = Math.min(1, f.t / dash);
-    const fw = new THREE.Vector3(p.bx - p.ax, 0, p.bz - p.az).normalize();
-    const center = this.at(p, u, new THREE.Vector3()); center.y = f.y0;
+    const fw = _fw.set(p.bx - p.ax, 0, p.bz - p.az).normalize();
+    const center = this.at(p, u, _t1); center.y = f.y0;
     center.addScaledVector(fw, 1.7);
     const spin = f.spin + f.t * 26;
     const draw = (rib, R, from, to, col, thick) => {
@@ -268,7 +280,7 @@ export class TechFx {
         const dir = _v.copy(fw).multiplyScalar(Math.cos(ang)).addScaledVector(UP, Math.sin(ang));
         const o = _w.copy(center).addScaledVector(dir, R);
         const inn = _u.copy(center).addScaledVector(dir, R - thick * (0.4 + k));
-        rib.push(inn, o, _c.set(col).multiplyScalar(k * (1 - out)));
+        rib.push(inn, o, _c.copy(colr(col)).multiplyScalar(k * (1 - out)));
       }
       rib.end();
     };
@@ -276,13 +288,13 @@ export class TechFx {
     draw(f.b, 0.78, Math.PI, Math.PI + 4.2, '#ffb02a', 0.34);
     // corte horizontal que gira alrededor
     f.c.begin();
-    const side = new THREE.Vector3(-fw.z, 0, fw.x);
+    const side = _sd.set(-fw.z, 0, fw.x);
+    const base = this.at(p, u, _t2); base.y = f.y0 - 0.25;
     for (let i = 0; i <= 36; i++) {
       const k = i / 36;
       const ang = -spin * 0.8 + k * 5;
       const dir = _v.copy(fw).multiplyScalar(Math.cos(ang)).addScaledVector(side, Math.sin(ang));
-      const base = this.at(p, u, new THREE.Vector3()); base.y = f.y0 - 0.25;
-      f.c.push(_u.copy(base).addScaledVector(dir, 0.7), _w.copy(base).addScaledVector(dir, 1.55), _c.set('#ff3b1a').multiplyScalar(k * 0.8 * (1 - out)));
+      f.c.push(_u.copy(base).addScaledVector(dir, 0.7), _w.copy(base).addScaledVector(dir, 1.55), _c.copy(col('#ff3b1a')).multiplyScalar(k * 0.8 * (1 - out)));
     }
     f.c.end();
     if (out < 0.5) { const ang = spin + Math.random() * 6; const q = _v.copy(fw).multiplyScalar(Math.cos(ang)).addScaledVector(UP, Math.sin(ang)).multiplyScalar(1.0).add(center); this.particles?.burst(q.x, q.y, q.z, 4, { colors: ['#ff6a1a', '#ffd27a', '#ff3b1a', '#fff2c0'], speed: 1.6, up: 1.5, size: 0.035, life: 0.5, gravity: -2 }); }
@@ -325,7 +337,7 @@ export class TechFx {
         const dir = _v.copy(c).sub(a).normalize();
         const side = _w.crossVectors(dir, UP).normalize().multiplyScalar(w);
         if (side.lengthSq() < 1e-6) side.set(w, 0, 0);
-        rib.push(_u.copy(pts[i]).sub(side), pts[i].clone().add(side), _c.set(col).multiplyScalar(bright * k * flick));
+        rib.push(_u.copy(pts[i]).sub(side), _t4.copy(pts[i]).add(side), _c.copy(colr(col)).multiplyScalar(bright * k * flick));
       }
       rib.end();
     };

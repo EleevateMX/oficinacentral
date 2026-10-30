@@ -1,5 +1,6 @@
 // Opciones de Zombies en la oficina: se guardan en este navegador (localStorage) y se aplican al momento.
-// La calidad se sigue guardando aparte en "zombies.quality" (así ya la guardaba el juego).
+// La calidad se sigue guardando aparte en "zombies.quality" (así ya la guardaba el juego): auto, alta,
+// media o baja (auto por omisión: baja la resolución, las sombras y los efectos si la compu no da).
 
 export const CROSS_STYLES = [
   { id: 'cruz', name: 'Cruz' },
@@ -19,6 +20,7 @@ export const DEFAULTS = {
   dmgNums: true, // números de daño sobre los zombis
   cross: 'cruz',
   crossColor: '#ffffff',
+  netInfo: false, // mostrar fps y ping arriba a la izquierda
 };
 
 const KEY = 'zombies.opts';
@@ -35,6 +37,7 @@ export function loadOpts() {
   o.effects = Math.round(clamp(raw.effects, 0, 100, DEFAULTS.effects));
   o.minimap = raw.minimap !== false;
   o.dmgNums = raw.dmgNums !== false;
+  o.netInfo = raw.netInfo === true;
   o.cross = CROSS_STYLES.some((c) => c.id === raw.cross) ? raw.cross : DEFAULTS.cross;
   o.crossColor = CROSS_COLORS.includes(raw.crossColor) ? raw.crossColor : DEFAULTS.crossColor;
   return o;
