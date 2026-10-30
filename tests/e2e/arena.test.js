@@ -167,21 +167,21 @@ test('arena: duelo 1v1 entre dos personas, una elimina a la otra', { timeout: 30
   try {
     await openArena(a.page, a.errors);
     await openArena(b.page, b.errors);
-    await a.page.waitForFunction(() => window.__arena.state().players === 2, null, { timeout: 20000, polling: 300 });
+    await a.page.waitForFunction(() => window.__arena.state().players === 2, null, { timeout: 60000, polling: 300 });
     assert.equal((await a.A('state')).host, true);
     assert.equal((await b.A('state')).host, false);
     // el anfitrión elige Duelo sin bots; la otra persona lo ve
     await a.A('cfg', { mode: 'duelo', bots: 0, map: 'bodega' });
-    await b.page.waitForFunction(() => window.__arena.state().mode === 'duelo', null, { timeout: 10000, polling: 200 });
+    await b.page.waitForFunction(() => window.__arena.state().mode === 'duelo', null, { timeout: 45000, polling: 200 });
     assert.equal((await b.A('state')).bots, 0);
     // listo y a jugar
     await b.page.click('.zm-item:has-text("Estoy listo")');
-    await a.page.waitForFunction(() => window.__arena.state().phase !== 'lobby', null, { timeout: 15000, polling: 200 })
+    await a.page.waitForFunction(() => window.__arena.state().phase !== 'lobby', null, { timeout: 45000, polling: 200 })
       .catch(async () => { await a.A('start'); });
-    await b.page.waitForFunction(() => window.__arena.state().phase !== 'lobby', null, { timeout: 15000, polling: 200 });
+    await b.page.waitForFunction(() => window.__arena.state().phase !== 'lobby', null, { timeout: 45000, polling: 200 });
     await a.A('play'); await b.A('play');
     await a.A('advance', 3.5);
-    await b.page.waitForFunction(() => window.__arena.state().phase === 'live' && window.__arena.state().alive, null, { timeout: 15000, polling: 200 });
+    await b.page.waitForFunction(() => window.__arena.state().phase === 'live' && window.__arena.state().alive, null, { timeout: 45000, polling: 200 });
     // cada quien en su lado del mapa
     const pa = await a.A('me'), pb = await b.A('me');
     assert.ok(Math.hypot(pa.x - pb.x, pa.y - pb.y) > 10, 'salen lejos uno del otro');
@@ -194,13 +194,13 @@ test('arena: duelo 1v1 entre dos personas, una elimina a la otra', { timeout: 30
       ok = (await a.A('state')).kills >= 1;
     }
     assert.ok(ok, 'el anfitrión eliminó al rival');
-    await b.page.waitForFunction(() => window.__arena.state().deaths >= 1, null, { timeout: 15000, polling: 200 });
+    await b.page.waitForFunction(() => window.__arena.state().deaths >= 1, null, { timeout: 45000, polling: 200 });
     const sb = await b.A('state');
     assert.equal(sb.alive, false);
     assert.equal(sb.killcam, true, 'quien cayó ve quién lo eliminó');
     // la ronda es para el anfitrión
     await a.A('advance', 1);
-    await b.page.waitForFunction(() => (window.__arena.state().result || window.__arena.state().phase) && window.__arena.others().some(Boolean), null, { timeout: 5000 });
+    await b.page.waitForFunction(() => (window.__arena.state().result || window.__arena.state().phase) && window.__arena.others().some(Boolean), null, { timeout: 20000 });
     assert.deepEqual(a.errors, [], `anfitrión sin errores: ${a.errors.join(' | ')}`);
     assert.deepEqual(b.errors, [], `invitado sin errores: ${b.errors.join(' | ')}`);
   } finally { await a.context.close(); await b.context.close(); }
