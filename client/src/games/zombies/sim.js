@@ -8,6 +8,7 @@ import {
   TECHNIQUES, ENERGY_MAX, BASH, isSword, falloff, pelletDirs, spreadLimits, arcHits, pathHits, techPath, swingOf,
   energyGain, techDamage, boxPick, ownedBits, bitsOwned, clamp,
 } from '../../../../shared/arsenal.js';
+import { SpatialHash } from '../../../../shared/spatialHash.js';
 
 export const ZSTATES = ['rise', 'emerge', 'walk', 'attack', 'dead', 'windup', 'charge', 'stun', 'cast'];
 export const PROJ = ['acid', 'paper', 'coffee'];
@@ -87,7 +88,7 @@ export function movePlayer(level, me, input, dt, others = []) {
   const sp = (input.sprint ? 5.0 : 3.3) * dt;
   const ca = Math.cos(me.a), sa = Math.sin(me.a);
   let dx = (ca * input.f - sa * input.s), dy = (sa * input.f + ca * input.s);
-  const len = Math.hypot(dx, dy);
+  const len = Math.sqrt(dx * dx + dy * dy);
   if (len > 1) { dx /= len; dy /= len; }
   const r = moveCircle(level, me.x, me.y, PLAYER_R, dx * sp, dy * sp);
   me.x = r.x; me.y = r.y;
@@ -439,7 +440,8 @@ export function step(S, dt) {
     if (S.bossPending <= 0) { S.bossPending = 0; spawnBoss(S, S.spec.boss); }
   }
   S.spawnT -= dt;
-  const alive = S.zombies.filter((z) => z.st !== 'dead').length;
+  let alive = 0;
+  for (const z of S.zombies) if (z.st !== 'dead') alive++;
   if (S.roster.length && S.spawnT <= 0 && alive < S.spec.maxAlive) {
     S.spawnT = S.spec.spawnEvery * (0.7 + S.rand() * 0.6);
     spawnZombie(S, S.roster.shift());
@@ -486,9 +488,32 @@ function hurtPlayer(S, P, dmg, from) {
   }
 }
 
+// Separación entre zombis con rejilla espacial (antes: todos contra todos, O(n²) en cada paso).
+// Variables del módulo para no crear funciones ni objetos por zombi.
+let _sz = null, _sx = 0, _sy = 0;
+function sepVisit(o) {
+  const z = _sz;
+  if (o === z) return;
+  const ex = z.x - o.x, ey = z.y - o.y, rr = z.r + o.r, e2 = ex * ex + ey * ey;
+  if (e2 < rr * rr && e2 > 1e-8) { const e = Math.sqrt(e2); _sx += (ex / e) * (rr - e); _sy += (ey / e) * (rr - e); }
+}
+function buildHash(S) {
+  const H = S._hash || (S._hash = new SpatialHash(1, 128));
+  H.clear();
+  let maxR = 0.3;
+  for (const z of S.zombies) {
+    if (z.st === 'dead' || z.st === 'rise') continue;
+    H.insert(z, z.x, z.y);
+    if (z.r > maxR) maxR = z.r;
+  }
+  S._hashR = maxR;
+  return H;
+}
+
 function updateZombies(S, dt) {
   const L = S.level;
   const ps = alivePlayers(S);
+  const H = buildHash(S);
   S.fieldT -= dt;
   if (ps.length && (S.fieldT <= 0 || !S.field)) {
     S.fieldT = 0.25;
@@ -508,7 +533,7 @@ function updateZombies(S, dt) {
       if (Math.abs(z.vx) + Math.abs(z.vy) < 0.02) { z.vx = 0; z.vy = 0; }
     }
     if (z.st === 'emerge') {
-      const dx = z.tx - z.x, dy = z.ty - z.y, d = Math.hypot(dx, dy);
+      const dx = z.tx - z.x, dy = z.ty - z.y, d = Math.sqrt(dx * dx + dy * dy);
       z.a = Math.atan2(dy, dx);
       if (d < 0.08 || z.t > 3) { z.st = 'walk'; z.t = 0; continue; }
       const s = Math.min(d, z.sp * 0.8 * dt);
@@ -517,8 +542,9 @@ function updateZombies(S, dt) {
     }
     if (!ps.length) { z.st = 'walk'; continue; }
     // objetivo: el jugador vivo más cercano
-    let tgt = ps[0], td = dist(z, ps[0]);
-    for (const p of ps) { const d = dist(z, p); if (d < td) { td = d; tgt = p; } }
+    let tgt = ps[0], td2 = Infinity;
+    for (const p of ps) { const ex = z.x - p.x, ey = z.y - p.y, d2 = ex * ex + ey * ey; if (d2 < td2) { td2 = d2; tgt = p; } }
+    const td = Math.sqrt(td2);
     if (z.kind === 'boss') { bossThink(S, z, tgt, td, dt); continue; }
     z.cd = Math.max(0, z.cd - dt);
     const reach = z.r + PLAYER_R + 0.32;
@@ -552,15 +578,13 @@ function updateZombies(S, dt) {
       gx = nxt ? nxt.x : tgt.x; gy = nxt ? nxt.y : tgt.y;
     }
     let dx = gx - z.x, dy = gy - z.y;
-    const d = Math.hypot(dx, dy) || 1;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
     dx /= d; dy /= d;
     // separarse de los demás
-    let sx = 0, sy = 0;
-    for (const o of S.zombies) {
-      if (o === z || o.st === 'dead' || o.st === 'rise') continue;
-      const ex = z.x - o.x, ey = z.y - o.y, e = Math.hypot(ex, ey), rr = z.r + o.r;
-      if (e < rr && e > 1e-4) { sx += (ex / e) * (rr - e); sy += (ey / e) * (rr - e); }
-    }
+    _sz = z; _sx = 0; _sy = 0;
+    H.query(z.x, z.y, z.r + S._hashR + 0.25, sepVisit);
+    const sx = _sx, sy = _sy;
+    _sz = null;
     const wob = Math.sin(S.t * 2.2 + z.look) * 0.25; // tambaleo
     const wx = dx - dy * wob, wy = dy + dx * wob;
     const sp = z.sp * dt;
@@ -570,21 +594,24 @@ function updateZombies(S, dt) {
   }
 }
 
-// siguiente casilla bajando por el mapa de distancias
+// siguiente casilla bajando por el mapa de distancias (devuelve un objeto que se reutiliza: leerlo enseguida)
+const DH_X = [1, -1, 0, 0, 1, 1, -1, -1], DH_Y = [0, 0, 1, -1, 1, -1, 1, -1];
+const _dh = { x: 0, y: 0 };
 function downhill(S, x, y) {
   const L = S.level, F = S.field;
   if (!F) return null;
   const i = Math.floor(x), j = Math.floor(y);
   const cur = F[j * L.W + i];
-  let best = null, bv = cur < 0 ? 1e9 : cur;
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+  let found = false, bv = cur < 0 ? 1e9 : cur;
+  for (let k = 0; k < 8; k++) {
+    const dx = DH_X[k], dy = DH_Y[k];
     const ni = i + dx, nj = j + dy;
     if (ni < 0 || nj < 0 || ni >= L.W || nj >= L.H) continue;
     if (dx && dy && (F[j * L.W + ni] < 0 || F[nj * L.W + i] < 0)) continue; // sin cortar esquinas
     const v = F[nj * L.W + ni];
-    if (v >= 0 && v < bv - (dx && dy ? 0.4 : 0)) { bv = v; best = { x: ni + 0.5, y: nj + 0.5 }; }
+    if (v >= 0 && v < bv - (dx && dy ? 0.4 : 0)) { bv = v; found = true; _dh.x = ni + 0.5; _dh.y = nj + 0.5; }
   }
-  return best;
+  return found ? _dh : null;
 }
 
 function turn(a, b, max) {
@@ -609,8 +636,10 @@ function updateShots(S, dt) {
     let gone = false;
     const c = cellAt(L, q.x, q.y);
     if ((c !== CELL.EMPTY && !(c === CELL.SOLID && q.h > 1.1)) || q.t > 4) gone = true;
-    for (const p of alivePlayers(S)) {
-      if (Math.hypot(p.x - q.x, p.y - q.y) < PLAYER_R + 0.18) { hurtPlayer(S, p, q.dmg, q); gone = true; break; }
+    for (const p of S.players) {
+      if (!p || !p.alive) continue;
+      const ex = p.x - q.x, ey = p.y - q.y, rr = PLAYER_R + 0.18;
+      if (ex * ex + ey * ey < rr * rr) { hurtPlayer(S, p, q.dmg, q); gone = true; break; }
     }
     if (gone) {
       if (q.splash) for (const p of alivePlayers(S)) if (Math.hypot(p.x - q.x, p.y - q.y) < q.splash) hurtPlayer(S, p, q.dmg * 0.5, q);
@@ -625,8 +654,10 @@ function updateDrops(S, dt) {
     const d = S.drops[i];
     d.t += dt;
     if (d.t > 30) { S.drops.splice(i, 1); continue; }
-    for (const p of alivePlayers(S)) {
-      if (Math.hypot(p.x - d.x, p.y - d.y) > 0.65) continue;
+    for (const p of S.players) {
+      if (!p || !p.alive) continue;
+      const ex = p.x - d.x, ey = p.y - d.y;
+      if (ex * ex + ey * ey > 0.65 * 0.65) continue;
       if (d.kind === 'health') { if (p.hp >= p.maxHp) continue; p.hp = Math.min(p.maxHp, p.hp + 30); }
       else if (d.kind === 'points') { p.pts += 150; p.earned += 150; }
       else if (d.kind === 'ammo') S.grants.push({ s: p.seat, ammo: 'pack' });
@@ -720,7 +751,7 @@ function bossThink(S, z, tgt, td, dt) {
   }
   let gx = tgt.x, gy = tgt.y;
   if (!(td < 3 && los)) { const n = downhill(S, z.x, z.y); if (n) { gx = n.x; gy = n.y; } }
-  const dx = gx - z.x, dy = gy - z.y, d = Math.hypot(dx, dy) || 1;
+  const dx = gx - z.x, dy = gy - z.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
   const sp = z.sp * (enraged ? 1.3 : 1) * dt;
   const m = moveCircle(L, z.x, z.y, Math.min(z.r, 0.45), (dx / d) * sp, (dy / d) * sp);
   z.x = m.x; z.y = m.y;

@@ -17,6 +17,7 @@ import { backupStatus } from './backup.js';
 import { SPEC_KEYS } from '../shared/sprite.js';
 import { PET_IDS, cleanPetName } from '../shared/pets.js';
 import { addScore, topScores, SCORE_GAMES, POINT_GAMES, TIME_GAMES, liveMatches, bestOf } from './games.js';
+import { registerArenaRoutes } from './arena.js'; // Arena HUB: XP, niveles y resultados
 import { activeSeason, SEASON_SETTINGS, validMD } from '../shared/seasons.js';
 import { registerSantaRoutes } from './santa.js';
 import { registerPushRoutes, pushNotification, pushMessage } from './push.js';
@@ -1094,6 +1095,7 @@ registerSantaRoutes(api, { fail, notify, requireAdmin, wrap }); // /santa… (am
 registerHotelRoutes(api, { fail, wrap, notify }); // /hotel… (salas isométricas)
 registerThemeRoutes(api, { fail }); // /themes y /me/theme (tema de cada persona)
 registerBadgeRoutes(api, { fail, notify, requireAdmin, wrap }); // /badges… y /admin/badges… (placas)
+registerArenaRoutes(api, { wrap, fail }); // /arena/result y /arena/profiles
 
 api.get('/notifications', (req, res) => {
   const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(req.user.id);

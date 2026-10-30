@@ -351,11 +351,12 @@ export class ZMenu {
       { k: 'sens', label: 'Sensibilidad del mouse', type: 'range', min: 0.2, max: 3, step: 0.05, fmt: (v) => `${(+v).toFixed(2)}×` },
       { k: 'invertY', label: 'Invertir eje Y', type: 'toggle' },
       { k: 'fov', label: 'Campo de visión', type: 'range', min: 60, max: 100, step: 1, fmt: (v) => `${v}°` },
-      { k: 'quality', label: 'Calidad', type: 'seg', opts: [['alta', 'Alta'], ['baja', 'Baja']] },
+      { k: 'quality', label: 'Calidad', type: 'seg', opts: [['auto', 'Auto'], ['alta', 'Alta'], ['media', 'Media'], ['baja', 'Baja']] },
       { k: 'master', label: 'Volumen general', type: 'range', min: 0, max: 100, step: 5, fmt: (v) => `${v}%` },
       { k: 'effects', label: 'Volumen de efectos', type: 'range', min: 0, max: 100, step: 5, fmt: (v) => `${v}%` },
       { k: 'minimap', label: 'Mostrar minimapa', type: 'toggle' },
       { k: 'dmgNums', label: 'Números de daño', type: 'toggle' },
+      { k: 'netInfo', label: 'Mostrar FPS y ping', type: 'toggle' },
       { k: 'cross', label: 'Estilo de mira', type: 'seg', opts: CROSS_STYLES.map((c) => [c.id, c.name]), cross: true },
       { k: 'crossColor', label: 'Color de mira', type: 'color', opts: CROSS_COLORS },
     ];
@@ -642,7 +643,7 @@ export class ZMenu {
   doAct(a) {
     this.a.sound?.('tick');
     if (a === 'closePanel') this.closePanel();
-    else if (a === 'resetOpts') { for (const [k, v] of Object.entries(DEFAULTS)) this.a.setOpt(k, v); this.a.setOpt('quality', 'alta'); this.m.opts = { ...DEFAULTS, quality: 'alta' }; this.syncOptions(); }
+    else if (a === 'resetOpts') { for (const [k, v] of Object.entries(DEFAULTS)) this.a.setOpt(k, v); this.a.setOpt('quality', 'auto'); this.m.opts = { ...DEFAULTS, quality: 'auto' }; this.syncOptions(); }
     else if (a === 'start') this.a.start();
     else if (a === 'ready') this.a.ready();
     else if (a === 'enter') this.a.enter();

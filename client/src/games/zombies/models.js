@@ -20,12 +20,14 @@ export const GEO = {
 
 // ---------- Geometría combinada con colores por vértice ----------
 export class Mesher {
-  constructor() { this.parts = { lit: [], glow: [], glass: [] }; this.base = new THREE.Matrix4(); }
+  constructor() { this.parts = { lit: [], glow: [], glass: [] }; this.at = { lit: [], glow: [], glass: [] }; this.base = new THREE.Matrix4(); }
   place(x, z, ry = 0, y = 0) { this.base.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(0, ry, 0)), _s.set(1, 1, 1)); return this; }
   add(geo, x, y, z, sx, sy, sz, color, { rx = 0, ry = 0, rz = 0, mat = 'lit' } = {}) {
     _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s.set(sx, sy, sz));
     const g = geo.clone();
-    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(this.base, _m));
+    const M = new THREE.Matrix4().multiplyMatrices(this.base, _m);
+    g.applyMatrix4(M);
+    this.at[mat].push(M.elements[12], M.elements[14]); // dónde quedó (para juntar por zonas)
     const n = g.attributes.position.count;
     const col = new Float32Array(n * 3);
     _c.set(color);
@@ -39,17 +41,29 @@ export class Mesher {
   cyl(r, h, x, y, z, color, o, geo = GEO.cyl) { return this.add(geo, x, y + h / 2, z, r * 2, h, r * 2, color, o); }
   ball(r, x, y, z, color, o, sy = 1) { return this.add(GEO.ball, x, y, z, r * 2, r * 2 * sy, r * 2, color, o); }
   cone(r, h, x, y, z, color, o) { return this.add(GEO.cone, x, y + h / 2, z, r * 2, h, r * 2, color, o); }
-  build({ lit, glow, glass }) {
+  // chunk (m): si se da, junta por zonas de chunk × chunk metros. Así la cámara puede dejar de dibujar
+  // las zonas que no ve (con una sola malla gigante se dibujaba toda la oficina siempre).
+  build({ lit, glow, glass }, { chunk = 0 } = {}) {
     const out = [];
-    const mk = (list, mat) => {
+    const mk = (list, mat, at) => {
       if (!list.length) return;
-      // en tandas para no hacer búferes gigantes
-      for (let i = 0; i < list.length; i += 4000) {
-        const g = mergeGeometries(list.slice(i, i + 4000));
-        out.push(new THREE.Mesh(g, mat));
+      const groups = new Map();
+      if (chunk > 0) {
+        for (let i = 0; i < list.length; i++) {
+          const k = `${Math.floor(at[i * 2] / chunk)},${Math.floor(at[i * 2 + 1] / chunk)}`;
+          if (!groups.has(k)) groups.set(k, []);
+          groups.get(k).push(list[i]);
+        }
+      } else groups.set('', list);
+      for (const g0 of groups.values()) {
+        // en tandas para no hacer búferes gigantes
+        for (let i = 0; i < g0.length; i += 4000) {
+          const g = mergeGeometries(g0.slice(i, i + 4000));
+          out.push(new THREE.Mesh(g, mat));
+        }
       }
     };
-    mk(this.parts.lit, lit); mk(this.parts.glow, glow); mk(this.parts.glass, glass);
+    mk(this.parts.lit, lit, this.at.lit); mk(this.parts.glow, glow, this.at.glow); mk(this.parts.glass, glass, this.at.glass);
     for (const g of [...this.parts.lit, ...this.parts.glow, ...this.parts.glass]) g.dispose();
     return out;
   }
@@ -185,6 +199,7 @@ export const FURNITURE = {
   vending: (m, w, d, c) => { m.box(w * 0.92, 1.9, d * 0.8, 0, 0, -d * 0.05, c); m.box(w * 0.6, 1.3, 0.02, -w * 0.1, 0.45, d * 0.36, '#bfe3f2', { mat: 'glow' }); for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) m.box(0.12, 0.14, 0.02, -w * 0.3 + k * 0.17, 0.6 + r * 0.3, d * 0.37, ['#ffd23f', '#e63946', '#2bb673', '#3a86ff'][(r + k) % 4], { mat: 'glow' }); },
   arcade: (m, w, d, c) => arcadeModel(m, w, d, c),
   zombieArcade: (m, w, d, c) => arcadeModel(m, w, d, c || '#1f3b24', { marquee: '#7CFF4F', screen: '#2c8a3c', zombie: true }),
+  arenaArcade: (m, w, d, c) => arcadeModel(m, w, d, c || '#22163a', { marquee: '#FE3377', screen: '#3a2a6a' }),
   jukebox: (m, w, d, c) => { m.box(w * 0.8, 1.45, d * 0.6, 0, 0, -d * 0.1, c); m.cyl(w * 0.4, d * 0.6, 0, 1.25, -d * 0.1, shade(c, 0.1), { rx: Math.PI / 2 }); m.box(w * 0.6, 0.5, 0.02, 0, 0.75, d * 0.21, '#ffd23f', { mat: 'glow' }); },
   poolTable: (m, w, d, c) => { m.box(w, 0.18, d, 0, 0.62, 0, '#6b3f22'); m.box(w - 0.24, 0.02, d - 0.24, 0, 0.8, 0, c); legs(m, w * 0.9, d * 0.8, 0.62, '#4a2b17', 0.14); for (let k = 0; k < 6; k++) m.ball(0.035, -0.6 + k * 0.17, 0.85, (k % 2) * 0.12 - 0.06, ['#ffd23f', '#3a86ff', '#e63946', '#9b5de5', '#f4a261', '#fff'][k]); return 0; },
   pingPong: (m, w, d, c) => { m.box(w, 0.05, d, 0, 0.74, 0, c); m.box(w, 0.006, 0.03, 0, 0.79, 0, '#fff'); m.box(0.03, 0.006, d, 0, 0.79, 0, '#fff'); m.box(0.02, 0.15, d, 0, 0.79, 0, '#e8e8ee', { mat: 'glass' }); legs(m, w * 0.9, d * 0.8, 0.74); },
@@ -324,40 +339,78 @@ export function zombieLook(kind, id) {
   return look;
 }
 
+// Todas las piezas de todos los zombis son cajas: van en UNA sola InstancedMesh (antes, una por
+// pieza: 13 llamadas de dibujo más 13 en la sombra). La caja de cada pieza (tamaño y centro) va en
+// la matriz de su instancia. Los ojos van aparte (brillan: otro material).
+// - Los colores de cada zombi se calculan una vez (no en cada cuadro).
+// - Con `view` (frustum + ojo): no se dibujan ni animan los que están fuera de la cámara, y los lejanos
+//   van sin las piezas chicas (corbata, mancha, manos, zapatos).
+const SMALL_PART = ZPARTS.map((p) => ['tie', 'stain', 'handL', 'handR', 'shoeL', 'shoeR'].includes(p.key));
+const PART_BOX = ZPARTS.map((p) => new THREE.Matrix4().compose(new THREE.Vector3(...p.off), new THREE.Quaternion(), new THREE.Vector3(...p.size)));
+const PART_PIVOT = ZPARTS.map((p) => new THREE.Vector3(...p.pivot));
+const FLASHY = ZPARTS.map((p) => p.col === 'shirt' || p.col === 'skin' || p.col === 'pants');
+const DEAD_EYE = new THREE.Color('#334');
+const ONE = new THREE.Vector3(1, 1, 1);
+const _sphere = new THREE.Sphere();
+const _rot = new Float32Array(ZPARTS.length * 3);
+
 export class Horde {
   constructor(scene, cap = 64) {
     this.cap = cap;
-    this.meshes = ZPARTS.map((p) => {
-      const g = GEO.box.clone();
-      g.scale(p.size[0], p.size[1], p.size[2]);
-      g.translate(p.off[0], p.off[1], p.off[2]);
-      const mesh = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial(), cap);
-      mesh.castShadow = true; mesh.receiveShadow = false;
-      mesh.frustumCulled = false;
-      mesh.count = 0;
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.setColorAt(0, _c.set('#fff'));
-      scene.add(mesh);
-      return mesh;
-    });
+    this.body = new THREE.InstancedMesh(GEO.box.clone(), new THREE.MeshLambertMaterial(), cap * ZPARTS.length);
+    this.body.castShadow = true; this.body.receiveShadow = false;
+    this.body.frustumCulled = false;
+    this.body.count = 0;
+    this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.body.setColorAt(0, _c.set('#fff'));
+    this.body.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    scene.add(this.body);
+    this.meshes = [this.body];
     // ojos que brillan
     const eg = mergeGeometries([GEO.box.clone().scale(0.08, 0.06, 0.02).translate(-0.085, 0.24, 0.215), GEO.box.clone().scale(0.08, 0.06, 0.02).translate(0.085, 0.24, 0.215)]);
     this.eyes = new THREE.InstancedMesh(eg, new THREE.MeshBasicMaterial(), cap);
     this.eyes.count = 0; this.eyes.frustumCulled = false;
+    this.eyes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.eyes.setColorAt(0, _c.set('#fff'));
     scene.add(this.eyes);
     this.tmp = ZPARTS.map(() => new THREE.Matrix4());
     this.local = new THREE.Matrix4();
     this.base = new THREE.Matrix4();
-    this.white = new THREE.Color('#ffffff');
+    this.out = new THREE.Matrix4();
+    this.looks = new Map(); // id → colores ya calculados
+    this.stats = { drawn: 0, culled: 0, far: 0 };
   }
-  // list: [{ id, kind, x, z (m), a (yaw), st, t, flash, rise (0..1), walkPhase, scaleMul }]
-  update(list, time) {
-    let n = 0;
+  set castShadow(v) { this.body.castShadow = !!v; }
+  get castShadow() { return this.body.castShadow; }
+  look(kind, id) {
+    const key = id * 8 + (kind === 'runner' ? 1 : kind === 'tank' ? 2 : kind === 'spitter' ? 3 : 0);
+    let L = this.looks.get(key);
+    if (!L) {
+      const raw = zombieLook(kind, id);
+      L = { scale: raw.scale, wide: raw.wide, cols: ZPARTS.map((p) => new THREE.Color(raw[p.col])), eye: new THREE.Color(raw.eye) };
+      if (this.looks.size > 400) this.looks.clear();
+      this.looks.set(key, L);
+    }
+    return L;
+  }
+  // list: [{ id, kind, x, z (m), a (yaw), st, t, flash, walk, scaleMul }]
+  // view (opcional): { frustum: THREE.Frustum, x, z (ojo, m), lod: metros desde los que van sin piezas chicas }
+  update(list, time, view = null) {
+    let n = 0, e = 0, culled = 0, far = 0;
+    const body = this.body, cols = body.instanceColor.array;
+    const ecols = this.eyes.instanceColor.array;
+    const lod2 = view?.lod ? view.lod * view.lod : Infinity;
     for (const z of list) {
-      if (n >= this.cap) break;
-      const L = zombieLook(z.kind, z.id);
+      if (e >= this.cap) break;
+      const L = this.look(z.kind, z.id);
       const s = L.scale * (z.scaleMul || 1);
+      if (view?.frustum) {
+        _sphere.center.set(z.x, 0.9 * s, z.z); _sphere.radius = 2.2 * s; // generoso: su sombra puede caer en cámara
+        if (!view.frustum.intersectsSphere(_sphere)) { culled++; continue; }
+      }
+      const dx = z.x - (view?.x || 0), dz = z.z - (view?.z || 0);
+      const isFar = !!view && dx * dx + dz * dz > lod2;
+      if (isFar) far++;
       // postura
       const ph = z.walk || 0;
       let lean = 0.18, armA = -1.45 + Math.sin(ph * 0.5 + z.id) * 0.12, armB = -1.45 + Math.sin(ph * 0.5 + z.id + 1.7) * 0.12;
@@ -368,10 +421,10 @@ export class Horde {
         armA = sw; armB = sw + 0.15; lean = 0.18 + (z.t < 0.45 ? -0.1 * k : 0.35); legA = 0.15; legB = -0.15;
       } else if (z.st === 'rise') {
         const k = Math.min(1, z.t / 1.4);
-        const e = 1 - (1 - k) * (1 - k);
-        y = -(z.h || 1.8) * s * (1 - e) * 1.05;
+        const ee = 1 - (1 - k) * (1 - k);
+        y = -(z.h || 1.8) * s * (1 - ee) * 1.05;
         armA = -2.9 + Math.sin(time * 9 + z.id) * 0.25; armB = -2.9 + Math.cos(time * 9 + z.id) * 0.25;
-        lean = 0.5 * (1 - e); legA = 0; legB = 0; headX = 0.4 * (1 - e);
+        lean = 0.5 * (1 - ee); legA = 0; legB = 0; headX = 0.4 * (1 - ee);
       } else if (z.st === 'dead') {
         const k = Math.min(1, z.t / 0.55);
         fall = -(Math.PI / 2) * (k * k);
@@ -380,29 +433,35 @@ export class Horde {
       }
       const yaw = Math.PI / 2 - z.a;
       this.base.compose(_p.set(z.x, y, z.z), _q.setFromEuler(_e.set(fall, yaw, 0, 'YXZ')), _s.set(s * L.wide, s, s));
-      const rot = [
-        [lean, 0, 0], [legA, 0, 0], [legB, 0, 0], [0.05, 0, 0], [0, 0, 0], [headX, 0, headZ], [0, 0, 0],
-        [armA, 0, 0.08], [armB, 0, -0.08], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
-      ];
+      // giro [x, y, z] de cada pieza (mismo orden que ZPARTS)
+      _rot.fill(0);
+      _rot[0] = lean; _rot[3] = legA; _rot[6] = legB; _rot[9] = 0.05; _rot[15] = headX; _rot[17] = headZ;
+      _rot[21] = armA; _rot[23] = 0.08; _rot[24] = armB; _rot[26] = -0.08;
+      const flash = !!z.flash;
       for (let i = 0; i < ZPARTS.length; i++) {
         const P = ZPARTS[i];
-        const r = rot[i];
-        this.local.compose(_p.set(P.pivot[0], P.pivot[1], P.pivot[2]), _q.setFromEuler(_e.set(r[0], r[1], r[2])), _s.set(1, 1, 1));
+        const rx = _rot[i * 3], ry = _rot[i * 3 + 1], rz = _rot[i * 3 + 2];
+        if (rx || ry || rz) _q.setFromEuler(_e.set(rx, ry, rz)); else _q.identity();
+        this.local.compose(PART_PIVOT[i], _q, ONE);
         const parent = P.parent != null ? this.tmp[P.parent] : this.base;
         this.tmp[i].multiplyMatrices(parent, this.local);
-        this.meshes[i].setMatrixAt(n, this.tmp[i]);
-        const flash = z.flash && (P.col === 'shirt' || P.col === 'skin' || P.col === 'pants');
-        this.meshes[i].setColorAt(n, flash ? this.white : _c.set(L[P.col]));
+        if (isFar && SMALL_PART[i]) continue;
+        this.out.multiplyMatrices(this.tmp[i], PART_BOX[i]);
+        body.setMatrixAt(n, this.out);
+        const o = n * 3;
+        if (flash && FLASHY[i]) { cols[o] = 1; cols[o + 1] = 1; cols[o + 2] = 1; }
+        else { const c = L.cols[i]; cols[o] = c.r; cols[o + 1] = c.g; cols[o + 2] = c.b; }
+        n++;
       }
-      this.eyes.setMatrixAt(n, this.tmp[EYE_PARENT]);
-      this.eyes.setColorAt(n, _c.set(z.st === 'dead' ? '#334' : L.eye));
-      n++;
+      this.eyes.setMatrixAt(e, this.tmp[EYE_PARENT]);
+      const ec = z.st === 'dead' ? DEAD_EYE : L.eye, eo = e * 3;
+      ecols[eo] = ec.r; ecols[eo + 1] = ec.g; ecols[eo + 2] = ec.b;
+      e++;
     }
-    for (const m of [...this.meshes, this.eyes]) {
-      m.count = n;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    }
+    body.count = n; this.eyes.count = e;
+    body.instanceMatrix.needsUpdate = true; body.instanceColor.needsUpdate = true;
+    this.eyes.instanceMatrix.needsUpdate = true; this.eyes.instanceColor.needsUpdate = true;
+    this.stats.drawn = e; this.stats.culled = culled; this.stats.far = far;
   }
 }
 
@@ -422,6 +481,53 @@ export function part(w, h, d, color, { pivotTop = false, glow = false, x = 0, y 
   m.position.set(x, y, z);
   m.castShadow = shadow;
   return m;
+}
+
+// Junta las piezas sueltas de un modelo hecho con part() (jefes, compañeros) en pocas mallas con
+// color por vértice: en cada grupo, sus cajas hijas (sin hijos propios y que no se animan solas)
+// se vuelven una malla. La jerarquía (cadera, brazos, cabeza…) y userData no cambian, así que las
+// animaciones siguen igual; solo bajan las llamadas de dibujo (un jefe: ~30 → ~8).
+// No toca: mallas con hijos, mallas guardadas en userData, transparentes o con textura.
+let _litVC = null, _glowVC = null;
+export function compactModel(root) {
+  const keep = new Set();
+  root.traverse((o) => { for (const v of Object.values(o.userData || {})) if (v?.isObject3D) keep.add(v); });
+  const groups = [];
+  root.traverse((o) => { if (o.children.length) groups.push(o); });
+  for (const g of groups) {
+    const lit = [], glow = [];
+    let shadow = false;
+    for (const c of g.children) {
+      if (!c.isMesh || c.isInstancedMesh || c.children.length || keep.has(c) || Array.isArray(c.material)) continue;
+      const m = c.material;
+      if (m.transparent || m.map || !(m.isMeshLambertMaterial || m.isMeshBasicMaterial) || !c.visible) continue;
+      (m.isMeshBasicMaterial ? glow : lit).push(c);
+      shadow ||= c.castShadow;
+    }
+    for (const [list, basic] of [[lit, false], [glow, true]]) {
+      if (list.length < 2) continue;
+      const geos = list.map((c) => {
+        c.updateMatrix();
+        const geo = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+        if (geo.attributes.uv) geo.deleteAttribute('uv');
+        geo.applyMatrix4(c.matrix);
+        const n = geo.attributes.position.count, col = new Float32Array(n * 3), k = c.material.color;
+        for (let i = 0; i < n; i++) { col[i * 3] = k.r; col[i * 3 + 1] = k.g; col[i * 3 + 2] = k.b; }
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        return geo;
+      });
+      let merged = null;
+      try { merged = mergeGeometries(geos); } catch { merged = null; }
+      for (const geo of geos) if (geo !== merged) geo.dispose();
+      if (!merged) continue;
+      const mat2 = basic ? (_glowVC ||= new THREE.MeshBasicMaterial({ vertexColors: true })) : (_litVC ||= new THREE.MeshLambertMaterial({ vertexColors: true }));
+      const mesh = new THREE.Mesh(merged, mat2);
+      mesh.castShadow = !basic && shadow;
+      for (const c of list) { g.remove(c); c.geometry.dispose(); }
+      g.add(mesh);
+    }
+  }
+  return root;
 }
 
 // Etiqueta con nombre (sprite)

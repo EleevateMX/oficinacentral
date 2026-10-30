@@ -52,7 +52,11 @@ function wallTexture(kind) {
 function mix(a, b, k) { const A = new THREE.Color(a), B = new THREE.Color(b); return '#' + A.lerp(B, k).getHexString(); }
 
 function signTexture(text, color = '#FE3377', sub = '') {
-  return canvasTex(512, 128, (g, w, h) => {
+  return canvasTex(512, 128, (g, w, h) => drawSign(g, w, h, text, color, sub));
+}
+// Un letrero (512 × 128) en (0, 0) del contexto
+function drawSign(g, w, h, text, color = '#FE3377', sub = '') {
+  {
     g.fillStyle = '#141414'; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 18); g.fill();
     g.strokeStyle = color; g.lineWidth = 6; g.beginPath(); g.roundRect(10, 10, w - 20, h - 20, 14); g.stroke();
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -62,8 +66,19 @@ function signTexture(text, color = '#FE3377', sub = '') {
     g.shadowColor = color; g.shadowBlur = 16;
     g.fillText(text, w / 2, h / 2 + (sub ? -8 : 2));
     if (sub) { g.shadowBlur = 0; g.font = '700 20px system-ui, sans-serif'; g.fillStyle = color; g.fillText(sub, w / 2, h - 26); }
-  });
+    g.shadowBlur = 0;
+  }
 }
+
+// Calidad del mundo: luces reales y sombras. Lo que se quita se "pinta" en el piso (luz falsa).
+// auto = como alta (la calidad automática solo cambia cosas que no obligan a recompilar sombreadores).
+export const WORLD_Q = {
+  alta: { lamps: 4, shadows: true, shadowSize: 2048, hemi: 1.25, sun: 1.5, bake: false },
+  auto: { lamps: 4, shadows: true, shadowSize: 2048, hemi: 1.25, sun: 1.5, bake: false },
+  media: { lamps: 2, shadows: true, shadowSize: 1024, hemi: 1.5, sun: 1.35, bake: true },
+  baja: { lamps: 1, shadows: false, shadowSize: 512, hemi: 1.9, sun: 1.1, bake: true },
+};
+const LAMP_SPOTS = [[0.28, 0.3], [0.72, 0.3], [0.28, 0.7], [0.72, 0.7]];
 
 // Letreros colgados más abajo (cables largos) y lámparas más fuertes: el techo ahora es alto
 const SIGN_Y = WALL_H - 1.3;
@@ -71,6 +86,7 @@ const LAMP = 18 * Math.pow((WALL_H - 0.25) / 2.45, 1.6);
 const AREA_ACCENT = ['#FE3377', '#FFCC00', '#3a86ff', '#2bb673', '#8B7BFF', '#ff8a3d'];
 
 export function buildWorld(level, floor, { quality = 'alta' } = {}) {
+  const Q = WORLD_Q[quality] || WORLD_Q.alta;
   const root = new THREE.Group();
   const W = level.W, H = level.H;
   const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? CELL.WALL : level.grid[y * W + x]);
@@ -85,6 +101,18 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
     g.translate(-level.ox * px, -level.oy * px);
     try { drawFloorLayer(g, floor); } catch { g.fillStyle = '#9a7652'; g.fillRect(0, 0, floor.W * px, floor.H * px); }
     for (const o of floor.objects || []) if (CATALOG[o.type]?.under) { try { drawObject(g, o); } catch { /* sin dibujo */ } }
+    if (Q.bake) {
+      // las lámparas que no son luz real dejan su "charco" de luz cálida pintado en el piso
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'lighter';
+      for (const [fx, fz] of LAMP_SPOTS) {
+        const cx = W * px * fx, cy = H * px * fz, r = Math.min(W, H) * px * 0.42;
+        const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+        gr.addColorStop(0, `rgba(255,226,180,${Q.lamps <= 1 ? 0.2 : 0.13})`); gr.addColorStop(1, 'rgba(255,226,180,0)');
+        g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
   }, { nearest: true });
   ftex.minFilter = THREE.LinearMipmapLinearFilter;
   const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(W * S, H * S), new THREE.MeshLambertMaterial({ map: ftex }));
@@ -174,22 +202,33 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
   const exitMat = new THREE.MeshBasicMaterial({ map: exitTex, side: THREE.DoubleSide });
   const tapeTex = canvasTex(128, 16, (g, w, h) => { for (let x = -16; x < w; x += 16) { g.fillStyle = '#ffcc00'; g.fillRect(x, 0, 8, h); g.fillStyle = '#141414'; g.fillRect(x + 8, 0, 8, h); } g.fillStyle = '#141414'; g.font = '900 11px system-ui'; }, { repeat: true });
   const tapeMat = new THREE.MeshLambertMaterial({ map: tapeTex, side: THREE.DoubleSide });
+  const exitGeos = [], tapeGeos = [];
+  const _o = new THREE.Object3D();
   for (const gr of groups) {
     const cx = ((gr.start.x + gr.end.x) / 2 + 0.5) * S - gr.dx * S * 0.38, cz = ((gr.start.y + gr.end.y) / 2 + 0.5) * S - gr.dy * S * 0.38;
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), exitMat);
-    sign.position.set(cx + gr.dx * 0.14, 2.42, cz + gr.dy * 0.14);
-    sign.rotation.y = Math.atan2(gr.dx, gr.dy);
-    root.add(sign);
+    _o.position.set(cx + gr.dx * 0.14, 2.42, cz + gr.dy * 0.14);
+    _o.rotation.set(0, Math.atan2(gr.dx, gr.dy), 0);
+    _o.updateMatrix();
+    exitGeos.push(new THREE.PlaneGeometry(0.9, 0.22).applyMatrix4(_o.matrix));
     if (gr.n >= 4) {
       const len = gr.n * S;
       for (const hy of [0.95, 1.35]) {
-        const t = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.1), tapeMat);
-        t.position.set(cx + gr.dx * 0.3, hy, cz + gr.dy * 0.3);
-        t.rotation.set(0, Math.atan2(gr.dx, gr.dy), (hy > 1 ? 0.03 : -0.02));
-        tapeTex.repeat.set(len / 1.2, 1);
-        root.add(t);
+        const t = new THREE.PlaneGeometry(len, 0.1);
+        const uv = t.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * (len / 1.2)); // la cinta se repite a lo largo
+        _o.position.set(cx + gr.dx * 0.3, hy, cz + gr.dy * 0.3);
+        _o.rotation.set(0, Math.atan2(gr.dx, gr.dy), (hy > 1 ? 0.03 : -0.02));
+        _o.updateMatrix();
+        tapeGeos.push(t.applyMatrix4(_o.matrix));
       }
     }
+  }
+  for (const [list, mt] of [[exitGeos, exitMat], [tapeGeos, tapeMat]]) {
+    if (!list.length) continue;
+    const mesh = new THREE.Mesh(mergeGeometries(list), mt);
+    root.add(mesh);
+    disposables.push(mesh.geometry);
+    list.forEach((g) => g.dispose());
   }
   disposables.push(voidTex, voidMat, exitTex, exitMat, tapeTex, tapeMat);
   const wmPlain = new THREE.MeshLambertMaterial({ map: wallTexture('plain') });
@@ -261,28 +300,42 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
     else if (o.type.startsWith('neon')) m.box(o.w * S * 0.8, 0.3, 0.03, 0, 1.75, 0.03, col, { mat: 'glow' });
     else m.box(o.w * S * 0.7, o.h * S * 0.6, 0.02, 0, 1.4, 0.03, col);
   }
-  for (const s of signs) {
-    const tex = signTexture(s.text.toUpperCase(), s.color || '#FE3377');
-    const smat = new THREE.MeshBasicMaterial({ map: tex });
-    const w = Math.max(2.2, Math.min(5, (s.w || 4) * S * 0.8));
-    // dos caras (una por lado) para que se lea de frente y de espaldas
-    for (const back of [false, true]) {
-      const board = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4), smat);
-      board.position.set(s.x * S, SIGN_Y, s.y * S + 0.2 + (back ? -0.01 : 0.01));
-      if (back) board.rotation.y = Math.PI;
-      root.add(board);
-      disposables.push(board.geometry);
-    }
-    // cables largos hasta el techo alto
-    const top = SIGN_Y + w / 8;
-    for (const k of [-1, 1]) m.place(s.x * S + k * w * 0.4, s.y * S + 0.2).box(0.015, WALL_H - top, 0.015, 0, top, 0, '#2b2f3a');
-    disposables.push(tex, smat);
+  // todos los letreros en una sola textura (atlas) y una sola malla (antes: 2 mallas y 1 textura por letrero)
+  if (signs.length) {
+    const rows = signs.length;
+    const atlas = canvasTex(512, 128 * rows, (g) => {
+      signs.forEach((s, i) => { g.save(); g.translate(0, i * 128); drawSign(g, 512, 128, s.text.toUpperCase(), s.color || '#FE3377'); g.restore(); });
+    });
+    atlas.anisotropy = 4;
+    const smat = new THREE.MeshBasicMaterial({ map: atlas });
+    const boards = [];
+    signs.forEach((s, i) => {
+      const w = Math.max(2.2, Math.min(5, (s.w || 4) * S * 0.8));
+      // dos caras (una por lado) para que se lea de frente y de espaldas
+      for (const back of [false, true]) {
+        const pg = new THREE.PlaneGeometry(w, w / 4);
+        const uv = pg.attributes.uv;
+        for (let k = 0; k < uv.count; k++) uv.setY(k, 1 - (i + 1 - uv.getY(k)) / rows); // su renglón del atlas
+        _o.position.set(s.x * S, SIGN_Y, s.y * S + 0.2 + (back ? -0.01 : 0.01));
+        _o.rotation.set(0, back ? Math.PI : 0, 0);
+        _o.updateMatrix();
+        boards.push(pg.applyMatrix4(_o.matrix));
+      }
+      // cables largos hasta el techo alto
+      const top = SIGN_Y + w / 8;
+      for (const k of [-1, 1]) m.place(s.x * S + k * w * 0.4, s.y * S + 0.2).box(0.015, WALL_H - top, 0.015, 0, top, 0, '#2b2f3a');
+    });
+    const board = new THREE.Mesh(mergeGeometries(boards), smat);
+    root.add(board);
+    boards.forEach((g) => g.dispose());
+    disposables.push(atlas, smat, board.geometry);
   }
 
   const litMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
   const glassMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
-  for (const mesh of m.build({ lit: litMat, glow: glowMat, glass: glassMat })) {
+  // por zonas de 12 m: lo que queda atrás de la cámara no se dibuja
+  for (const mesh of m.build({ lit: litMat, glow: glowMat, glass: glassMat }, { chunk: 12 })) {
     if (mesh.material === litMat) { mesh.castShadow = true; mesh.receiveShadow = true; }
     root.add(mesh);
     disposables.push(mesh.geometry);
@@ -290,27 +343,26 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
   disposables.push(litMat, glowMat, glassMat);
 
   // ---------- Luces ----------
-  const hi = quality === 'alta';
-  const hemi = new THREE.HemisphereLight('#eef3ff', '#463c52', hi ? 1.25 : 1.9);
+  const hemi = new THREE.HemisphereLight('#eef3ff', '#463c52', Q.hemi);
   root.add(hemi);
-  const sun = new THREE.DirectionalLight('#fff4e0', hi ? 1.5 : 1.1);
+  const sun = new THREE.DirectionalLight('#fff4e0', Q.sun);
   const cx = (W * S) / 2, cz = (H * S) / 2;
   sun.position.set(cx + 6, 24, cz + 9);
   sun.target.position.set(cx, 0, cz);
   root.add(sun, sun.target);
-  if (hi) {
+  if (Q.shadows) {
     sun.castShadow = true;
     const ext = Math.max(W, H) * S * 0.62;
     Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 });
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(Q.shadowSize, Q.shadowSize);
     sun.shadow.bias = -0.0008;
     sun.shadow.normalBias = 0.03;
   }
   const points = [];
-  const nP = hi ? 4 : 1;
+  const nP = Q.lamps;
   for (let k = 0; k < nP; k++) {
     const pl = new THREE.PointLight('#ffe8c4', LAMP, 18, 1.6);
-    const fx = nP === 1 ? 0.5 : (k % 2 ? 0.72 : 0.28), fz = nP === 1 ? 0.5 : (k < 2 ? 0.3 : 0.7);
+    const fx = nP === 1 ? 0.5 : (k % 2 ? 0.72 : 0.28), fz = nP === 1 ? 0.5 : nP === 2 ? 0.5 : (k < 2 ? 0.3 : 0.7);
     pl.position.set(W * S * fx, WALL_H - 0.25, H * S * fz);
     root.add(pl);
     points.push(pl);
@@ -323,25 +375,31 @@ export function buildWorld(level, floor, { quality = 'alta' } = {}) {
   let flickT = 0, nightK = 0.2;
   return {
     group: root,
+    sun,
+    alarm,
+    lamps: points,
+    quality: Q,
     // night: menú principal (oficina de noche, lámparas que fallan)
-    update(dt, t, boss, night = false) {
+    // menu: el menú tiene prestada la luz de alarma (ver MenuScene): no se toca
+    update(dt, t, boss, night = false, menu = false) {
       // en las hordas de jefe las luces parpadean y hay alarma
       flickT -= dt;
       let k = 1;
       if (boss) {
         if (flickT <= 0) flickT = 0.05 + Math.random() * 0.4;
         k = Math.random() < 0.12 ? 0.25 : 0.85 + Math.sin(t * 23) * 0.08;
-        alarm.intensity = (Math.sin(t * 4) * 0.5 + 0.5) * 40;
-      } else alarm.intensity = 0;
+        if (!menu) alarm.intensity = (Math.sin(t * 4) * 0.5 + 0.5) * 40;
+      } else if (!menu) alarm.intensity = 0;
       if (night) {
         // casi todo apagado; de vez en cuando una lámpara chisporrotea
         if (flickT <= 0) { flickT = 0.04 + Math.random() * (Math.random() < 0.2 ? 0.08 : 1.6); nightK = Math.random() < 0.3 ? 0.04 : 0.16 + Math.random() * 0.12; }
         k = nightK;
       }
       ceilMat.emissiveIntensity = k;
-      for (const p of points) p.intensity = LAMP * k;
-      hemi.intensity = (hi ? 1.25 : 1.9) * (boss ? 0.75 + k * 0.2 : night ? 0.22 : 1);
-      sun.intensity = (hi ? 1.5 : 1.1) * (night ? 0.12 : 1);
+      // en el menú la primera lámpara es la lámpara de escritorio (prestada: ver MenuScene)
+      for (let i = 0; i < points.length; i++) if (!(menu && i === 0)) points[i].intensity = LAMP * k;
+      hemi.intensity = Q.hemi * (boss ? 0.75 + k * 0.2 : night ? 0.22 : 1);
+      sun.intensity = Q.sun * (night ? 0.12 : 1);
     },
     dispose() {
       for (const d of disposables) d?.dispose?.();

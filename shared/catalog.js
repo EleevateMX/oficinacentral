@@ -54,6 +54,7 @@ export const CATALOG = {
   arcade: f('Arcade', 'deco', 1, 1, { colorable: true, color: '#2bb673', interactive: 'game' }),
   zombieArcade: f('Máquina Zombies', 'deco', 1, 1, { colorable: true, color: '#1f3b24', interactive: 'game', animated: true }), // shooter 3D cooperativo
   kartArcade: f('Máquina Karts', 'deco', 1, 1, { colorable: true, color: '#c81e5b', interactive: 'game', animated: true }), // carreras de karts 3D (1 a 8)
+  arenaArcade: f('Máquina Arena', 'deco', 1, 1, { colorable: true, color: '#22163a', interactive: 'game', animated: true }), // Arena HUB: shooter 3D jugador contra jugador (1 a 8)
   jukebox: f('Rocola', 'deco', 2, 1, { colorable: true, color: '#FE3377', interactive: 'jukebox', animated: true }),
   hotelElevator: f('Elevador a MeDed Friends', 'gtahub', 2, 1, { interactive: 'hotel', brand: true, animated: true }), // sube al Hotel (salas isométricas)
   foosball: f('Futbolito', 'deco', 3, 2, { interactive: 'game' }),

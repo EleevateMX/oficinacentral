@@ -1,0 +1,42 @@
+// Cuánto cuesta en la GPU cada parte de Zombies (dibuja con espera, sin depender de rAF):
+// resolución, sombras, mundo, zombis y luces puntuales.  node tools/perf/zombiesGpu.mjs [dpr] [calidad]
+import { createRequire } from 'node:module';
+import { startServer, ADMIN } from '../../tests/helpers/server.js';
+import { login, openGame } from './common.mjs';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
+const DPR = Number(process.argv[2] || 2), Q = process.argv[3] || 'alta';
+const srv = await startServer({ env: { OFFICE_NAME: 'HUB' } });
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const ctx = await browser.newContext({ viewport: { width: 800, height: 450 }, deviceScaleFactor: DPR });
+const page = await ctx.newPage();
+await login(page, srv.url, ADMIN.username, ADMIN.password);
+await openGame(page, { quality: Q });
+const Z = (fn, ...a) => page.evaluate(([f, args]) => window.__zombies[f](...args), [fn, a]);
+await Z('start'); await Z('play'); await Z('god', true); await Z('skipTo', 10); await Z('advance', 5); await Z('horde', 24); await Z('advance', 1);
+await page.waitForTimeout(3000);
+const bench = (label) => page.evaluate((label) => {
+  const Zb = window.__zombies, t = Zb.three();
+  const gl = t.renderer.getContext(), px = new Uint8Array(4);
+  const once = () => { if (window.__noShadow) t.renderer.shadowMap.needsUpdate = false; if (Zb.renderOnce && !window.__forceShadow) Zb.renderOnce(); else { t.renderer.shadowMap.needsUpdate = !window.__noShadow; t.renderer.render(t.scene, t.camera); } };
+  const run = (n) => { once(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) { once(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return (performance.now() - t0) / n; };
+  const r = [run(6), run(6), run(6)].sort((a, b) => a - b);
+  const I = t.renderer.info.render;
+  return `${label.padEnd(34)} ${r[1].toFixed(1)} ms  (calls ${I.calls} tris ${I.triangles}) pr ${t.renderer.getPixelRatio()}`;
+}, label).then((s) => console.log(s));
+await bench('base');
+await page.evaluate(() => { window.__zombies.three().renderer.setPixelRatio(0.5); });
+await bench('pr 0.5');
+await page.evaluate(() => { window.__zombies.three().renderer.setPixelRatio(1.5); });
+await bench('pr 1.5');
+await page.evaluate(() => { window.__forceShadow = true; });
+await bench('pr 1.5 + sombra completa cada vez');
+await page.evaluate(() => { window.__forceShadow = false; window.__noShadow = true; });
+await bench('pr 1.5 sin rehacer sombra');
+await page.evaluate(() => { const t = window.__zombies.three(); t.world.group.visible = false; });
+await bench('sin mundo');
+await page.evaluate(() => { const t = window.__zombies.three(); t.world.group.visible = true; t.horde.body.visible = false; });
+await bench('sin zombis');
+await page.evaluate(() => { const t = window.__zombies.three(); t.horde.body.visible = true; t.scene.traverse((o) => { if (o.isLight && o.isPointLight) o.visible = false; }); t.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); }); });
+await bench('sin luces puntuales');
+await browser.close(); await srv.stop();

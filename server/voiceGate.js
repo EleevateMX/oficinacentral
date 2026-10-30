@@ -25,6 +25,7 @@ import crypto from 'node:crypto';
 import { getFloor, isFloorAdminOnly } from './world.js';
 import { areaAt, canTalk, PROXIMITY_RADIUS } from '../shared/map.js';
 import { hotelCtx } from './hotel.js';
+import { sameTeam } from './games.js'; // Arena por equipos: voz por equipo
 
 export const WARM_RADIUS = PROXIMITY_RADIUS + 7; // igual que store.updateProximity
 export const SLACK = 2; // casillas extra por el retraso del movimiento
@@ -94,7 +95,7 @@ export function canConnect(a, b) {
   const pa = presence.get(a), pb = presence.get(b);
   if (!pa || !pb) return false;
   // Zombies: quien juega solo se oye con su equipo (misma partida)
-  if (pa.game || pb.game) return !!(pa.game && pb.game && pa.game.objectId === pb.game.objectId);
+  if (pa.game || pb.game) return !!(pa.game && pb.game && pa.game.objectId === pb.game.objectId && sameTeam(pa.game, pb.game));
   const ha = hotelCtx.where.get(a), hb = hotelCtx.where.get(b);
   // Hotel: la misma sala se oye sin importar el piso de la oficina (regla de antes)
   if (ha && hb && ha.roomId === hb.roomId) return hotelNear(a, b, ha.roomId) || inCall(a, b);
@@ -218,7 +219,7 @@ export function voiceScope(uid) {
   if (w) return `h${w.roomId}`;
   const p = presence.get(Number(uid));
   if (!p) return 'idle';
-  if (p.game) return `z${p.game.objectId}`; // equipo de Zombies
+  if (p.game) return `z${p.game.objectId}${p.game.team != null ? `t${p.game.team}` : ''}`; // equipo de Zombies (o de la Arena)
   const f = getFloor(p.floorId)?.state;
   const a = f && areaAt(f, p.x, p.y);
   if (a?.closed) return `a${a.id}`;

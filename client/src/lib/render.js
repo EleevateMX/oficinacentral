@@ -2034,6 +2034,42 @@ D.kartArcade = (ctx, x, y, w, h, o, c) => {
   R(ctx, OL, x + 9, y + 18, 6, 6); R(ctx, '#cfd4da', x + 10, y + 19, 4, 4);
   R(ctx, OL, x + 17, y + 18, 6, 6); R(ctx, '#cfd4da', x + 18, y + 19, 4, 4);
 };
+// Máquina de "Arena HUB": gabinete morado oscuro con una diana rosa en la marquesina, una mira
+// en la pantalla que barre entre dos siluetas y dos palancas (es de dos jugadores)
+D.arenaArcade = (ctx, x, y, w, h, o, c) => {
+  const col = o.color || c.color;
+  const t = Math.floor(ANIM_T / 120);
+  const blink = Math.floor(ANIM_T / 450) % 2 === 0;
+  prr(ctx, SH, x + 2, y + h - 3, w, 5, 2);
+  obox(ctx, col, x + 1, y - 26, w - 2, h + 25, 1);
+  R(ctx, shade(col, 0.25), x + 1, y - 26, 2, h + 25); R(ctx, shade(col, -0.3), x + w - 3, y - 26, 2, h + 25);
+  // marquesina: franja rosa con una diana que sobresale
+  R(ctx, '#14101f', x + 3, y - 23, w - 6, 8);
+  R(ctx, blink ? '#FE3377' : '#d92a66', x + 5, y - 21, w - 10, 4);
+  for (const bx of [8, 12, 19, 23]) R(ctx, '#14101f', x + bx, y - 20, 2, 2);
+  pell(ctx, OL, x + 16, y - 31, 7, 7); pell(ctx, '#fff', x + 16, y - 31, 6, 6); pell(ctx, '#FE3377', x + 16, y - 31, 4.4, 4.4);
+  pell(ctx, '#fff', x + 16, y - 31, 2.6, 2.6); pell(ctx, '#FE3377', x + 16, y - 31, 1.2, 1.2);
+  R(ctx, '#FFCC00', x + 21, y - 37, 1, 6); R(ctx, '#FFCC00', x + 20, y - 37, 3, 1); // dardo clavado
+  // pantalla: dos siluetas (rosa y azul) y una mira que va de una a otra
+  R(ctx, '#0a0814', x + 4, y - 14, w - 8, 15);
+  R(ctx, '#1b1530', x + 6, y - 12, w - 12, 11);
+  R(ctx, '#2c2348', x + 6, y - 5, w - 12, 4);
+  R(ctx, '#FE3377', x + 8, y - 9, 3, 5); R(ctx, '#ffd6e4', x + 8, y - 11, 3, 2);
+  R(ctx, '#3a86ff', x + w - 11, y - 9, 3, 5); R(ctx, '#d6e6ff', x + w - 11, y - 11, 3, 2);
+  const sweep = Math.abs(((t % 16) / 8) - 1);
+  const cx = x + 9 + sweep * (w - 19);
+  R(ctx, '#7CFF4F', cx - 3, y - 8, 2, 1); R(ctx, '#7CFF4F', cx + 2, y - 8, 2, 1); R(ctx, '#7CFF4F', cx, y - 11, 1, 2); R(ctx, '#7CFF4F', cx, y - 6, 1, 2);
+  if (t % 16 === 0 || t % 16 === 8) R(ctx, '#fff3a8', cx - 1, y - 9, 3, 3); // ¡pum!
+  // tablero: dos palancas y botones
+  R(ctx, shade(col, -0.35), x + 3, y + 2, w - 6, 6); R(ctx, shade(col, -0.5), x + 3, y + 7, w - 6, 2);
+  for (const [jx, jc] of [[9, '#FE3377'], [22, '#3a86ff']]) { R(ctx, OL, x + jx, y + 1, 2, 4); pell(ctx, OL, x + jx + 1, y + 1, 2, 2); pell(ctx, jc, x + jx + 1, y + 1, 1.4, 1.4); }
+  for (const bx of [12, 15, 25, 28]) { R(ctx, OL, x + bx - 1, y + 4, 3, 3); R(ctx, bx < 20 ? '#FFCC00' : '#7CFF4F', x + bx - 1, y + 4, 2, 2); }
+  R(ctx, shade(col, -0.28), x + 4, y + 10, w - 8, h - 12);
+  // franja con cruz de mira y ranuras de monedas
+  R(ctx, '#FE3377', x + 4, y + 12, w - 8, 1);
+  R(ctx, OL, x + 10, y + 17, 5, 7); R(ctx, '#ffcc00', x + 12, y + 18, 1, 4);
+  R(ctx, OL, x + 18, y + 17, 5, 7); R(ctx, '#ffcc00', x + 20, y + 18, 1, 4);
+};
 D.foosball = (ctx, x, y, w, h) => {
   const wd = '#7a4a2b';
   prr(ctx, SH, x + 3, y + h - 6, w - 2, 7, 2);
